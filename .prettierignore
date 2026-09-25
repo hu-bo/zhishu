@@ -1,0 +1,6 @@
+node_modules/
+dist/
+pnpm-lock.yaml
+apps/server/database/migrations/
+apps/server/openapi.json
+*.tmp
