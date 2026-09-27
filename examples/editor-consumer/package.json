@@ -1,0 +1,35 @@
+{
+  "name": "@zhishu/editor-consumer-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "pnpm --filter @zhishu/document-contracts build && pnpm --filter @zhishu/editor-core build && pnpm --filter @zhishu/editor-collaboration build && pnpm --filter @zhishu/editor-react build && pnpm --filter @zhishu/editor-ui build",
+    "dev": "vite --host 127.0.0.1 --port 5180 --strictPort",
+    "prebuild": "pnpm --filter @zhishu/document-contracts build && pnpm --filter @zhishu/editor-core build && pnpm --filter @zhishu/editor-collaboration build && pnpm --filter @zhishu/editor-react build && pnpm --filter @zhishu/editor-ui build",
+    "pretypecheck": "pnpm --filter @zhishu/document-contracts build && pnpm --filter @zhishu/editor-core build && pnpm --filter @zhishu/editor-collaboration build && pnpm --filter @zhishu/editor-react build && pnpm --filter @zhishu/editor-ui build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json --noEmit && vite build"
+  },
+  "dependencies": {
+    "@zhishu/document-contracts": "workspace:*",
+    "@zhishu/editor-core": "workspace:*",
+    "@zhishu/editor-collaboration": "workspace:*",
+    "@zhishu/editor-react": "workspace:*",
+    "@zhishu/editor-ui": "workspace:*",
+    "@tiptap/core": "^3.30.3",
+    "@tiptap/extension-collaboration": "^3.30.3",
+    "@tiptap/pm": "^3.30.3",
+    "@tiptap/react": "^3.30.3",
+    "@tiptap/y-tiptap": "^3.0.7",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "yjs": "^13.6.33"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "typescript": "^5.7.3",
+    "vite": "^8.2.2"
+  }
+}

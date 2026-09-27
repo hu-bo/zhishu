@@ -1,4 +1,10 @@
-export type DomainErrorCode = "NOT_FOUND" | "CONFLICT" | "VALIDATION_ERROR";
+export type DomainErrorCode =
+  | "NOT_FOUND"
+  | "CONFLICT"
+  | "VALIDATION_ERROR"
+  | "UNAUTHENTICATED"
+  | "SERVICE_UNAVAILABLE"
+  | "RESOURCE_LIMIT";
 
 export class DomainError extends Error {
   constructor(

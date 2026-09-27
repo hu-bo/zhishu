@@ -3,4 +3,10 @@ dist/
 pnpm-lock.yaml
 apps/server/database/migrations/
 apps/server/openapi.json
+apps/app-server/database/migrations/
+apps/app-server/openapi.json
+apps/app-web/src/api/generated/
+apps/app-web/src/routeTree.gen.ts
+.playwright-cli/
+output/playwright/
 *.tmp

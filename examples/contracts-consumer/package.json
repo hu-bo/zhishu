@@ -1,0 +1,17 @@
+{
+  "name": "@zhishu/contracts-consumer-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prebuild": "pnpm --filter @zhishu/document-contracts build",
+    "pretypecheck": "pnpm --filter @zhishu/document-contracts build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json && node dist/index.js"
+  },
+  "dependencies": {
+    "@zhishu/document-contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

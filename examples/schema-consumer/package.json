@@ -1,0 +1,19 @@
+{
+  "name": "@zhishu/schema-consumer-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prebuild": "pnpm --filter @zhishu/document-contracts build && pnpm --filter @zhishu/editor-core build",
+    "pretypecheck": "pnpm --filter @zhishu/document-contracts build && pnpm --filter @zhishu/editor-core build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json && node dist/index.js",
+    "verify:node": "node dist/index.js"
+  },
+  "dependencies": {
+    "@zhishu/document-contracts": "workspace:*",
+    "@zhishu/editor-core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

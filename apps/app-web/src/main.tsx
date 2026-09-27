@@ -5,6 +5,7 @@ import { AppProviders } from '@/app/providers';
 import { createQueryClient } from '@/app/query-client';
 import { createAppRouter } from '@/app/router';
 import '@/styles/globals.css';
+import '@zhishu/editor-ui/styles.css';
 
 const queryClient = createQueryClient();
 const router = createAppRouter(queryClient);

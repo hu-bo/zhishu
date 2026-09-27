@@ -1,0 +1,38 @@
+{
+  "name": "@zhishu/editor-react",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "@tiptap/core": "^3.30.3",
+    "@tiptap/react": "^3.30.3",
+    "@zhishu/editor-core": "workspace:*",
+    "@zhishu/document-contracts": "workspace:*",
+    "react": "^18.2.0 || ^19.0.0",
+    "react-dom": "^18.2.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@tiptap/core": "^3.30.3",
+    "@tiptap/react": "^3.30.3",
+    "@zhishu/editor-core": "workspace:*",
+    "@zhishu/document-contracts": "workspace:*",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "typescript": "^5.7.3"
+  }
+}

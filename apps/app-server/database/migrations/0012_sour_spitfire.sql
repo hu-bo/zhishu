@@ -1,0 +1,1 @@
+CREATE INDEX "document_audit_events_request_idx" ON "document_audit_events" USING btree ("tenant_id","request_id","created_at","id");

@@ -1,0 +1,3 @@
+ALTER TABLE "document_versions" ADD COLUMN "kind" text DEFAULT 'named' NOT NULL;--> statement-breakpoint
+CREATE INDEX "document_versions_generation_kind_created_idx" ON "document_versions" USING btree ("tenant_id","document_id","generation_id","kind","created_at");--> statement-breakpoint
+ALTER TABLE "document_versions" ADD CONSTRAINT "document_versions_kind_check" CHECK ("document_versions"."kind" in ('named', 'automatic'));

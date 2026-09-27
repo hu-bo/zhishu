@@ -1,10 +1,10 @@
 import { defineConfig } from 'orval';
 
 export default defineConfig({
-  workflow: {
-    input: { target: '../workflow-server/openapi.json' },
+  appServer: {
+    input: { target: '../app-server/openapi.json' },
     output: {
-      target: './src/api/generated/workflow-api.ts',
+      target: './src/api/generated/app-api.ts',
       schemas: './src/api/generated/models',
       mode: 'split',
       client: 'react-query',

@@ -23,6 +23,7 @@ export const databasePlugin = fp(
 
     pool.on("error", () => app.log.error("Idle database connection failed"));
     app.decorate("db", createDatabase(pool));
+    app.decorate("dbPool", pool);
     app.addHook("onClose", async () => {
       await pool.end();
     });

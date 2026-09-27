@@ -3,3 +3,5 @@ dist/
 .env
 *.log
 apps/server/openapi.json
+.playwright-cli/
+output/playwright/

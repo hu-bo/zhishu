@@ -23,18 +23,18 @@ export function RouteError({ error }: ErrorComponentProps) {
       <AlertCircle className="mx-auto mb-4 text-muted-foreground" size={32} />
       <h1 className="text-xl font-semibold">
         {error instanceof ApiError && error.status === 404
-          ? 'Workflow not found'
+          ? '文档不存在或已被移除'
           : '暂时无法打开页面'}
       </h1>
       <p className="mt-3 text-sm text-muted-foreground">{errorMessage(error)}</p>
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         <Link
-          to="/workflows"
-          search={{ limit: 20, offset: 0 }}
+          to="/documents"
+          search={{ view: 'recent', sort: 'recent', direction: 'desc', limit: 20, offset: 0 }}
           className={buttonVariants({ variant: 'outline' })}
         >
           <ArrowLeft size={16} />
-          返回工作流
+          返回文档
         </Link>
         <Button onClick={() => void router.invalidate()}>重新加载</Button>
       </div>
@@ -48,11 +48,11 @@ export function RouteNotFound() {
       <p className="text-sm text-muted-foreground">404 / PAGE NOT FOUND</p>
       <h1 className="mt-3 text-2xl font-semibold">这里还没有内容</h1>
       <Link
-        to="/workflows"
-        search={{ limit: 20, offset: 0 }}
+        to="/documents"
+        search={{ view: 'recent', sort: 'recent', direction: 'desc', limit: 20, offset: 0 }}
         className={buttonVariants({ variant: 'outline', className: 'mt-6' })}
       >
-        返回工作流
+        返回文档
       </Link>
     </div>
   );

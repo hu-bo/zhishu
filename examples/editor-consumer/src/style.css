@@ -1,0 +1,403 @@
+:root {
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #202632;
+  background: #f3f5f8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button {
+  font: inherit;
+}
+
+.playground {
+  width: min(1440px, calc(100% - 64px));
+  margin: 0 auto;
+  padding: 52px 0 72px;
+}
+
+.page-heading {
+  max-width: 680px;
+  margin-bottom: 32px;
+}
+
+.page-heading h1 {
+  margin: 7px 0 8px;
+  font-size: 34px;
+  letter-spacing: -0.035em;
+}
+
+.page-heading p {
+  color: #687386;
+  line-height: 1.6;
+}
+
+.page-heading .eyebrow {
+  color: #4b60ae;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.editor-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #dfe4ec;
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: 0 16px 40px -34px rgb(24 35 57 / 55%);
+}
+
+.editor-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 21px 15px;
+  border-bottom: 1px solid #e8ebf0;
+}
+
+.editor-card-header h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.editor-card-header p {
+  margin: 5px 0 0;
+  color: #8992a2;
+  font-size: 11px;
+}
+
+.editor-card .zhishu-ui-title h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.editor-card .zhishu-ui-title p {
+  margin: 5px 0 0;
+  color: #8992a2;
+  font-size: 11px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.toolbar .zhishu-ui-toolbar {
+  min-height: 34px;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+}
+
+.toolbar .zhishu-ui-toolbar button {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.toolbar button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #e0e4eb;
+  border-radius: 7px;
+  background: white;
+  color: #414b5d;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.toolbar button:hover:not(:disabled) {
+  border-color: #aab6da;
+  background: #f4f6fd;
+}
+
+.toolbar button:disabled {
+  color: #a6adba;
+  cursor: not-allowed;
+}
+
+.toolbar button:focus-visible,
+.editor-card [contenteditable="true"]:focus-visible {
+  outline: 2px solid #6578c5;
+  outline-offset: 2px;
+}
+
+.update-count {
+  margin-left: 7px;
+  color: #7a8495;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.editor-surface {
+  min-height: 250px;
+  min-width: 0;
+  flex: 1;
+  padding: 23px 25px;
+  line-height: 1.75;
+}
+
+.editor-body {
+  display: flex;
+  min-width: 0;
+}
+
+.editor-card .zhishu-ui-outline {
+  flex-basis: 145px;
+  padding: 16px 12px;
+}
+
+.editor-card .zhishu-ui-outline h2 {
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+
+.editor-surface [contenteditable="true"] {
+  min-height: 200px;
+  outline: none;
+}
+
+.editor-surface h1,
+.editor-surface h2,
+.editor-surface h3 {
+  margin: 0 0 12px;
+  line-height: 1.35;
+}
+
+.editor-surface p {
+  margin: 0 0 12px;
+}
+
+.toolbar-placeholder {
+  width: 184px;
+  height: 34px;
+}
+
+.mount-demo {
+  margin-top: 24px;
+  padding: 18px 20px;
+  border: 1px solid #dfe4ec;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.conversion-demo {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+  padding: 18px 20px;
+  border: 1px solid #dfe4ec;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.block-command-demo {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+  padding: 18px 20px;
+  border: 1px solid #dfe4ec;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.block-command-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.block-command-actions button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #e0e4eb;
+  border-radius: 7px;
+  background: white;
+  color: #414b5d;
+  cursor: pointer;
+}
+
+.block-command-actions button:disabled {
+  color: #a6adba;
+  cursor: not-allowed;
+}
+
+.block-command-actions [role="status"] {
+  color: #687386;
+  font-size: 12px;
+}
+
+.block-command-surface {
+  min-height: 160px;
+  padding: 12px;
+  border: 1px solid #e8ebf0;
+  border-radius: 8px;
+}
+
+.conversion-output {
+  display: grid;
+  gap: 7px;
+  color: #687386;
+  font-size: 12px;
+}
+
+.conversion-output textarea {
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid #e0e4eb;
+  border-radius: 7px;
+  color: #414b5d;
+  font:
+    12px/1.5 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+}
+
+.mount-demo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.mount-demo-header h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.mount-demo-header p,
+.mount-demo-status {
+  color: #687386;
+  font-size: 12px;
+}
+
+.mount-demo-header button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #e0e4eb;
+  border-radius: 7px;
+  background: white;
+  color: #414b5d;
+  cursor: pointer;
+}
+
+.mount-demo-host:not([hidden]) {
+  min-height: 96px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid #e8ebf0;
+  border-radius: 8px;
+  line-height: 1.75;
+}
+
+.mount-demo-host [contenteditable="true"] {
+  min-height: 64px;
+  outline: none;
+}
+
+.retry-demo {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 18px 20px;
+  border: 1px solid #dfe4ec;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.retry-demo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.retry-demo-header h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.retry-demo-header p,
+.retry-status {
+  color: #687386;
+  font-size: 12px;
+}
+
+.retry-demo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.retry-demo-actions button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #e0e4eb;
+  border-radius: 7px;
+  background: white;
+  color: #414b5d;
+  cursor: pointer;
+}
+
+.retry-demo [role="alert"] {
+  padding: 12px;
+  border-radius: 8px;
+  background: #fff5f2;
+  color: #8f3021;
+}
+
+.retry-demo [role="alert"] button {
+  margin-left: 10px;
+}
+
+@media (max-width: 760px) {
+  .playground {
+    width: calc(100% - 32px);
+    padding: 32px 0 48px;
+  }
+
+  .page-heading h1 {
+    font-size: 28px;
+  }
+
+  .editor-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .editor-card .zhishu-ui-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .toolbar {
+    flex-wrap: wrap;
+  }
+
+  .update-count {
+    white-space: normal;
+  }
+}

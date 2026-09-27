@@ -1,0 +1,2 @@
+ALTER TABLE "collaboration_updates" ADD COLUMN "source_update_hash" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "collaboration_updates_generation_source_hash_uq" ON "collaboration_updates" USING btree ("generation_id","source_update_hash");

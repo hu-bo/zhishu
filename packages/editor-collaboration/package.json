@@ -1,0 +1,66 @@
+{
+  "name": "@zhishu/editor-collaboration",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./hocuspocus": {
+      "types": "./dist/hocuspocus.d.ts",
+      "import": "./dist/hocuspocus.js"
+    },
+    "./tiptap": {
+      "types": "./dist/tiptap.d.ts",
+      "import": "./dist/tiptap.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@zhishu/document-contracts": "workspace:*"
+  },
+  "peerDependencies": {
+    "@tiptap/core": "^3.30.3",
+    "@tiptap/extension-collaboration": "^3.30.3",
+    "@tiptap/pm": "^3.30.3",
+    "@hocuspocus/provider": "^4.7.0",
+    "@tiptap/y-tiptap": "^3.0.7",
+    "yjs": "^13.6.33"
+  },
+  "peerDependenciesMeta": {
+    "@tiptap/core": {
+      "optional": true
+    },
+    "@tiptap/extension-collaboration": {
+      "optional": true
+    },
+    "@tiptap/pm": {
+      "optional": true
+    },
+    "@hocuspocus/provider": {
+      "optional": true
+    },
+    "@tiptap/y-tiptap": {
+      "optional": true
+    },
+    "yjs": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@tiptap/extension-collaboration": "^3.30.3",
+    "@tiptap/core": "^3.30.3",
+    "@tiptap/pm": "^3.30.3",
+    "@hocuspocus/provider": "^4.7.0",
+    "@tiptap/y-tiptap": "^3.0.7",
+    "yjs": "^13.6.33"
+  }
+}

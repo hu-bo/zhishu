@@ -1,0 +1,30 @@
+{
+  "name": "@zhishu/collaboration-consumer-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pretypecheck": "pnpm --filter @zhishu/editor-collaboration build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "presmoke": "pnpm --filter @zhishu/editor-collaboration build",
+    "smoke": "tsx src/smoke.ts",
+    "smoke:failure": "tsx src/smoke.ts --database-outage",
+    "smoke:post-commit-crash": "tsx src/post-commit-crash-smoke.ts",
+    "smoke:capacity": "tsx src/capacity-smoke.ts",
+    "smoke:structure": "tsx src/structure-smoke.ts",
+    "build": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@hocuspocus/provider": "^4.7.0",
+    "@tiptap/y-tiptap": "^3.0.7",
+    "@zhishu/editor-collaboration": "workspace:*",
+    "@zhishu/editor-core": "workspace:*",
+    "@zhishu/editor-react": "workspace:*",
+    "@zhishu/document-contracts": "workspace:*",
+    "yjs": "^13.6.33"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3",
+    "tsx": "^4.19.2"
+  }
+}

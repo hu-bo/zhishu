@@ -22,6 +22,7 @@ const responseProject = (project: {
   createdAt: project.createdAt.toISOString(),
   updatedAt: project.updatedAt.toISOString(),
 });
+const bearerSecurity = [{ bearerAuth: [] }];
 
 export async function projectRoutes(app: FastifyInstance, service: ProjectService): Promise<void> {
   const typed = app.withTypeProvider<ZodTypeProvider>();
@@ -31,8 +32,9 @@ export async function projectRoutes(app: FastifyInstance, service: ProjectServic
       schema: {
         operationId: "listProjects",
         tags: ["projects"],
+        security: bearerSecurity,
         querystring: paginationQuerySchema,
-        response: { 200: projectListSchema },
+        response: { 200: projectListSchema, 401: errorResponseSchema },
       },
     },
     async (request) => ({ items: (await service.list(request.query.limit)).map(responseProject) }),
@@ -43,8 +45,9 @@ export async function projectRoutes(app: FastifyInstance, service: ProjectServic
       schema: {
         operationId: "createProject",
         tags: ["projects"],
+        security: bearerSecurity,
         body: createProjectBodySchema,
-        response: { 201: projectSchema, 400: errorResponseSchema },
+        response: { 201: projectSchema, 400: errorResponseSchema, 401: errorResponseSchema },
       },
     },
     async (request, reply) =>
@@ -56,8 +59,14 @@ export async function projectRoutes(app: FastifyInstance, service: ProjectServic
       schema: {
         operationId: "getProject",
         tags: ["projects"],
+        security: bearerSecurity,
         params: projectParamsSchema,
-        response: { 200: projectSchema, 400: errorResponseSchema, 404: errorResponseSchema },
+        response: {
+          200: projectSchema,
+          400: errorResponseSchema,
+          401: errorResponseSchema,
+          404: errorResponseSchema,
+        },
       },
     },
     async (request) => responseProject(await service.get(request.params.id)),
@@ -68,9 +77,15 @@ export async function projectRoutes(app: FastifyInstance, service: ProjectServic
       schema: {
         operationId: "updateProject",
         tags: ["projects"],
+        security: bearerSecurity,
         params: projectParamsSchema,
         body: updateProjectBodySchema,
-        response: { 200: projectSchema, 400: errorResponseSchema, 404: errorResponseSchema },
+        response: {
+          200: projectSchema,
+          400: errorResponseSchema,
+          401: errorResponseSchema,
+          404: errorResponseSchema,
+        },
       },
     },
     async (request) => responseProject(await service.update(request.params.id, request.body)),
@@ -81,8 +96,14 @@ export async function projectRoutes(app: FastifyInstance, service: ProjectServic
       schema: {
         operationId: "deleteProject",
         tags: ["projects"],
+        security: bearerSecurity,
         params: projectParamsSchema,
-        response: { 204: z.null(), 400: errorResponseSchema, 404: errorResponseSchema },
+        response: {
+          204: z.null(),
+          400: errorResponseSchema,
+          401: errorResponseSchema,
+          404: errorResponseSchema,
+        },
       },
     },
     async (request, reply) => {
