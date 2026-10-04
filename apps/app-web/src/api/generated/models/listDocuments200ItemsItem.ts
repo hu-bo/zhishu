@@ -5,12 +5,25 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ListDocuments200ItemsItemExtensionsItem } from './listDocuments200ItemsItemExtensionsItem';
+import type { ListDocuments200ItemsItemMode } from './listDocuments200ItemsItemMode';
+import type { ListDocuments200ItemsItemTagsItem } from './listDocuments200ItemsItemTagsItem';
 
 export type ListDocuments200ItemsItem = {
   /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
   id: string;
   tenantId: string;
   title: string;
+  workspaceId: string;
+  /** @pattern ^cat_[A-Za-z0-9_-]{1,64}$ */
+  catalogId: string;
+  /** @minimum 0 */
+  position: number;
+  /** @maxLength 32 */
+  icon: string | null;
+  /** @maxItems 12 */
+  tags: ListDocuments200ItemsItemTagsItem[];
+  createdBy: string;
+  mode: ListDocuments200ItemsItemMode;
   /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
   generationId: string;
   /**
@@ -28,7 +41,14 @@ export type ListDocuments200ItemsItem = {
      * @exclusiveMinimum
      */
   metadataRevision: number;
-  isFavorite: boolean;
   canManage: boolean;
+  isFavorite: boolean;
   deletedAt: string | null;
+  /**
+     * @minimum 0
+     * @exclusiveMinimum
+     */
+  snapshotRevision: number | null;
+  workspaceName: string;
+  excerpt: string;
 };

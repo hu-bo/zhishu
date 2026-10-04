@@ -56,7 +56,17 @@ async function main(): Promise<void> {
       throw new Error("OpenAPI document is missing the shared DocumentContent schema reference");
     if (!document.components?.schemas?.DocumentBlock)
       throw new Error("OpenAPI document is missing the shared DocumentBlock schema");
-    for (const name of ["DocumentSnapshot", "OperationBatch", "AssetReference", "Anchor"]) {
+    for (const name of [
+      "DocumentSnapshot",
+      "TaskList",
+      "Table",
+      "TableRow",
+      "TableCell",
+      "TableHeader",
+      "OperationBatch",
+      "AssetReference",
+      "Anchor",
+    ]) {
       if (!document.components?.schemas?.[name])
         throw new Error(`OpenAPI document is missing the shared ${name} schema`);
     }

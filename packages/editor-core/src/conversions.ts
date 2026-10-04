@@ -2,22 +2,34 @@ import { DOMParser as ProseMirrorDOMParser, DOMSerializer, type Schema } from "@
 import type { JSONContent } from "@tiptap/core";
 import {
   createBlockId,
+  HIGHLIGHT_COLORS,
+  CALLOUT_THEMES,
+  CALLOUT_THEME_LABELS,
+  DOCUMENT_STATUSES,
+  DOCUMENT_STATUS_LABELS,
   normalizeDocumentContent,
+  TEXT_ALIGNMENTS,
   validateDocumentContent,
 } from "@zhishu/document-contracts";
 import type { ContentIssue, DocumentContent } from "@zhishu/document-contracts";
+import { normalizeTiptapDocumentJSON } from "./schema.js";
 
 const maxImportBytes = 2 * 1024 * 1024;
 const addressableBlockTypes = new Set([
   "paragraph",
   "heading",
   "blockquote",
+  "callout",
   "bulletList",
   "orderedList",
   "listItem",
+  "taskList",
+  "taskItem",
   "codeBlock",
   "horizontalRule",
   "image",
+  "pdfAttachment",
+  "table",
 ]);
 const supportedHtmlTags = new Set([
   "a",
@@ -35,22 +47,32 @@ const supportedHtmlTags = new Set([
   "h5",
   "h6",
   "hr",
+  "input",
   "i",
   "li",
+  "mark",
   "ol",
   "p",
   "pre",
   "s",
+  "table",
+  "tbody",
+  "td",
+  "th",
+  "thead",
+  "tr",
+  "colgroup",
+  "col",
   "span",
   "strong",
   "ul",
+  "u",
 ]);
 const rejectedHtmlTags = new Set([
   "audio",
   "embed",
   "form",
   "iframe",
-  "input",
   "math",
   "object",
   "script",
@@ -59,6 +81,8 @@ const rejectedHtmlTags = new Set([
   "svg",
   "video",
 ]);
+const highlightColorSet = new Set<string>(HIGHLIGHT_COLORS);
+const textAlignmentSet = new Set<string>(TEXT_ALIGNMENTS);
 
 export interface ConversionIssue {
   code: string;
@@ -198,6 +222,11 @@ function inlineText(nodes: readonly Record<string, unknown>[] | undefined): stri
       ?.map((node) => {
         if (node.type === "text") return typeof node.text === "string" ? node.text : "";
         if (node.type === "hardBreak") return "\n";
+        if (node.type === "statusTag") {
+          const attrs = node.attrs as Record<string, unknown> | undefined;
+          const status = DOCUMENT_STATUSES.find((value) => value === attrs?.status) ?? "todo";
+          return DOCUMENT_STATUS_LABELS[status];
+        }
         return "";
       })
       .join("") ?? ""
@@ -229,7 +258,7 @@ function collectMarks(value: unknown, report: MutableReport): void {
   if (Array.isArray(node.content)) collectMarks(node.content, report);
 }
 
-function blockPlainText(node: Record<string, unknown>, report: MutableReport): string {
+function blockPlainText(node: Record<string, unknown>, report: MutableReport, depth = 0): string {
   const type = node.type;
   const children = Array.isArray(node.content) ? (node.content as Record<string, unknown>[]) : [];
   if (type === "paragraph") return inlineText(children);
@@ -247,15 +276,46 @@ function blockPlainText(node: Record<string, unknown>, report: MutableReport): s
       "horizontal-rule-to-text",
       "A horizontal rule becomes three hyphens.",
     );
-    return "---";
+    const label = (node.attrs as { label?: string } | undefined)?.label;
+    return label ? `--- ${label} ---` : "---";
   }
   if (type === "image") {
     addIssue(report.degraded, "image-to-alt-text", "Images are represented by alternative text.");
     const attrs = node.attrs as Record<string, unknown> | undefined;
     return typeof attrs?.alt === "string" ? attrs.alt : "";
   }
-  if (type === "blockquote") {
-    addIssue(report.degraded, "blockquote-to-text", "Quote formatting is lost in plain text.");
+  if (type === "pdfAttachment") {
+    addIssue(report.degraded, "pdf-attachment-to-text", "PDF attachments are represented by name.");
+    const attrs = node.attrs as Record<string, unknown> | undefined;
+    const fileName = typeof attrs?.fileName === "string" ? attrs.fileName : "PDF attachment";
+    return `[PDF: ${fileName}]`;
+  }
+  if (type === "table") {
+    addIssue(
+      report.degraded,
+      "table-to-text",
+      "Table structure is represented as tab-separated rows in plain text.",
+    );
+    return children
+      .map((row) => {
+        const cells = Array.isArray(row.content) ? (row.content as Record<string, unknown>[]) : [];
+        return cells
+          .map((cell) => {
+            const paragraphs = Array.isArray(cell.content)
+              ? (cell.content as Record<string, unknown>[])
+              : [];
+            return paragraphs.map((paragraph) => blockPlainText(paragraph, report)).join("\n");
+          })
+          .join("\t");
+      })
+      .join("\n");
+  }
+  if (type === "blockquote" || type === "callout") {
+    addIssue(
+      report.degraded,
+      `${type}-to-text`,
+      "Quote or callout formatting is lost in plain text.",
+    );
     return children
       .map((child) => blockPlainText(child, report))
       .join("\n")
@@ -279,7 +339,31 @@ function blockPlainText(node: Record<string, unknown>, report: MutableReport): s
       })
       .join("\n");
   }
-  if (type === "listItem") return children.map((child) => blockPlainText(child, report)).join("\n");
+  if (type === "listItem")
+    return children.map((child) => blockPlainText(child, report, depth)).join("\n");
+  if (type === "taskList") {
+    addIssue(
+      report.degraded,
+      "task-list-to-text",
+      "Task list structure is represented with indentation.",
+    );
+    return children
+      .map((child) =>
+        child.type === "taskList"
+          ? blockPlainText(child, report, depth + 1)
+          : `${"  ".repeat(depth)}${blockPlainText(child, report, depth)}`,
+      )
+      .join("\n");
+  }
+  if (type === "taskItem") {
+    addIssue(
+      report.degraded,
+      "task-item-to-text",
+      "Task list status is represented with a text prefix.",
+    );
+    const attrs = node.attrs as Record<string, unknown> | undefined;
+    return `${"  ".repeat(depth)}${attrs?.checked === true ? "- [x] " : "- [ ] "}${inlineText(children)}`;
+  }
   return "";
 }
 
@@ -293,6 +377,258 @@ export function exportPlainText(content: unknown): ConversionResult<string> {
   const value = doc.content.map((block) => blockPlainText(block, report)).join("\n");
   collectMarks(validated.value, report);
   return { success: true, value, report: finalizeReport(report) };
+}
+
+function markdownEscape(text: string): string {
+  return text.replace(/([\\`*_{}[\]()#+.!|~<>-])/gu, "\\$1");
+}
+
+function markdownInline(nodes: readonly JSONContent[], report: MutableReport): string {
+  return nodes
+    .map((node) => {
+      if (node.type === "hardBreak") return "  \n";
+      let raw = node.text ?? "";
+      if (node.type === "statusTag") {
+        const status = DOCUMENT_STATUSES.find((value) => value === node.attrs?.status) ?? "todo";
+        addIssue(
+          report.degraded,
+          "markdown-status-tag",
+          "Markdown 将状态标签转换为文字，不能继续切换状态。",
+        );
+        raw = DOCUMENT_STATUS_LABELS[status];
+      }
+      if (node.type !== "text" && node.type !== "statusTag") return "";
+      const marks = node.marks ?? [];
+      let text = markdownEscape(raw);
+      if (marks.some((mark) => mark.type === "code")) {
+        const longest = Math.max(0, ...(raw.match(/`+/gu) ?? []).map((run) => run.length));
+        const fence = "`".repeat(longest + 1);
+        const pad = /^[` ]|[` ]$/u.test(raw) ? " " : "";
+        text = `${fence}${pad}${raw}${pad}${fence}`;
+      }
+      for (const mark of marks) {
+        if (mark.type === "bold" || mark.type === "italic" || mark.type === "strike") {
+          const token = mark.type === "bold" ? "**" : mark.type === "italic" ? "*" : "~~";
+          text = text.replace(
+            /^(\s*)([\s\S]*?)(\s*)$/u,
+            (_match: string, before: string, body: string, after: string) =>
+              body ? `${before}${token}${body}${token}${after}` : text,
+          );
+        } else if (mark.type === "link") {
+          const href = String(mark.attrs?.href ?? (mark as { href?: string }).href ?? "");
+          text = `[${text}](<${href.replace(/>/gu, "%3E")}>)`;
+        } else if (mark.type === "underline" || mark.type === "highlight") {
+          addIssue(
+            report.degraded,
+            `markdown-${mark.type}`,
+            mark.type === "underline" ? "Markdown 不保留下划线。" : "Markdown 不保留高亮颜色。",
+          );
+        }
+      }
+      return text;
+    })
+    .join("");
+}
+
+function markdownBlock(node: JSONContent, report: MutableReport): string {
+  const children = node.content ?? [];
+  if (node.attrs?.align && node.attrs.align !== "left")
+    addIssue(report.degraded, "markdown-alignment", "Markdown 不保留段落和标题对齐方式。");
+  switch (node.type) {
+    case "paragraph":
+      return markdownInline(children, report);
+    case "heading":
+      return `${"#".repeat(Number(node.attrs?.level ?? 1))} ${markdownInline(children, report)}`;
+    case "horizontalRule":
+      if (node.attrs?.label) {
+        addIssue(
+          report.degraded,
+          "markdown-divider-label",
+          "Markdown 将分隔线标签放在分隔线上方。",
+        );
+        return `${markdownEscape(String(node.attrs.label))}\n\n---`;
+      }
+      return "---";
+    case "callout": {
+      const theme = CALLOUT_THEMES.find((value) => value === node.attrs?.theme) ?? "info";
+      addIssue(
+        report.degraded,
+        "markdown-callout",
+        "Markdown 将提示块转换为引用文字，不能保留主题样式。",
+      );
+      return [
+        `**${CALLOUT_THEME_LABELS[theme]}**`,
+        ...children.map((child) => markdownBlock(child, report)),
+      ]
+        .join("\n\n")
+        .split("\n")
+        .map((line) => `> ${line}`)
+        .join("\n");
+    }
+    case "codeBlock": {
+      const text = children.map((child) => child.text ?? "").join("");
+      const fence = "`".repeat(
+        Math.max(3, ...(text.match(/`+/gu) ?? []).map((run) => run.length + 1)),
+      );
+      const language = String(node.attrs?.language ?? "").replace(/[^a-zA-Z0-9_+-]/gu, "");
+      return `${fence}${language}\n${text}\n${fence}`;
+    }
+    case "blockquote":
+      return children
+        .map((child) => markdownBlock(child, report))
+        .join("\n\n")
+        .split("\n")
+        .map((line) => `> ${line}`)
+        .join("\n");
+    case "bulletList":
+    case "orderedList":
+      return children
+        .map((item, index) => {
+          const prefix =
+            node.type === "orderedList" ? `${Number(node.attrs?.start ?? 1) + index}. ` : "- ";
+          const body = (item.content ?? [])
+            .map((child) => markdownBlock(child, report))
+            .join("\n\n");
+          return body
+            .split("\n")
+            .map((line, lineIndex) =>
+              lineIndex === 0 ? `${prefix}${line}` : `${" ".repeat(prefix.length)}${line}`,
+            )
+            .join("\n");
+        })
+        .join("\n");
+    case "taskList":
+      return children
+        .map((child) =>
+          child.type === "taskList"
+            ? markdownBlock(child, report)
+                .split("\n")
+                .map((line) => `  ${line}`)
+                .join("\n")
+            : `- [${child.attrs?.checked ? "x" : " "}] ${markdownInline(child.content ?? [], report)}`,
+        )
+        .join("\n");
+    case "table": {
+      if (children[0]?.content?.some((cell) => cell.type !== "tableHeader"))
+        addIssue(report.degraded, "markdown-table-header", "Markdown 将表格第一行用作表头。");
+      const rows = children.map((row) =>
+        (row.content ?? []).flatMap((cell) => {
+          if (
+            (cell.content?.length ?? 0) > 1 ||
+            cell.content?.some((block) => block.type !== "paragraph")
+          )
+            addIssue(
+              report.degraded,
+              "markdown-table-blocks",
+              "Markdown 表格中的多段落和块布局降级为行内内容。",
+            );
+          if (Number(cell.attrs?.colspan ?? 1) > 1 || Number(cell.attrs?.rowspan ?? 1) > 1)
+            addIssue(
+              report.degraded,
+              "markdown-table-merge",
+              "Markdown 不保留合并单元格；内容按行展开。",
+            );
+          const cellText = (cell.content ?? [])
+            .map((block) => markdownBlock(block, report).replace(/\n/gu, "<br>"))
+            .join("<br>");
+          // GFM splits table cells before parsing inline code, including code pipes.
+          let escapedCell = "";
+          let backslashes = 0;
+          for (const character of cellText) {
+            if (character === "|" && backslashes % 2 === 0) escapedCell += "\\";
+            escapedCell += character;
+            backslashes = character === "\\" ? backslashes + 1 : 0;
+          }
+          return [
+            escapedCell,
+            ...Array.from({ length: Math.max(0, Number(cell.attrs?.colspan ?? 1) - 1) }, () => ""),
+          ];
+        }),
+      );
+      const width = Math.max(0, ...rows.map((row) => row.length));
+      const lines = rows.map(
+        (row) => `| ${Array.from({ length: width }, (_, index) => row[index] ?? "").join(" | ")} |`,
+      );
+      lines.splice(1, 0, `| ${Array.from({ length: width }, () => "---").join(" | ")} |`);
+      return lines.join("\n");
+    }
+    case "image":
+    case "pdfAttachment": {
+      addIssue(
+        report.degraded,
+        "markdown-private-asset",
+        "私有附件只导出名称和替代文本，不包含文件或临时授权链接。",
+      );
+      const label = String(
+        node.type === "image" ? node.attrs?.alt || "图片" : node.attrs?.fileName || "PDF 附件",
+      );
+      return `[${markdownEscape(label)}（私有附件）]`;
+    }
+    default:
+      return children.map((child) => markdownBlock(child, report)).join("\n\n");
+  }
+}
+
+/** Exports CommonMark with GFM task lists, tables and strikethrough. */
+export function exportDocumentMarkdown(content: unknown): ConversionResult<string> {
+  const report = createReport();
+  report.supported.add("markdown-commonmark-gfm");
+  const validated = toContentResult(content, report);
+  if (!validated.success) return validated;
+  const value =
+    validated.value.content
+      .map((block) => markdownBlock(block as JSONContent, report))
+      .join("\n\n") + "\n";
+  return { success: true, value, report: finalizeReport(report) };
+}
+
+function escapeHtmlText(value: string): string {
+  return value
+    .replace(/&/gu, "&amp;")
+    .replace(/</gu, "&lt;")
+    .replace(/>/gu, "&gt;")
+    .replace(/"/gu, "&quot;");
+}
+
+/** Self-contained reading/printing document; the title is host-owned metadata. */
+export function exportStandaloneDocumentHtml(
+  content: unknown,
+  schema: Schema,
+  title: string,
+): ConversionResult<string> {
+  const converted = exportDocumentHtml(content, schema);
+  if (!converted.success) return converted;
+  const escapedTitle = escapeHtmlText(title);
+  const body = document.createElement("div");
+  body.innerHTML = converted.value;
+  for (const table of body.querySelectorAll("table")) {
+    const firstRow = table.querySelector("tr");
+    if (
+      firstRow &&
+      firstRow.cells.length &&
+      [...firstRow.cells].every((cell) => cell.tagName === "TH") &&
+      !table.querySelector("thead")
+    ) {
+      const head = document.createElement("thead");
+      head.append(firstRow);
+      table.prepend(head);
+    }
+  }
+  return {
+    ...converted,
+    value: `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>${escapedTitle}</title><style>
+body{max-width:896px;margin:48px auto;padding:0 24px;color:#0f172a;background:white;font:16px/1.8 Inter,"PingFang SC",system-ui,sans-serif;overflow-wrap:anywhere}
+h1,h2,h3,h4,h5,h6{line-height:1.35;margin:1.5em 0 .6em;break-after:avoid}p{margin:1em 0}a{color:#4f46e5}blockquote{border-left:3px solid #cbd5e1;margin:1em 0;padding-left:1em;color:#475569}
+pre{padding:16px;background:#f1f5f9;border-radius:8px;overflow:auto;white-space:pre}code{font-family:"Fira Code",monospace;font-size:.9em}.tableWrapper{max-width:100%;overflow:auto}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #cbd5e1;padding:8px;vertical-align:top}th{background:#f8fafc}hr{border:0;border-top:1px solid #cbd5e1;margin:2em 0}img{max-width:100%}
+mark[data-highlight-color="yellow"]{background:#fef08a}mark[data-highlight-color="green"]{background:#bbf7d0}mark[data-highlight-color="blue"]{background:#bfdbfe}mark[data-highlight-color="pink"]{background:#fbcfe8}mark[data-highlight-color="purple"]{background:#e9d5ff}
+div[data-type="taskList"]{padding-left:0}div[data-type="taskList"] div[data-type="taskList"]{padding-left:1.5em}div[data-type="taskItem"]{display:flex;align-items:baseline;gap:.5em}div[data-type="taskItem"][data-checked="true"]{text-decoration:line-through;color:#64748b}
+div[data-callout-theme]{border-left:3px solid #6366f1;background:#eef2ff;padding:12px 16px;margin:1em 0;border-radius:6px}div[data-callout-theme="tip"]{border-color:#7c3aed;background:#f5f3ff}div[data-callout-theme="warning"]{border-color:#d97706;background:#fffbeb}div[data-callout-theme="success"]{border-color:#059669;background:#ecfdf5}div[data-callout-theme="danger"]{border-color:#e11d48;background:#fff1f2}div[data-divider-label]{display:flex;gap:12px;align-items:center;margin:2em 0}div[data-divider-label] hr{flex:1;margin:0}span[data-status-tag]{display:inline-block;background:#e2e8f0;border:1px solid #cbd5e1;border-radius:5px;padding:0 6px;font-size:.85em}
+@page{margin:18mm}@media print{body{margin:0;padding:0;max-width:none;font-size:11pt}pre{white-space:pre-wrap;overflow:visible;overflow-wrap:anywhere}.tableWrapper{overflow:visible}table{width:100%!important;min-width:0!important;table-layout:fixed}col{width:auto!important;min-width:0!important}thead{display:table-header-group}tr,img{break-inside:avoid}a{color:inherit}h1,h2,h3{break-after:avoid}}
+</style></head><body><main><h1>${escapedTitle}</h1>${body.innerHTML}</main></body></html>`,
+  };
 }
 
 function assignFreshBlockIds(value: unknown): void {
@@ -331,6 +667,17 @@ function sanitizeHtmlBody(body: HTMLElement, report: MutableReport): void {
   for (const element of elements) {
     if (!body.contains(element)) continue;
     const tag = element.localName.toLowerCase();
+    const inTaskItem = Boolean(element.closest('div[data-type="taskItem"]'));
+    const passiveTaskCheckbox =
+      tag === "input" &&
+      inTaskItem &&
+      element.getAttribute("type") === "checkbox" &&
+      element.hasAttribute("disabled");
+    if (tag === "input" && !passiveTaskCheckbox) {
+      addIssue(report.rejected, "active-html-removed", "The <input> element was removed.");
+      element.remove();
+      continue;
+    }
     if (rejectedHtmlTags.has(tag)) {
       addIssue(report.rejected, "active-html-removed", `The <${tag}> element was removed.`);
       element.remove();
@@ -355,7 +702,116 @@ function sanitizeHtmlBody(body: HTMLElement, report: MutableReport): void {
         if (isSafeLinkHref(attribute.value)) continue;
         addIssue(report.rejected, "unsafe-url-removed", "An unsafe link URL was removed.");
         element.removeAttribute(attribute.name);
+      } else if (
+        (tag === "div" &&
+          name === "data-callout-theme" &&
+          CALLOUT_THEMES.some((value) => value === attribute.value)) ||
+        (tag === "div" &&
+          name === "data-callout-content" &&
+          element.closest("div[data-callout-theme]")) ||
+        (tag === "span" &&
+          name === "data-status-tag" &&
+          DOCUMENT_STATUSES.some((value) => value === attribute.value)) ||
+        (tag === "div" && name === "data-divider-label" && attribute.value.length <= 80)
+      ) {
+        continue;
+      } else if (
+        tag === "code" &&
+        name === "class" &&
+        /^language-[A-Za-z0-9_+-]{1,32}$/.test(attribute.value)
+      ) {
+        continue;
+      } else if (
+        name === "data-type" &&
+        (attribute.value === "taskItem" || attribute.value === "taskList") &&
+        tag === "div"
+      ) {
+        continue;
+      } else if (
+        name === "data-checked" &&
+        /^(true|false)$/.test(attribute.value) &&
+        tag === "div" &&
+        element.dataset.type === "taskItem"
+      ) {
+        continue;
+      } else if (
+        name === "data-task-content" &&
+        tag === "span" &&
+        element.closest('div[data-type="taskItem"]')
+      ) {
+        continue;
+      } else if (
+        tag === "input" &&
+        inTaskItem &&
+        ((name === "type" && attribute.value === "checkbox") ||
+          name === "disabled" ||
+          (name === "checked" && element.hasAttribute("checked")))
+      ) {
+        continue;
       } else if (tag === "ol" && name === "start" && /^[1-9][0-9]{0,6}$/.test(attribute.value)) {
+        continue;
+      } else if (
+        (tag === "td" || tag === "th") &&
+        name === "colspan" &&
+        /^[1-9][0-9]{0,1}$/.test(attribute.value) &&
+        Number(attribute.value) <= 20
+      ) {
+        continue;
+      } else if (
+        (tag === "td" || tag === "th") &&
+        name === "rowspan" &&
+        /^[1-9][0-9]{0,2}$/.test(attribute.value) &&
+        Number(attribute.value) <= 100
+      ) {
+        continue;
+      } else if (
+        (tag === "td" || tag === "th") &&
+        name === "align" &&
+        /^(left|center|right)$/i.test(attribute.value)
+      ) {
+        continue;
+      } else if (
+        (tag === "td" || tag === "th") &&
+        name === "style" &&
+        /^text-align:\s*(left|center|right);?$/i.test(attribute.value.trim())
+      ) {
+        continue;
+      } else if (
+        ["p", "h1", "h2", "h3", "h4", "h5", "h6"].includes(tag) &&
+        name === "data-text-align" &&
+        textAlignmentSet.has(attribute.value.toLowerCase())
+      ) {
+        continue;
+      } else if (
+        ["p", "h1", "h2", "h3", "h4", "h5", "h6"].includes(tag) &&
+        name === "style" &&
+        /^text-align:\s*(left|center|right);?$/i.test(attribute.value.trim())
+      ) {
+        continue;
+      } else if (tag === "mark" && name === "data-highlight-color") {
+        if (highlightColorSet.has(attribute.value)) continue;
+        addIssue(
+          report.degraded,
+          "highlight-color-defaulted",
+          "An unsupported highlight color was changed to yellow.",
+        );
+        element.removeAttribute(attribute.name);
+      } else if (
+        tag === "table" &&
+        name === "style" &&
+        /^(?:min-width:\s*|width:\s*)(?:[1-9][0-9]{0,5}px|100%);?$/i.test(attribute.value.trim()) &&
+        (attribute.value.trim() === "width: 100%" ||
+          Number(attribute.value.match(/[1-9][0-9]*/)?.[0] ?? 0) <= 655_360)
+      ) {
+        continue;
+      } else if (
+        tag === "col" &&
+        name === "style" &&
+        /^(?:min-width:\s*|width:\s*)[1-9][0-9]{0,4}px;?$/i.test(attribute.value.trim()) &&
+        Number(attribute.value.match(/[1-9][0-9]*/)?.[0] ?? 0) <= 32_768
+      ) {
+        continue;
+      } else if (tag === "div" && name === "class" && attribute.value === "tableWrapper") {
         continue;
       } else if (name === "data-blockid") {
         addIssue(
@@ -397,7 +853,21 @@ export function importDocumentHtml(
   sanitizeHtmlBody(htmlDocument.body, report);
   try {
     const parsed = ProseMirrorDOMParser.fromSchema(schema).parse(htmlDocument.body);
-    const json: unknown = parsed.toJSON();
+    const parsedJson = parsed.toJSON() as JSONContent;
+    const pending = [parsedJson];
+    while (pending.length) {
+      const node = pending.pop()!;
+      if (node.type === "statusTag" && node.marks?.length) {
+        delete node.marks;
+        addIssue(
+          report.degraded,
+          "status-tag-formatting",
+          "状态标签使用固定外观，不保留套用的文字格式。",
+        );
+      }
+      if (node.content) pending.push(...node.content);
+    }
+    const json: unknown = normalizeTiptapDocumentJSON(parsedJson);
     assignFreshBlockIds(json);
     const validation = toContentResult(json, report);
     if (!validation.success) return validation;
@@ -426,7 +896,7 @@ export function exportDocumentHtml(content: unknown, schema: Schema): Conversion
 
   try {
     const doc = schema.nodeFromJSON(validated.value as JSONContent);
-    doc.check();
+    if (validated.value.content.length > 0) doc.check();
     const wrapper = document.createElement("div");
     const fragment = DOMSerializer.fromSchema(schema).serializeFragment(doc.content);
     wrapper.appendChild(fragment);
@@ -441,6 +911,18 @@ export function exportDocumentHtml(content: unknown, schema: Schema): Conversion
         const image = block.querySelector("img[alt]");
         const alt = image?.getAttribute("alt")?.trim();
         block.replaceWith(document.createTextNode(alt ? `[Image: ${alt}]` : "[Image]"));
+      }
+    }
+    const pdfBlocks = wrapper.querySelectorAll<HTMLAnchorElement>("a[data-pdf-asset-id]");
+    if (pdfBlocks.length > 0) {
+      addIssue(
+        report.degraded,
+        "pdf-attachment-to-text",
+        "PDF attachments are exported as file names without access URLs.",
+      );
+      for (const block of pdfBlocks) {
+        const fileName = block.getAttribute("data-file-name")?.trim() || block.textContent?.trim();
+        block.replaceWith(document.createTextNode(fileName ? `[PDF: ${fileName}]` : "[PDF]"));
       }
     }
     return { success: true, value: wrapper.innerHTML, report: finalizeReport(report) };

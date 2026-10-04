@@ -9,86 +9,183 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root';
-import { Route as IndexRouteImport } from './routes/index';
-import { Route as DocumentsIndexRouteImport } from './routes/documents/index';
-import { Route as DocumentsDocumentIdRouteImport } from './routes/documents/$documentId';
+import { Route as AppRouteImport } from './routes/_app';
+import { Route as AppIndexRouteImport } from './routes/_app/index';
+import { Route as ShareShareIdRouteImport } from './routes/share/$shareId';
+import { Route as AppDocumentsIndexRouteImport } from './routes/_app/documents/index';
+import { Route as AppDocumentsDocumentIdRouteImport } from './routes/_app/documents/$documentId';
+import { Route as AppSpacesIndexRouteImport } from './routes/_app/spaces/index';
+import { Route as AppSpacesWorkspaceIdRouteImport } from './routes/_app/spaces/$workspaceId';
 
-const IndexRoute = IndexRouteImport.update({
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any);
+const ShareShareIdRoute = ShareShareIdRouteImport.update({
+  id: '/share/$shareId',
+  path: '/share/$shareId',
   getParentRoute: () => rootRouteImport,
 } as any);
-const DocumentsIndexRoute = DocumentsIndexRouteImport.update({
+const AppDocumentsIndexRoute = AppDocumentsIndexRouteImport.update({
   id: '/documents/',
   path: '/documents/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
 } as any);
-const DocumentsDocumentIdRoute = DocumentsDocumentIdRouteImport.update({
+const AppDocumentsDocumentIdRoute = AppDocumentsDocumentIdRouteImport.update({
   id: '/documents/$documentId',
   path: '/documents/$documentId',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppRoute,
+} as any);
+const AppSpacesIndexRoute = AppSpacesIndexRouteImport.update({
+  id: '/spaces/',
+  path: '/spaces/',
+  getParentRoute: () => AppRoute,
+} as any);
+const AppSpacesWorkspaceIdRoute = AppSpacesWorkspaceIdRouteImport.update({
+  id: '/spaces/$workspaceId',
+  path: '/spaces/$workspaceId',
+  getParentRoute: () => AppRoute,
 } as any);
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute;
-  '/documents/$documentId': typeof DocumentsDocumentIdRoute;
-  '/documents/': typeof DocumentsIndexRoute;
+  '/': typeof AppIndexRoute;
+  '/share/$shareId': typeof ShareShareIdRoute;
+  '/documents/$documentId': typeof AppDocumentsDocumentIdRoute;
+  '/spaces/$workspaceId': typeof AppSpacesWorkspaceIdRoute;
+  '/documents/': typeof AppDocumentsIndexRoute;
+  '/spaces/': typeof AppSpacesIndexRoute;
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute;
-  '/documents/$documentId': typeof DocumentsDocumentIdRoute;
-  '/documents': typeof DocumentsIndexRoute;
+  '/share/$shareId': typeof ShareShareIdRoute;
+  '/': typeof AppIndexRoute;
+  '/documents/$documentId': typeof AppDocumentsDocumentIdRoute;
+  '/spaces/$workspaceId': typeof AppSpacesWorkspaceIdRoute;
+  '/documents': typeof AppDocumentsIndexRoute;
+  '/spaces': typeof AppSpacesIndexRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
-  '/': typeof IndexRoute;
-  '/documents/$documentId': typeof DocumentsDocumentIdRoute;
-  '/documents/': typeof DocumentsIndexRoute;
+  '/_app': typeof AppRouteWithChildren;
+  '/share/$shareId': typeof ShareShareIdRoute;
+  '/_app/': typeof AppIndexRoute;
+  '/_app/documents/$documentId': typeof AppDocumentsDocumentIdRoute;
+  '/_app/spaces/$workspaceId': typeof AppSpacesWorkspaceIdRoute;
+  '/_app/documents/': typeof AppDocumentsIndexRoute;
+  '/_app/spaces/': typeof AppSpacesIndexRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
-  fullPaths: '/' | '/documents/$documentId' | '/documents/';
+  fullPaths:
+    | '/'
+    | '/share/$shareId'
+    | '/documents/$documentId'
+    | '/spaces/$workspaceId'
+    | '/documents/'
+    | '/spaces/';
   fileRoutesByTo: FileRoutesByTo;
-  to: '/' | '/documents/$documentId' | '/documents';
-  id: '__root__' | '/' | '/documents/$documentId' | '/documents/';
+  to:
+    | '/share/$shareId'
+    | '/'
+    | '/documents/$documentId'
+    | '/spaces/$workspaceId'
+    | '/documents'
+    | '/spaces';
+  id:
+    | '__root__'
+    | '/_app'
+    | '/share/$shareId'
+    | '/_app/'
+    | '/_app/documents/$documentId'
+    | '/_app/spaces/$workspaceId'
+    | '/_app/documents/'
+    | '/_app/spaces/';
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute;
-  DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute;
-  DocumentsIndexRoute: typeof DocumentsIndexRoute;
+  AppRoute: typeof AppRouteWithChildren;
+  ShareShareIdRoute: typeof ShareShareIdRoute;
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/';
+    '/_app': {
+      id: '/_app';
+      path: '';
+      fullPath: '/';
+      preLoaderRoute: typeof AppRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/_app/': {
+      id: '/_app/';
       path: '/';
       fullPath: '/';
-      preLoaderRoute: typeof IndexRouteImport;
+      preLoaderRoute: typeof AppIndexRouteImport;
+      parentRoute: typeof AppRoute;
+    };
+    '/share/$shareId': {
+      id: '/share/$shareId';
+      path: '/share/$shareId';
+      fullPath: '/share/$shareId';
+      preLoaderRoute: typeof ShareShareIdRouteImport;
       parentRoute: typeof rootRouteImport;
     };
-    '/documents/': {
-      id: '/documents/';
+    '/_app/documents/': {
+      id: '/_app/documents/';
       path: '/documents';
       fullPath: '/documents/';
-      preLoaderRoute: typeof DocumentsIndexRouteImport;
-      parentRoute: typeof rootRouteImport;
+      preLoaderRoute: typeof AppDocumentsIndexRouteImport;
+      parentRoute: typeof AppRoute;
     };
-    '/documents/$documentId': {
-      id: '/documents/$documentId';
+    '/_app/documents/$documentId': {
+      id: '/_app/documents/$documentId';
       path: '/documents/$documentId';
       fullPath: '/documents/$documentId';
-      preLoaderRoute: typeof DocumentsDocumentIdRouteImport;
-      parentRoute: typeof rootRouteImport;
+      preLoaderRoute: typeof AppDocumentsDocumentIdRouteImport;
+      parentRoute: typeof AppRoute;
+    };
+    '/_app/spaces/': {
+      id: '/_app/spaces/';
+      path: '/spaces';
+      fullPath: '/spaces/';
+      preLoaderRoute: typeof AppSpacesIndexRouteImport;
+      parentRoute: typeof AppRoute;
+    };
+    '/_app/spaces/$workspaceId': {
+      id: '/_app/spaces/$workspaceId';
+      path: '/spaces/$workspaceId';
+      fullPath: '/spaces/$workspaceId';
+      preLoaderRoute: typeof AppSpacesWorkspaceIdRouteImport;
+      parentRoute: typeof AppRoute;
     };
   }
 }
 
+interface AppRouteChildren {
+  AppIndexRoute: typeof AppIndexRoute;
+  AppDocumentsDocumentIdRoute: typeof AppDocumentsDocumentIdRoute;
+  AppSpacesWorkspaceIdRoute: typeof AppSpacesWorkspaceIdRoute;
+  AppDocumentsIndexRoute: typeof AppDocumentsIndexRoute;
+  AppSpacesIndexRoute: typeof AppSpacesIndexRoute;
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppIndexRoute: AppIndexRoute,
+  AppDocumentsDocumentIdRoute: AppDocumentsDocumentIdRoute,
+  AppSpacesWorkspaceIdRoute: AppSpacesWorkspaceIdRoute,
+  AppDocumentsIndexRoute: AppDocumentsIndexRoute,
+  AppSpacesIndexRoute: AppSpacesIndexRoute,
+};
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren);
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
-  DocumentsIndexRoute: DocumentsIndexRoute,
+  AppRoute: AppRouteWithChildren,
+  ShareShareIdRoute: ShareShareIdRoute,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

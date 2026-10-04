@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type PropsWithChildren,
+} from "react";
 import {
   createEditor,
   type CreateEditorOptions,
@@ -14,12 +22,36 @@ import {
   type EditorInstanceContextValue,
 } from "./context.js";
 import { EditorStore } from "./store.js";
+import {
+  createSafeReactNodeViewRenderer,
+  type ReactNodeViewProps,
+  type SafeReactNodeViewRendererOptions,
+} from "./react-node-view.js";
+
+export interface EditorReactNodeView {
+  component: ComponentType<ReactNodeViewProps>;
+  options?: SafeReactNodeViewRendererOptions;
+}
 
 const emptyOptions = {};
 const emptyHostServices: EditorHostServices = Object.freeze({});
 
 export interface EditorProviderProps extends PropsWithChildren {
-  options?: Omit<CreateEditorOptions, "element" | "onLinkClick">;
+  options?: Omit<
+    CreateEditorOptions,
+    | "element"
+    | "onLinkClick"
+    | "codeBlockNodeView"
+    | "calloutNodeView"
+    | "dividerNodeView"
+    | "statusTagNodeView"
+  >;
+  nodeViews?: {
+    codeBlock?: EditorReactNodeView;
+    callout?: EditorReactNodeView;
+    horizontalRule?: EditorReactNodeView;
+    statusTag?: EditorReactNodeView;
+  };
   instanceKey?: string;
   loading?: boolean;
   editable?: boolean;
@@ -32,6 +64,7 @@ export interface EditorProviderProps extends PropsWithChildren {
 
 export function EditorProvider({
   options = emptyOptions,
+  nodeViews,
   instanceKey,
   loading = false,
   editable,
@@ -46,10 +79,12 @@ export function EditorProvider({
   if (!storeRef.current) storeRef.current = new EditorStore();
   const store = storeRef.current;
   const optionsRef = useRef(options);
+  const nodeViewsRef = useRef(nodeViews);
   const collaborationRef = useRef(collaboration);
   const hostRef = useRef(hostServices);
   const callbacksRef = useRef({ onTransaction, onUpdate });
   optionsRef.current = options;
+  nodeViewsRef.current = nodeViews;
   collaborationRef.current = collaboration;
   hostRef.current = hostServices;
   callbacksRef.current = { onTransaction, onUpdate };
@@ -137,8 +172,35 @@ export function EditorProvider({
         if (!active) return;
 
         const sessionReadOnly = applyCollaborationAccess();
+        const collaborationExtensions = (await session?.createEditorExtensions?.()) ?? [];
+        if (!active) return;
         currentController = createEditor({
           ...currentOptions,
+          codeBlockNodeView: nodeViewsRef.current?.codeBlock
+            ? createSafeReactNodeViewRenderer(
+                nodeViewsRef.current.codeBlock.component,
+                nodeViewsRef.current.codeBlock.options,
+              )
+            : undefined,
+          calloutNodeView: nodeViewsRef.current?.callout
+            ? createSafeReactNodeViewRenderer(
+                nodeViewsRef.current.callout.component,
+                nodeViewsRef.current.callout.options,
+              )
+            : undefined,
+          dividerNodeView: nodeViewsRef.current?.horizontalRule
+            ? createSafeReactNodeViewRenderer(
+                nodeViewsRef.current.horizontalRule.component,
+                nodeViewsRef.current.horizontalRule.options,
+              )
+            : undefined,
+          statusTagNodeView: nodeViewsRef.current?.statusTag
+            ? createSafeReactNodeViewRenderer(
+                nodeViewsRef.current.statusTag.component,
+                nodeViewsRef.current.statusTag.options,
+              )
+            : undefined,
+          extensions: [...(currentOptions.extensions ?? []), ...collaborationExtensions],
           editable: sessionReadOnly ? false : (editable ?? currentOptions.editable),
           readOnlyReason: sessionReadOnly
             ? (readOnlyReason ?? currentOptions.readOnlyReason ?? "当前会话仅允许查看")
@@ -148,10 +210,7 @@ export function EditorProvider({
             if (!host.openExternalLink) return;
             let confirmed = false;
             try {
-              confirmed =
-                host.confirmExternalLink?.(href) ??
-                (typeof window !== "undefined" &&
-                  window.confirm(`即将打开外部链接：\n${href}\n\n是否继续？`));
+              confirmed = host.confirmExternalLink?.(href) ?? false;
             } catch (caught) {
               host.reportError?.(
                 caught instanceof Error ? caught : new Error("Could not confirm external link."),

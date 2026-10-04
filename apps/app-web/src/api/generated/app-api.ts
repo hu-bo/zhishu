@@ -37,6 +37,8 @@ import type {
   CopyDocumentTemplate400,
   CopyDocumentTemplate401,
   CopyDocumentTemplate404,
+  CopyDocumentTemplate409,
+  CopyDocumentTemplate429,
   CopyDocumentTemplateBody,
   CreateAssetReference201,
   CreateAssetReference400,
@@ -48,8 +50,17 @@ import type {
   CreateAssetUpload400,
   CreateAssetUpload401,
   CreateAssetUpload404,
+  CreateAssetUpload409,
+  CreateAssetUpload429,
   CreateAssetUpload503,
   CreateAssetUploadBody,
+  CreateCatalog201,
+  CreateCatalog400,
+  CreateCatalog401,
+  CreateCatalog404,
+  CreateCatalog409,
+  CreateCatalog429,
+  CreateCatalogBody,
   CreateCollaborationSession201,
   CreateCollaborationSession400,
   CreateCollaborationSession401,
@@ -59,21 +70,46 @@ import type {
   CreateDocument201,
   CreateDocument400,
   CreateDocument401,
+  CreateDocument409,
+  CreateDocument429,
   CreateDocumentBody,
+  CreateDocumentShare201,
+  CreateDocumentShare400,
+  CreateDocumentShare401,
+  CreateDocumentShare404,
+  CreateDocumentShare409,
+  CreateDocumentShareBody,
   CreateDocumentVersion201,
   CreateDocumentVersion400,
   CreateDocumentVersion401,
   CreateDocumentVersion404,
   CreateDocumentVersion409,
   CreateDocumentVersionBody,
+  CreateKnowledgeWorkspace201,
+  CreateKnowledgeWorkspace400,
+  CreateKnowledgeWorkspace401,
+  CreateKnowledgeWorkspace404,
+  CreateKnowledgeWorkspace409,
+  CreateKnowledgeWorkspace429,
+  CreateKnowledgeWorkspaceBody,
   CreateProject201,
   CreateProject400,
   CreateProject401,
   CreateProjectBody,
+  DeleteCatalog204,
+  DeleteCatalog400,
+  DeleteCatalog401,
+  DeleteCatalog404,
+  DeleteCatalog409,
+  DeleteCatalog429,
   DeleteProject204,
   DeleteProject400,
   DeleteProject401,
   DeleteProject404,
+  ExportDocumentJson200,
+  ExportDocumentJson401,
+  ExportDocumentJson404,
+  ExportDocumentJson409,
   FavoriteDocument204,
   FavoriteDocument401,
   FavoriteDocument404,
@@ -81,11 +117,21 @@ import type {
   GetAssetAccess401,
   GetAssetAccess404,
   GetAssetAccess503,
+  GetCatalogDeletionImpact200,
+  GetCatalogDeletionImpact400,
+  GetCatalogDeletionImpact401,
+  GetCatalogDeletionImpact404,
+  GetCatalogDeletionImpact409,
+  GetCatalogDeletionImpact429,
   GetCurrentUser200,
   GetCurrentUser401,
   GetDocument200,
   GetDocument401,
   GetDocument404,
+  GetDocumentContent200,
+  GetDocumentContent401,
+  GetDocumentContent404,
+  GetDocumentContent409,
   GetDocumentVersion200,
   GetDocumentVersion401,
   GetDocumentVersion404,
@@ -98,7 +144,48 @@ import type {
   GetProject400,
   GetProject401,
   GetProject404,
+  GetPublicShare200,
+  GetPublicShare400,
+  GetPublicShareAssetAccess200,
+  GetPublicShareAssetAccess400,
+  GetPublicShareAssetAccess404,
+  GetPublicShareAssetAccess503,
+  GetPublicShareContent200,
+  GetPublicShareContent400,
+  GetPublicShareContent404,
+  GetPublicShareContent409,
   GetReadiness200,
+  ImportDocumentJson200,
+  ImportDocumentJson400,
+  ImportDocumentJson401,
+  ImportDocumentJson409,
+  ImportDocumentJson413,
+  ImportDocumentJson429,
+  ImportDocumentJsonBody,
+  InitializeKnowledgePresets200,
+  InitializeKnowledgePresets400,
+  InitializeKnowledgePresets401,
+  InitializeKnowledgePresets404,
+  InitializeKnowledgePresets409,
+  InitializeKnowledgePresets429,
+  JoinShare200,
+  JoinShare400,
+  JoinShare401,
+  JoinShare404,
+  ListCatalogChildren200,
+  ListCatalogChildren400,
+  ListCatalogChildren401,
+  ListCatalogChildren404,
+  ListCatalogChildren409,
+  ListCatalogChildren429,
+  ListDocumentAcl200Item,
+  ListDocumentAcl401,
+  ListDocumentAcl404,
+  ListDocumentShares200Item,
+  ListDocumentShares400,
+  ListDocumentShares401,
+  ListDocumentShares404,
+  ListDocumentShares409,
   ListDocumentVersions200Item,
   ListDocumentVersions401,
   ListDocumentVersions404,
@@ -106,19 +193,52 @@ import type {
   ListDocuments400,
   ListDocuments401,
   ListDocumentsParams,
+  ListKnowledgeWorkspaces200Item,
+  ListKnowledgeWorkspaces400,
+  ListKnowledgeWorkspaces401,
+  ListKnowledgeWorkspaces404,
+  ListKnowledgeWorkspaces409,
+  ListKnowledgeWorkspaces429,
   ListProjects200,
   ListProjects401,
   ListProjectsParams,
+  LocateDocument200,
+  LocateDocument400,
+  LocateDocument401,
+  LocateDocument404,
+  LocateDocument409,
+  LocateDocument429,
   MockLogin200,
   MockLogout204,
   MockLogout401,
+  MoveCatalog200,
+  MoveCatalog400,
+  MoveCatalog401,
+  MoveCatalog404,
+  MoveCatalog409,
+  MoveCatalog429,
+  MoveCatalogBody,
+  MoveKnowledgeDocument200,
+  MoveKnowledgeDocument400,
+  MoveKnowledgeDocument401,
+  MoveKnowledgeDocument404,
+  MoveKnowledgeDocument409,
+  MoveKnowledgeDocument429,
+  MoveKnowledgeDocumentBody,
   PermanentlyDeleteDocument204,
   PermanentlyDeleteDocument401,
   PermanentlyDeleteDocument404,
   PermanentlyDeleteDocument409,
+  PutDocumentContent200,
+  PutDocumentContent400,
+  PutDocumentContent401,
+  PutDocumentContent404,
+  PutDocumentContent409,
+  PutDocumentContentBody,
   RemoveDocumentAcl204,
   RemoveDocumentAcl401,
   RemoveDocumentAcl404,
+  RemoveDocumentAcl409,
   RestoreDocument204,
   RestoreDocument401,
   RestoreDocument404,
@@ -129,10 +249,23 @@ import type {
   RestoreDocumentVersion404,
   RestoreDocumentVersion409,
   RestoreDocumentVersionBody,
+  RevokeDocumentShare204,
+  RevokeDocumentShare400,
+  RevokeDocumentShare401,
+  RevokeDocumentShare404,
+  RevokeDocumentShare409,
+  SearchKnowledgeDocuments200,
+  SearchKnowledgeDocuments400,
+  SearchKnowledgeDocuments401,
+  SearchKnowledgeDocuments404,
+  SearchKnowledgeDocuments409,
+  SearchKnowledgeDocuments429,
+  SearchKnowledgeDocumentsParams,
   SetDocumentAcl200,
   SetDocumentAcl400,
   SetDocumentAcl401,
   SetDocumentAcl404,
+  SetDocumentAcl409,
   SetDocumentAclBody,
   TrashDocument204,
   TrashDocument401,
@@ -141,6 +274,13 @@ import type {
   UnfavoriteDocument204,
   UnfavoriteDocument401,
   UnfavoriteDocument404,
+  UpdateCatalog200,
+  UpdateCatalog400,
+  UpdateCatalog401,
+  UpdateCatalog404,
+  UpdateCatalog409,
+  UpdateCatalog429,
+  UpdateCatalogBody,
   UpdateDocumentMetadata200,
   UpdateDocumentMetadata400,
   UpdateDocumentMetadata401,
@@ -366,6 +506,101 @@ export function useGetReadiness<TData = Awaited<ReturnType<typeof getReadiness>>
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetReadinessQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetMetricsUrl = () => {
+
+
+
+
+  return `/metrics`
+}
+
+export const getMetrics = async ( options?: Parameters<typeof apiFetch>[1]): Promise<string> => {
+
+  return apiFetch<string>(getGetMetricsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMetricsQueryKey = () => {
+    return [
+    `/metrics`
+    ] as const;
+    }
+
+
+export const getGetMetricsQueryOptions = <TData = Awaited<ReturnType<typeof getMetrics>>, TError = ErrorType<string>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMetrics>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMetricsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMetrics>>> = ({ signal }) => getMetrics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMetrics>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetMetricsQueryResult = NonNullable<Awaited<ReturnType<typeof getMetrics>>>
+export type GetMetricsQueryError = ErrorType<string>
+
+
+export function useGetMetrics<TData = Awaited<ReturnType<typeof getMetrics>>, TError = ErrorType<string>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMetrics>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMetrics>>,
+          TError,
+          Awaited<ReturnType<typeof getMetrics>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetMetrics<TData = Awaited<ReturnType<typeof getMetrics>>, TError = ErrorType<string>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMetrics>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMetrics>>,
+          TError,
+          Awaited<ReturnType<typeof getMetrics>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetMetrics<TData = Awaited<ReturnType<typeof getMetrics>>, TError = ErrorType<string>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMetrics>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetMetrics<TData = Awaited<ReturnType<typeof getMetrics>>, TError = ErrorType<string>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMetrics>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetMetricsQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -1226,7 +1461,7 @@ export const getCreateAssetUploadQueryKey = (documentId: string,
     }
 
 
-export const getCreateAssetUploadQueryOptions = <TData = Awaited<ReturnType<typeof createAssetUpload>>, TError = ErrorType<CreateAssetUpload400 | CreateAssetUpload401 | CreateAssetUpload404 | CreateAssetUpload503>>(documentId: string,
+export const getCreateAssetUploadQueryOptions = <TData = Awaited<ReturnType<typeof createAssetUpload>>, TError = ErrorType<CreateAssetUpload400 | CreateAssetUpload401 | CreateAssetUpload404 | CreateAssetUpload409 | CreateAssetUpload429 | CreateAssetUpload503>>(documentId: string,
     createAssetUploadBody: BodyType<CreateAssetUploadBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createAssetUpload>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
@@ -1246,10 +1481,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type CreateAssetUploadQueryResult = NonNullable<Awaited<ReturnType<typeof createAssetUpload>>>
-export type CreateAssetUploadQueryError = ErrorType<CreateAssetUpload400 | CreateAssetUpload401 | CreateAssetUpload404 | CreateAssetUpload503>
+export type CreateAssetUploadQueryError = ErrorType<CreateAssetUpload400 | CreateAssetUpload401 | CreateAssetUpload404 | CreateAssetUpload409 | CreateAssetUpload429 | CreateAssetUpload503>
 
 
-export function useCreateAssetUpload<TData = Awaited<ReturnType<typeof createAssetUpload>>, TError = ErrorType<CreateAssetUpload400 | CreateAssetUpload401 | CreateAssetUpload404 | CreateAssetUpload503>>(
+export function useCreateAssetUpload<TData = Awaited<ReturnType<typeof createAssetUpload>>, TError = ErrorType<CreateAssetUpload400 | CreateAssetUpload401 | CreateAssetUpload404 | CreateAssetUpload409 | CreateAssetUpload429 | CreateAssetUpload503>>(
  documentId: string,
     createAssetUploadBody: BodyType<CreateAssetUploadBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof createAssetUpload>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -1260,7 +1495,7 @@ export function useCreateAssetUpload<TData = Awaited<ReturnType<typeof createAss
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useCreateAssetUpload<TData = Awaited<ReturnType<typeof createAssetUpload>>, TError = ErrorType<CreateAssetUpload400 | CreateAssetUpload401 | CreateAssetUpload404 | CreateAssetUpload503>>(
+export function useCreateAssetUpload<TData = Awaited<ReturnType<typeof createAssetUpload>>, TError = ErrorType<CreateAssetUpload400 | CreateAssetUpload401 | CreateAssetUpload404 | CreateAssetUpload409 | CreateAssetUpload429 | CreateAssetUpload503>>(
  documentId: string,
     createAssetUploadBody: BodyType<CreateAssetUploadBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createAssetUpload>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -1271,13 +1506,13 @@ export function useCreateAssetUpload<TData = Awaited<ReturnType<typeof createAss
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useCreateAssetUpload<TData = Awaited<ReturnType<typeof createAssetUpload>>, TError = ErrorType<CreateAssetUpload400 | CreateAssetUpload401 | CreateAssetUpload404 | CreateAssetUpload503>>(
+export function useCreateAssetUpload<TData = Awaited<ReturnType<typeof createAssetUpload>>, TError = ErrorType<CreateAssetUpload400 | CreateAssetUpload401 | CreateAssetUpload404 | CreateAssetUpload409 | CreateAssetUpload429 | CreateAssetUpload503>>(
  documentId: string,
     createAssetUploadBody: BodyType<CreateAssetUploadBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createAssetUpload>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useCreateAssetUpload<TData = Awaited<ReturnType<typeof createAssetUpload>>, TError = ErrorType<CreateAssetUpload400 | CreateAssetUpload401 | CreateAssetUpload404 | CreateAssetUpload503>>(
+export function useCreateAssetUpload<TData = Awaited<ReturnType<typeof createAssetUpload>>, TError = ErrorType<CreateAssetUpload400 | CreateAssetUpload401 | CreateAssetUpload404 | CreateAssetUpload409 | CreateAssetUpload429 | CreateAssetUpload503>>(
  documentId: string,
     createAssetUploadBody: BodyType<CreateAssetUploadBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createAssetUpload>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -1821,6 +2056,115 @@ export function useGetAssetAccess<TData = Awaited<ReturnType<typeof getAssetAcce
 
 
 
+export const getImportDocumentJsonUrl = () => {
+
+
+
+
+  return `/api/documents/import`
+}
+
+export const importDocumentJson = async (importDocumentJsonBody: ImportDocumentJsonBody, options?: Parameters<typeof apiFetch>[1]): Promise<ImportDocumentJson200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<ImportDocumentJson200>(getImportDocumentJsonUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(importDocumentJsonBody)
+  }
+);}
+
+
+
+
+
+export const getImportDocumentJsonQueryKey = (importDocumentJsonBody?: BodyType<ImportDocumentJsonBody>,) => {
+    return [
+    'POST', `/api/documents/import`, importDocumentJsonBody
+    ] as const;
+    }
+
+
+export const getImportDocumentJsonQueryOptions = <TData = Awaited<ReturnType<typeof importDocumentJson>>, TError = ErrorType<ImportDocumentJson400 | ImportDocumentJson401 | ImportDocumentJson409 | ImportDocumentJson413 | ImportDocumentJson429>>(importDocumentJsonBody: BodyType<ImportDocumentJsonBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof importDocumentJson>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getImportDocumentJsonQueryKey(importDocumentJsonBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof importDocumentJson>>> = ({ signal }) => importDocumentJson(importDocumentJsonBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof importDocumentJson>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ImportDocumentJsonQueryResult = NonNullable<Awaited<ReturnType<typeof importDocumentJson>>>
+export type ImportDocumentJsonQueryError = ErrorType<ImportDocumentJson400 | ImportDocumentJson401 | ImportDocumentJson409 | ImportDocumentJson413 | ImportDocumentJson429>
+
+
+export function useImportDocumentJson<TData = Awaited<ReturnType<typeof importDocumentJson>>, TError = ErrorType<ImportDocumentJson400 | ImportDocumentJson401 | ImportDocumentJson409 | ImportDocumentJson413 | ImportDocumentJson429>>(
+ importDocumentJsonBody: BodyType<ImportDocumentJsonBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof importDocumentJson>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof importDocumentJson>>,
+          TError,
+          Awaited<ReturnType<typeof importDocumentJson>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useImportDocumentJson<TData = Awaited<ReturnType<typeof importDocumentJson>>, TError = ErrorType<ImportDocumentJson400 | ImportDocumentJson401 | ImportDocumentJson409 | ImportDocumentJson413 | ImportDocumentJson429>>(
+ importDocumentJsonBody: BodyType<ImportDocumentJsonBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof importDocumentJson>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof importDocumentJson>>,
+          TError,
+          Awaited<ReturnType<typeof importDocumentJson>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useImportDocumentJson<TData = Awaited<ReturnType<typeof importDocumentJson>>, TError = ErrorType<ImportDocumentJson400 | ImportDocumentJson401 | ImportDocumentJson409 | ImportDocumentJson413 | ImportDocumentJson429>>(
+ importDocumentJsonBody: BodyType<ImportDocumentJsonBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof importDocumentJson>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useImportDocumentJson<TData = Awaited<ReturnType<typeof importDocumentJson>>, TError = ErrorType<ImportDocumentJson400 | ImportDocumentJson401 | ImportDocumentJson409 | ImportDocumentJson413 | ImportDocumentJson429>>(
+ importDocumentJsonBody: BodyType<ImportDocumentJsonBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof importDocumentJson>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getImportDocumentJsonQueryOptions(importDocumentJsonBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getListDocumentsUrl = (params?: ListDocumentsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -1967,7 +2311,7 @@ export const getCreateDocumentQueryKey = (createDocumentBody?: BodyType<CreateDo
     }
 
 
-export const getCreateDocumentQueryOptions = <TData = Awaited<ReturnType<typeof createDocument>>, TError = ErrorType<CreateDocument400 | CreateDocument401>>(createDocumentBody: BodyType<CreateDocumentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createDocument>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getCreateDocumentQueryOptions = <TData = Awaited<ReturnType<typeof createDocument>>, TError = ErrorType<CreateDocument400 | CreateDocument401 | CreateDocument409 | CreateDocument429>>(createDocumentBody: BodyType<CreateDocumentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createDocument>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -1986,10 +2330,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type CreateDocumentQueryResult = NonNullable<Awaited<ReturnType<typeof createDocument>>>
-export type CreateDocumentQueryError = ErrorType<CreateDocument400 | CreateDocument401>
+export type CreateDocumentQueryError = ErrorType<CreateDocument400 | CreateDocument401 | CreateDocument409 | CreateDocument429>
 
 
-export function useCreateDocument<TData = Awaited<ReturnType<typeof createDocument>>, TError = ErrorType<CreateDocument400 | CreateDocument401>>(
+export function useCreateDocument<TData = Awaited<ReturnType<typeof createDocument>>, TError = ErrorType<CreateDocument400 | CreateDocument401 | CreateDocument409 | CreateDocument429>>(
  createDocumentBody: BodyType<CreateDocumentBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof createDocument>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof createDocument>>,
@@ -1999,7 +2343,7 @@ export function useCreateDocument<TData = Awaited<ReturnType<typeof createDocume
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useCreateDocument<TData = Awaited<ReturnType<typeof createDocument>>, TError = ErrorType<CreateDocument400 | CreateDocument401>>(
+export function useCreateDocument<TData = Awaited<ReturnType<typeof createDocument>>, TError = ErrorType<CreateDocument400 | CreateDocument401 | CreateDocument409 | CreateDocument429>>(
  createDocumentBody: BodyType<CreateDocumentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createDocument>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof createDocument>>,
@@ -2009,12 +2353,12 @@ export function useCreateDocument<TData = Awaited<ReturnType<typeof createDocume
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useCreateDocument<TData = Awaited<ReturnType<typeof createDocument>>, TError = ErrorType<CreateDocument400 | CreateDocument401>>(
+export function useCreateDocument<TData = Awaited<ReturnType<typeof createDocument>>, TError = ErrorType<CreateDocument400 | CreateDocument401 | CreateDocument409 | CreateDocument429>>(
  createDocumentBody: BodyType<CreateDocumentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createDocument>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useCreateDocument<TData = Awaited<ReturnType<typeof createDocument>>, TError = ErrorType<CreateDocument400 | CreateDocument401>>(
+export function useCreateDocument<TData = Awaited<ReturnType<typeof createDocument>>, TError = ErrorType<CreateDocument400 | CreateDocument401 | CreateDocument409 | CreateDocument429>>(
  createDocumentBody: BodyType<CreateDocumentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createDocument>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -2326,6 +2670,407 @@ export function useTrashDocument<TData = Awaited<ReturnType<typeof trashDocument
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getTrashDocumentQueryOptions(documentId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getExportDocumentJsonUrl = (documentId: string,) => {
+
+
+
+
+  return `/api/documents/${documentId}/export`
+}
+
+export const exportDocumentJson = async (documentId: string, options?: Parameters<typeof apiFetch>[1]): Promise<ExportDocumentJson200> => {
+
+  return apiFetch<ExportDocumentJson200>(getExportDocumentJsonUrl(documentId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportDocumentJsonQueryKey = (documentId: string,) => {
+    return [
+    `/api/documents/${documentId}/export`
+    ] as const;
+    }
+
+
+export const getExportDocumentJsonQueryOptions = <TData = Awaited<ReturnType<typeof exportDocumentJson>>, TError = ErrorType<ExportDocumentJson401 | ExportDocumentJson404 | ExportDocumentJson409>>(documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocumentJson>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportDocumentJsonQueryKey(documentId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportDocumentJson>>> = ({ signal }) => exportDocumentJson(documentId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: documentId !== null && documentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportDocumentJson>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ExportDocumentJsonQueryResult = NonNullable<Awaited<ReturnType<typeof exportDocumentJson>>>
+export type ExportDocumentJsonQueryError = ErrorType<ExportDocumentJson401 | ExportDocumentJson404 | ExportDocumentJson409>
+
+
+export function useExportDocumentJson<TData = Awaited<ReturnType<typeof exportDocumentJson>>, TError = ErrorType<ExportDocumentJson401 | ExportDocumentJson404 | ExportDocumentJson409>>(
+ documentId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocumentJson>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportDocumentJson>>,
+          TError,
+          Awaited<ReturnType<typeof exportDocumentJson>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportDocumentJson<TData = Awaited<ReturnType<typeof exportDocumentJson>>, TError = ErrorType<ExportDocumentJson401 | ExportDocumentJson404 | ExportDocumentJson409>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocumentJson>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportDocumentJson>>,
+          TError,
+          Awaited<ReturnType<typeof exportDocumentJson>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportDocumentJson<TData = Awaited<ReturnType<typeof exportDocumentJson>>, TError = ErrorType<ExportDocumentJson401 | ExportDocumentJson404 | ExportDocumentJson409>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocumentJson>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useExportDocumentJson<TData = Awaited<ReturnType<typeof exportDocumentJson>>, TError = ErrorType<ExportDocumentJson401 | ExportDocumentJson404 | ExportDocumentJson409>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportDocumentJson>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getExportDocumentJsonQueryOptions(documentId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetDocumentContentUrl = (documentId: string,) => {
+
+
+
+
+  return `/api/documents/${documentId}/content`
+}
+
+export const getDocumentContent = async (documentId: string, options?: Parameters<typeof apiFetch>[1]): Promise<GetDocumentContent200> => {
+
+  return apiFetch<GetDocumentContent200>(getGetDocumentContentUrl(documentId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDocumentContentQueryKey = (documentId: string,) => {
+    return [
+    `/api/documents/${documentId}/content`
+    ] as const;
+    }
+
+
+export const getGetDocumentContentQueryOptions = <TData = Awaited<ReturnType<typeof getDocumentContent>>, TError = ErrorType<GetDocumentContent401 | GetDocumentContent404 | GetDocumentContent409>>(documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocumentContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDocumentContentQueryKey(documentId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDocumentContent>>> = ({ signal }) => getDocumentContent(documentId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: documentId !== null && documentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDocumentContent>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetDocumentContentQueryResult = NonNullable<Awaited<ReturnType<typeof getDocumentContent>>>
+export type GetDocumentContentQueryError = ErrorType<GetDocumentContent401 | GetDocumentContent404 | GetDocumentContent409>
+
+
+export function useGetDocumentContent<TData = Awaited<ReturnType<typeof getDocumentContent>>, TError = ErrorType<GetDocumentContent401 | GetDocumentContent404 | GetDocumentContent409>>(
+ documentId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocumentContent>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocumentContent>>,
+          TError,
+          Awaited<ReturnType<typeof getDocumentContent>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetDocumentContent<TData = Awaited<ReturnType<typeof getDocumentContent>>, TError = ErrorType<GetDocumentContent401 | GetDocumentContent404 | GetDocumentContent409>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocumentContent>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDocumentContent>>,
+          TError,
+          Awaited<ReturnType<typeof getDocumentContent>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetDocumentContent<TData = Awaited<ReturnType<typeof getDocumentContent>>, TError = ErrorType<GetDocumentContent401 | GetDocumentContent404 | GetDocumentContent409>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocumentContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetDocumentContent<TData = Awaited<ReturnType<typeof getDocumentContent>>, TError = ErrorType<GetDocumentContent401 | GetDocumentContent404 | GetDocumentContent409>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDocumentContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetDocumentContentQueryOptions(documentId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getPutDocumentContentUrl = (documentId: string,) => {
+
+
+
+
+  return `/api/documents/${documentId}/content`
+}
+
+export const putDocumentContent = async (documentId: string,
+    putDocumentContentBody: PutDocumentContentBody, options?: Parameters<typeof apiFetch>[1]): Promise<PutDocumentContent200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<PutDocumentContent200>(getPutDocumentContentUrl(documentId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(putDocumentContentBody)
+  }
+);}
+
+
+
+
+
+export const getPutDocumentContentQueryKey = (documentId: string,
+    putDocumentContentBody?: BodyType<PutDocumentContentBody>,) => {
+    return [
+    'PUT', `/api/documents/${documentId}/content`, putDocumentContentBody
+    ] as const;
+    }
+
+
+export const getPutDocumentContentQueryOptions = <TData = Awaited<ReturnType<typeof putDocumentContent>>, TError = ErrorType<PutDocumentContent400 | PutDocumentContent401 | PutDocumentContent404 | PutDocumentContent409>>(documentId: string,
+    putDocumentContentBody: BodyType<PutDocumentContentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putDocumentContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getPutDocumentContentQueryKey(documentId,putDocumentContentBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof putDocumentContent>>> = ({ signal }) => putDocumentContent(documentId,putDocumentContentBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: documentId !== null && documentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof putDocumentContent>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type PutDocumentContentQueryResult = NonNullable<Awaited<ReturnType<typeof putDocumentContent>>>
+export type PutDocumentContentQueryError = ErrorType<PutDocumentContent400 | PutDocumentContent401 | PutDocumentContent404 | PutDocumentContent409>
+
+
+export function usePutDocumentContent<TData = Awaited<ReturnType<typeof putDocumentContent>>, TError = ErrorType<PutDocumentContent400 | PutDocumentContent401 | PutDocumentContent404 | PutDocumentContent409>>(
+ documentId: string,
+    putDocumentContentBody: BodyType<PutDocumentContentBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof putDocumentContent>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putDocumentContent>>,
+          TError,
+          Awaited<ReturnType<typeof putDocumentContent>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutDocumentContent<TData = Awaited<ReturnType<typeof putDocumentContent>>, TError = ErrorType<PutDocumentContent400 | PutDocumentContent401 | PutDocumentContent404 | PutDocumentContent409>>(
+ documentId: string,
+    putDocumentContentBody: BodyType<PutDocumentContentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putDocumentContent>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof putDocumentContent>>,
+          TError,
+          Awaited<ReturnType<typeof putDocumentContent>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function usePutDocumentContent<TData = Awaited<ReturnType<typeof putDocumentContent>>, TError = ErrorType<PutDocumentContent400 | PutDocumentContent401 | PutDocumentContent404 | PutDocumentContent409>>(
+ documentId: string,
+    putDocumentContentBody: BodyType<PutDocumentContentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putDocumentContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function usePutDocumentContent<TData = Awaited<ReturnType<typeof putDocumentContent>>, TError = ErrorType<PutDocumentContent400 | PutDocumentContent401 | PutDocumentContent404 | PutDocumentContent409>>(
+ documentId: string,
+    putDocumentContentBody: BodyType<PutDocumentContentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putDocumentContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getPutDocumentContentQueryOptions(documentId,putDocumentContentBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListDocumentAclUrl = (documentId: string,) => {
+
+
+
+
+  return `/api/documents/${documentId}/acl`
+}
+
+export const listDocumentAcl = async (documentId: string, options?: Parameters<typeof apiFetch>[1]): Promise<ListDocumentAcl200Item[]> => {
+
+  return apiFetch<ListDocumentAcl200Item[]>(getListDocumentAclUrl(documentId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDocumentAclQueryKey = (documentId: string,) => {
+    return [
+    `/api/documents/${documentId}/acl`
+    ] as const;
+    }
+
+
+export const getListDocumentAclQueryOptions = <TData = Awaited<ReturnType<typeof listDocumentAcl>>, TError = ErrorType<ListDocumentAcl401 | ListDocumentAcl404>>(documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocumentAcl>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDocumentAclQueryKey(documentId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDocumentAcl>>> = ({ signal }) => listDocumentAcl(documentId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: documentId !== null && documentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDocumentAcl>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListDocumentAclQueryResult = NonNullable<Awaited<ReturnType<typeof listDocumentAcl>>>
+export type ListDocumentAclQueryError = ErrorType<ListDocumentAcl401 | ListDocumentAcl404>
+
+
+export function useListDocumentAcl<TData = Awaited<ReturnType<typeof listDocumentAcl>>, TError = ErrorType<ListDocumentAcl401 | ListDocumentAcl404>>(
+ documentId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocumentAcl>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listDocumentAcl>>,
+          TError,
+          Awaited<ReturnType<typeof listDocumentAcl>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListDocumentAcl<TData = Awaited<ReturnType<typeof listDocumentAcl>>, TError = ErrorType<ListDocumentAcl401 | ListDocumentAcl404>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocumentAcl>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listDocumentAcl>>,
+          TError,
+          Awaited<ReturnType<typeof listDocumentAcl>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListDocumentAcl<TData = Awaited<ReturnType<typeof listDocumentAcl>>, TError = ErrorType<ListDocumentAcl401 | ListDocumentAcl404>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocumentAcl>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useListDocumentAcl<TData = Awaited<ReturnType<typeof listDocumentAcl>>, TError = ErrorType<ListDocumentAcl401 | ListDocumentAcl404>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocumentAcl>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListDocumentAclQueryOptions(documentId,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -2925,7 +3670,7 @@ export const getCopyDocumentTemplateQueryKey = (documentId: string,
     }
 
 
-export const getCopyDocumentTemplateQueryOptions = <TData = Awaited<ReturnType<typeof copyDocumentTemplate>>, TError = ErrorType<CopyDocumentTemplate400 | CopyDocumentTemplate401 | CopyDocumentTemplate404>>(documentId: string,
+export const getCopyDocumentTemplateQueryOptions = <TData = Awaited<ReturnType<typeof copyDocumentTemplate>>, TError = ErrorType<CopyDocumentTemplate400 | CopyDocumentTemplate401 | CopyDocumentTemplate404 | CopyDocumentTemplate409 | CopyDocumentTemplate429>>(documentId: string,
     copyDocumentTemplateBody: BodyType<CopyDocumentTemplateBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof copyDocumentTemplate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
@@ -2945,10 +3690,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type CopyDocumentTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof copyDocumentTemplate>>>
-export type CopyDocumentTemplateQueryError = ErrorType<CopyDocumentTemplate400 | CopyDocumentTemplate401 | CopyDocumentTemplate404>
+export type CopyDocumentTemplateQueryError = ErrorType<CopyDocumentTemplate400 | CopyDocumentTemplate401 | CopyDocumentTemplate404 | CopyDocumentTemplate409 | CopyDocumentTemplate429>
 
 
-export function useCopyDocumentTemplate<TData = Awaited<ReturnType<typeof copyDocumentTemplate>>, TError = ErrorType<CopyDocumentTemplate400 | CopyDocumentTemplate401 | CopyDocumentTemplate404>>(
+export function useCopyDocumentTemplate<TData = Awaited<ReturnType<typeof copyDocumentTemplate>>, TError = ErrorType<CopyDocumentTemplate400 | CopyDocumentTemplate401 | CopyDocumentTemplate404 | CopyDocumentTemplate409 | CopyDocumentTemplate429>>(
  documentId: string,
     copyDocumentTemplateBody: BodyType<CopyDocumentTemplateBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof copyDocumentTemplate>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -2959,7 +3704,7 @@ export function useCopyDocumentTemplate<TData = Awaited<ReturnType<typeof copyDo
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useCopyDocumentTemplate<TData = Awaited<ReturnType<typeof copyDocumentTemplate>>, TError = ErrorType<CopyDocumentTemplate400 | CopyDocumentTemplate401 | CopyDocumentTemplate404>>(
+export function useCopyDocumentTemplate<TData = Awaited<ReturnType<typeof copyDocumentTemplate>>, TError = ErrorType<CopyDocumentTemplate400 | CopyDocumentTemplate401 | CopyDocumentTemplate404 | CopyDocumentTemplate409 | CopyDocumentTemplate429>>(
  documentId: string,
     copyDocumentTemplateBody: BodyType<CopyDocumentTemplateBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof copyDocumentTemplate>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -2970,13 +3715,13 @@ export function useCopyDocumentTemplate<TData = Awaited<ReturnType<typeof copyDo
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useCopyDocumentTemplate<TData = Awaited<ReturnType<typeof copyDocumentTemplate>>, TError = ErrorType<CopyDocumentTemplate400 | CopyDocumentTemplate401 | CopyDocumentTemplate404>>(
+export function useCopyDocumentTemplate<TData = Awaited<ReturnType<typeof copyDocumentTemplate>>, TError = ErrorType<CopyDocumentTemplate400 | CopyDocumentTemplate401 | CopyDocumentTemplate404 | CopyDocumentTemplate409 | CopyDocumentTemplate429>>(
  documentId: string,
     copyDocumentTemplateBody: BodyType<CopyDocumentTemplateBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof copyDocumentTemplate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useCopyDocumentTemplate<TData = Awaited<ReturnType<typeof copyDocumentTemplate>>, TError = ErrorType<CopyDocumentTemplate400 | CopyDocumentTemplate401 | CopyDocumentTemplate404>>(
+export function useCopyDocumentTemplate<TData = Awaited<ReturnType<typeof copyDocumentTemplate>>, TError = ErrorType<CopyDocumentTemplate400 | CopyDocumentTemplate401 | CopyDocumentTemplate404 | CopyDocumentTemplate409 | CopyDocumentTemplate429>>(
  documentId: string,
     copyDocumentTemplateBody: BodyType<CopyDocumentTemplateBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof copyDocumentTemplate>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -3519,7 +4264,7 @@ export const getSetDocumentAclQueryKey = (documentId: string,
     }
 
 
-export const getSetDocumentAclQueryOptions = <TData = Awaited<ReturnType<typeof setDocumentAcl>>, TError = ErrorType<SetDocumentAcl400 | SetDocumentAcl401 | SetDocumentAcl404>>(documentId: string,
+export const getSetDocumentAclQueryOptions = <TData = Awaited<ReturnType<typeof setDocumentAcl>>, TError = ErrorType<SetDocumentAcl400 | SetDocumentAcl401 | SetDocumentAcl404 | SetDocumentAcl409>>(documentId: string,
     identityId: string,
     setDocumentAclBody: BodyType<SetDocumentAclBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof setDocumentAcl>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
@@ -3540,10 +4285,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type SetDocumentAclQueryResult = NonNullable<Awaited<ReturnType<typeof setDocumentAcl>>>
-export type SetDocumentAclQueryError = ErrorType<SetDocumentAcl400 | SetDocumentAcl401 | SetDocumentAcl404>
+export type SetDocumentAclQueryError = ErrorType<SetDocumentAcl400 | SetDocumentAcl401 | SetDocumentAcl404 | SetDocumentAcl409>
 
 
-export function useSetDocumentAcl<TData = Awaited<ReturnType<typeof setDocumentAcl>>, TError = ErrorType<SetDocumentAcl400 | SetDocumentAcl401 | SetDocumentAcl404>>(
+export function useSetDocumentAcl<TData = Awaited<ReturnType<typeof setDocumentAcl>>, TError = ErrorType<SetDocumentAcl400 | SetDocumentAcl401 | SetDocumentAcl404 | SetDocumentAcl409>>(
  documentId: string,
     identityId: string,
     setDocumentAclBody: BodyType<SetDocumentAclBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof setDocumentAcl>>, TError, TData>> & Pick<
@@ -3555,7 +4300,7 @@ export function useSetDocumentAcl<TData = Awaited<ReturnType<typeof setDocumentA
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useSetDocumentAcl<TData = Awaited<ReturnType<typeof setDocumentAcl>>, TError = ErrorType<SetDocumentAcl400 | SetDocumentAcl401 | SetDocumentAcl404>>(
+export function useSetDocumentAcl<TData = Awaited<ReturnType<typeof setDocumentAcl>>, TError = ErrorType<SetDocumentAcl400 | SetDocumentAcl401 | SetDocumentAcl404 | SetDocumentAcl409>>(
  documentId: string,
     identityId: string,
     setDocumentAclBody: BodyType<SetDocumentAclBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof setDocumentAcl>>, TError, TData>> & Pick<
@@ -3567,14 +4312,14 @@ export function useSetDocumentAcl<TData = Awaited<ReturnType<typeof setDocumentA
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useSetDocumentAcl<TData = Awaited<ReturnType<typeof setDocumentAcl>>, TError = ErrorType<SetDocumentAcl400 | SetDocumentAcl401 | SetDocumentAcl404>>(
+export function useSetDocumentAcl<TData = Awaited<ReturnType<typeof setDocumentAcl>>, TError = ErrorType<SetDocumentAcl400 | SetDocumentAcl401 | SetDocumentAcl404 | SetDocumentAcl409>>(
  documentId: string,
     identityId: string,
     setDocumentAclBody: BodyType<SetDocumentAclBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof setDocumentAcl>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useSetDocumentAcl<TData = Awaited<ReturnType<typeof setDocumentAcl>>, TError = ErrorType<SetDocumentAcl400 | SetDocumentAcl401 | SetDocumentAcl404>>(
+export function useSetDocumentAcl<TData = Awaited<ReturnType<typeof setDocumentAcl>>, TError = ErrorType<SetDocumentAcl400 | SetDocumentAcl401 | SetDocumentAcl404 | SetDocumentAcl409>>(
  documentId: string,
     identityId: string,
     setDocumentAclBody: BodyType<SetDocumentAclBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof setDocumentAcl>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
@@ -3627,7 +4372,7 @@ export const getRemoveDocumentAclQueryKey = (documentId: string,
     }
 
 
-export const getRemoveDocumentAclQueryOptions = <TData = Awaited<ReturnType<typeof removeDocumentAcl>>, TError = ErrorType<RemoveDocumentAcl401 | RemoveDocumentAcl404>>(documentId: string,
+export const getRemoveDocumentAclQueryOptions = <TData = Awaited<ReturnType<typeof removeDocumentAcl>>, TError = ErrorType<RemoveDocumentAcl401 | RemoveDocumentAcl404 | RemoveDocumentAcl409>>(documentId: string,
     identityId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof removeDocumentAcl>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
@@ -3647,10 +4392,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type RemoveDocumentAclQueryResult = NonNullable<Awaited<ReturnType<typeof removeDocumentAcl>>>
-export type RemoveDocumentAclQueryError = ErrorType<RemoveDocumentAcl401 | RemoveDocumentAcl404>
+export type RemoveDocumentAclQueryError = ErrorType<RemoveDocumentAcl401 | RemoveDocumentAcl404 | RemoveDocumentAcl409>
 
 
-export function useRemoveDocumentAcl<TData = Awaited<ReturnType<typeof removeDocumentAcl>>, TError = ErrorType<RemoveDocumentAcl401 | RemoveDocumentAcl404>>(
+export function useRemoveDocumentAcl<TData = Awaited<ReturnType<typeof removeDocumentAcl>>, TError = ErrorType<RemoveDocumentAcl401 | RemoveDocumentAcl404 | RemoveDocumentAcl409>>(
  documentId: string,
     identityId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof removeDocumentAcl>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
@@ -3661,7 +4406,7 @@ export function useRemoveDocumentAcl<TData = Awaited<ReturnType<typeof removeDoc
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useRemoveDocumentAcl<TData = Awaited<ReturnType<typeof removeDocumentAcl>>, TError = ErrorType<RemoveDocumentAcl401 | RemoveDocumentAcl404>>(
+export function useRemoveDocumentAcl<TData = Awaited<ReturnType<typeof removeDocumentAcl>>, TError = ErrorType<RemoveDocumentAcl401 | RemoveDocumentAcl404 | RemoveDocumentAcl409>>(
  documentId: string,
     identityId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof removeDocumentAcl>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
@@ -3672,13 +4417,13 @@ export function useRemoveDocumentAcl<TData = Awaited<ReturnType<typeof removeDoc
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useRemoveDocumentAcl<TData = Awaited<ReturnType<typeof removeDocumentAcl>>, TError = ErrorType<RemoveDocumentAcl401 | RemoveDocumentAcl404>>(
+export function useRemoveDocumentAcl<TData = Awaited<ReturnType<typeof removeDocumentAcl>>, TError = ErrorType<RemoveDocumentAcl401 | RemoveDocumentAcl404 | RemoveDocumentAcl409>>(
  documentId: string,
     identityId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof removeDocumentAcl>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useRemoveDocumentAcl<TData = Awaited<ReturnType<typeof removeDocumentAcl>>, TError = ErrorType<RemoveDocumentAcl401 | RemoveDocumentAcl404>>(
+export function useRemoveDocumentAcl<TData = Awaited<ReturnType<typeof removeDocumentAcl>>, TError = ErrorType<RemoveDocumentAcl401 | RemoveDocumentAcl404 | RemoveDocumentAcl409>>(
  documentId: string,
     identityId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof removeDocumentAcl>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
@@ -3801,6 +4546,1961 @@ export function useCreateCollaborationSession<TData = Awaited<ReturnType<typeof 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getCreateCollaborationSessionQueryOptions(documentId,createCollaborationSessionBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListKnowledgeWorkspacesUrl = () => {
+
+
+
+
+  return `/api/knowledge/workspaces`
+}
+
+export const listKnowledgeWorkspaces = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ListKnowledgeWorkspaces200Item[]> => {
+
+  return apiFetch<ListKnowledgeWorkspaces200Item[]>(getListKnowledgeWorkspacesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListKnowledgeWorkspacesQueryKey = () => {
+    return [
+    `/api/knowledge/workspaces`
+    ] as const;
+    }
+
+
+export const getListKnowledgeWorkspacesQueryOptions = <TData = Awaited<ReturnType<typeof listKnowledgeWorkspaces>>, TError = ErrorType<ListKnowledgeWorkspaces400 | ListKnowledgeWorkspaces401 | ListKnowledgeWorkspaces404 | ListKnowledgeWorkspaces409 | ListKnowledgeWorkspaces429>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listKnowledgeWorkspaces>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListKnowledgeWorkspacesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listKnowledgeWorkspaces>>> = ({ signal }) => listKnowledgeWorkspaces({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listKnowledgeWorkspaces>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListKnowledgeWorkspacesQueryResult = NonNullable<Awaited<ReturnType<typeof listKnowledgeWorkspaces>>>
+export type ListKnowledgeWorkspacesQueryError = ErrorType<ListKnowledgeWorkspaces400 | ListKnowledgeWorkspaces401 | ListKnowledgeWorkspaces404 | ListKnowledgeWorkspaces409 | ListKnowledgeWorkspaces429>
+
+
+export function useListKnowledgeWorkspaces<TData = Awaited<ReturnType<typeof listKnowledgeWorkspaces>>, TError = ErrorType<ListKnowledgeWorkspaces400 | ListKnowledgeWorkspaces401 | ListKnowledgeWorkspaces404 | ListKnowledgeWorkspaces409 | ListKnowledgeWorkspaces429>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listKnowledgeWorkspaces>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listKnowledgeWorkspaces>>,
+          TError,
+          Awaited<ReturnType<typeof listKnowledgeWorkspaces>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListKnowledgeWorkspaces<TData = Awaited<ReturnType<typeof listKnowledgeWorkspaces>>, TError = ErrorType<ListKnowledgeWorkspaces400 | ListKnowledgeWorkspaces401 | ListKnowledgeWorkspaces404 | ListKnowledgeWorkspaces409 | ListKnowledgeWorkspaces429>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listKnowledgeWorkspaces>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listKnowledgeWorkspaces>>,
+          TError,
+          Awaited<ReturnType<typeof listKnowledgeWorkspaces>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListKnowledgeWorkspaces<TData = Awaited<ReturnType<typeof listKnowledgeWorkspaces>>, TError = ErrorType<ListKnowledgeWorkspaces400 | ListKnowledgeWorkspaces401 | ListKnowledgeWorkspaces404 | ListKnowledgeWorkspaces409 | ListKnowledgeWorkspaces429>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listKnowledgeWorkspaces>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useListKnowledgeWorkspaces<TData = Awaited<ReturnType<typeof listKnowledgeWorkspaces>>, TError = ErrorType<ListKnowledgeWorkspaces400 | ListKnowledgeWorkspaces401 | ListKnowledgeWorkspaces404 | ListKnowledgeWorkspaces409 | ListKnowledgeWorkspaces429>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listKnowledgeWorkspaces>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListKnowledgeWorkspacesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateKnowledgeWorkspaceUrl = () => {
+
+
+
+
+  return `/api/knowledge/workspaces`
+}
+
+export const createKnowledgeWorkspace = async (createKnowledgeWorkspaceBody: CreateKnowledgeWorkspaceBody, options?: Parameters<typeof apiFetch>[1]): Promise<CreateKnowledgeWorkspace201> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<CreateKnowledgeWorkspace201>(getCreateKnowledgeWorkspaceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createKnowledgeWorkspaceBody)
+  }
+);}
+
+
+
+
+
+export const getCreateKnowledgeWorkspaceQueryKey = (createKnowledgeWorkspaceBody?: BodyType<CreateKnowledgeWorkspaceBody>,) => {
+    return [
+    'POST', `/api/knowledge/workspaces`, createKnowledgeWorkspaceBody
+    ] as const;
+    }
+
+
+export const getCreateKnowledgeWorkspaceQueryOptions = <TData = Awaited<ReturnType<typeof createKnowledgeWorkspace>>, TError = ErrorType<CreateKnowledgeWorkspace400 | CreateKnowledgeWorkspace401 | CreateKnowledgeWorkspace404 | CreateKnowledgeWorkspace409 | CreateKnowledgeWorkspace429>>(createKnowledgeWorkspaceBody: BodyType<CreateKnowledgeWorkspaceBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createKnowledgeWorkspace>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCreateKnowledgeWorkspaceQueryKey(createKnowledgeWorkspaceBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof createKnowledgeWorkspace>>> = ({ signal }) => createKnowledgeWorkspace(createKnowledgeWorkspaceBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof createKnowledgeWorkspace>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CreateKnowledgeWorkspaceQueryResult = NonNullable<Awaited<ReturnType<typeof createKnowledgeWorkspace>>>
+export type CreateKnowledgeWorkspaceQueryError = ErrorType<CreateKnowledgeWorkspace400 | CreateKnowledgeWorkspace401 | CreateKnowledgeWorkspace404 | CreateKnowledgeWorkspace409 | CreateKnowledgeWorkspace429>
+
+
+export function useCreateKnowledgeWorkspace<TData = Awaited<ReturnType<typeof createKnowledgeWorkspace>>, TError = ErrorType<CreateKnowledgeWorkspace400 | CreateKnowledgeWorkspace401 | CreateKnowledgeWorkspace404 | CreateKnowledgeWorkspace409 | CreateKnowledgeWorkspace429>>(
+ createKnowledgeWorkspaceBody: BodyType<CreateKnowledgeWorkspaceBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof createKnowledgeWorkspace>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof createKnowledgeWorkspace>>,
+          TError,
+          Awaited<ReturnType<typeof createKnowledgeWorkspace>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCreateKnowledgeWorkspace<TData = Awaited<ReturnType<typeof createKnowledgeWorkspace>>, TError = ErrorType<CreateKnowledgeWorkspace400 | CreateKnowledgeWorkspace401 | CreateKnowledgeWorkspace404 | CreateKnowledgeWorkspace409 | CreateKnowledgeWorkspace429>>(
+ createKnowledgeWorkspaceBody: BodyType<CreateKnowledgeWorkspaceBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createKnowledgeWorkspace>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof createKnowledgeWorkspace>>,
+          TError,
+          Awaited<ReturnType<typeof createKnowledgeWorkspace>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCreateKnowledgeWorkspace<TData = Awaited<ReturnType<typeof createKnowledgeWorkspace>>, TError = ErrorType<CreateKnowledgeWorkspace400 | CreateKnowledgeWorkspace401 | CreateKnowledgeWorkspace404 | CreateKnowledgeWorkspace409 | CreateKnowledgeWorkspace429>>(
+ createKnowledgeWorkspaceBody: BodyType<CreateKnowledgeWorkspaceBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createKnowledgeWorkspace>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useCreateKnowledgeWorkspace<TData = Awaited<ReturnType<typeof createKnowledgeWorkspace>>, TError = ErrorType<CreateKnowledgeWorkspace400 | CreateKnowledgeWorkspace401 | CreateKnowledgeWorkspace404 | CreateKnowledgeWorkspace409 | CreateKnowledgeWorkspace429>>(
+ createKnowledgeWorkspaceBody: BodyType<CreateKnowledgeWorkspaceBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createKnowledgeWorkspace>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCreateKnowledgeWorkspaceQueryOptions(createKnowledgeWorkspaceBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getInitializeKnowledgePresetsUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/knowledge/workspaces/${workspaceId}/presets`
+}
+
+export const initializeKnowledgePresets = async (workspaceId: string, options?: Parameters<typeof apiFetch>[1]): Promise<InitializeKnowledgePresets200> => {
+
+  return apiFetch<InitializeKnowledgePresets200>(getInitializeKnowledgePresetsUrl(workspaceId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getInitializeKnowledgePresetsQueryKey = (workspaceId: string,) => {
+    return [
+    'POST', `/api/knowledge/workspaces/${workspaceId}/presets`
+    ] as const;
+    }
+
+
+export const getInitializeKnowledgePresetsQueryOptions = <TData = Awaited<ReturnType<typeof initializeKnowledgePresets>>, TError = ErrorType<InitializeKnowledgePresets400 | InitializeKnowledgePresets401 | InitializeKnowledgePresets404 | InitializeKnowledgePresets409 | InitializeKnowledgePresets429>>(workspaceId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof initializeKnowledgePresets>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInitializeKnowledgePresetsQueryKey(workspaceId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof initializeKnowledgePresets>>> = ({ signal }) => initializeKnowledgePresets(workspaceId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: workspaceId !== null && workspaceId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof initializeKnowledgePresets>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type InitializeKnowledgePresetsQueryResult = NonNullable<Awaited<ReturnType<typeof initializeKnowledgePresets>>>
+export type InitializeKnowledgePresetsQueryError = ErrorType<InitializeKnowledgePresets400 | InitializeKnowledgePresets401 | InitializeKnowledgePresets404 | InitializeKnowledgePresets409 | InitializeKnowledgePresets429>
+
+
+export function useInitializeKnowledgePresets<TData = Awaited<ReturnType<typeof initializeKnowledgePresets>>, TError = ErrorType<InitializeKnowledgePresets400 | InitializeKnowledgePresets401 | InitializeKnowledgePresets404 | InitializeKnowledgePresets409 | InitializeKnowledgePresets429>>(
+ workspaceId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof initializeKnowledgePresets>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof initializeKnowledgePresets>>,
+          TError,
+          Awaited<ReturnType<typeof initializeKnowledgePresets>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInitializeKnowledgePresets<TData = Awaited<ReturnType<typeof initializeKnowledgePresets>>, TError = ErrorType<InitializeKnowledgePresets400 | InitializeKnowledgePresets401 | InitializeKnowledgePresets404 | InitializeKnowledgePresets409 | InitializeKnowledgePresets429>>(
+ workspaceId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof initializeKnowledgePresets>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof initializeKnowledgePresets>>,
+          TError,
+          Awaited<ReturnType<typeof initializeKnowledgePresets>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useInitializeKnowledgePresets<TData = Awaited<ReturnType<typeof initializeKnowledgePresets>>, TError = ErrorType<InitializeKnowledgePresets400 | InitializeKnowledgePresets401 | InitializeKnowledgePresets404 | InitializeKnowledgePresets409 | InitializeKnowledgePresets429>>(
+ workspaceId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof initializeKnowledgePresets>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useInitializeKnowledgePresets<TData = Awaited<ReturnType<typeof initializeKnowledgePresets>>, TError = ErrorType<InitializeKnowledgePresets400 | InitializeKnowledgePresets401 | InitializeKnowledgePresets404 | InitializeKnowledgePresets409 | InitializeKnowledgePresets429>>(
+ workspaceId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof initializeKnowledgePresets>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getInitializeKnowledgePresetsQueryOptions(workspaceId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getMoveKnowledgeDocumentUrl = (documentId: string,) => {
+
+
+
+
+  return `/api/knowledge/documents/${documentId}/location`
+}
+
+export const moveKnowledgeDocument = async (documentId: string,
+    moveKnowledgeDocumentBody: MoveKnowledgeDocumentBody, options?: Parameters<typeof apiFetch>[1]): Promise<MoveKnowledgeDocument200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<MoveKnowledgeDocument200>(getMoveKnowledgeDocumentUrl(documentId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(moveKnowledgeDocumentBody)
+  }
+);}
+
+
+
+
+
+export const getMoveKnowledgeDocumentQueryKey = (documentId: string,
+    moveKnowledgeDocumentBody?: BodyType<MoveKnowledgeDocumentBody>,) => {
+    return [
+    'PATCH', `/api/knowledge/documents/${documentId}/location`, moveKnowledgeDocumentBody
+    ] as const;
+    }
+
+
+export const getMoveKnowledgeDocumentQueryOptions = <TData = Awaited<ReturnType<typeof moveKnowledgeDocument>>, TError = ErrorType<MoveKnowledgeDocument400 | MoveKnowledgeDocument401 | MoveKnowledgeDocument404 | MoveKnowledgeDocument409 | MoveKnowledgeDocument429>>(documentId: string,
+    moveKnowledgeDocumentBody: BodyType<MoveKnowledgeDocumentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof moveKnowledgeDocument>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getMoveKnowledgeDocumentQueryKey(documentId,moveKnowledgeDocumentBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof moveKnowledgeDocument>>> = ({ signal }) => moveKnowledgeDocument(documentId,moveKnowledgeDocumentBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: documentId !== null && documentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof moveKnowledgeDocument>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type MoveKnowledgeDocumentQueryResult = NonNullable<Awaited<ReturnType<typeof moveKnowledgeDocument>>>
+export type MoveKnowledgeDocumentQueryError = ErrorType<MoveKnowledgeDocument400 | MoveKnowledgeDocument401 | MoveKnowledgeDocument404 | MoveKnowledgeDocument409 | MoveKnowledgeDocument429>
+
+
+export function useMoveKnowledgeDocument<TData = Awaited<ReturnType<typeof moveKnowledgeDocument>>, TError = ErrorType<MoveKnowledgeDocument400 | MoveKnowledgeDocument401 | MoveKnowledgeDocument404 | MoveKnowledgeDocument409 | MoveKnowledgeDocument429>>(
+ documentId: string,
+    moveKnowledgeDocumentBody: BodyType<MoveKnowledgeDocumentBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof moveKnowledgeDocument>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof moveKnowledgeDocument>>,
+          TError,
+          Awaited<ReturnType<typeof moveKnowledgeDocument>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useMoveKnowledgeDocument<TData = Awaited<ReturnType<typeof moveKnowledgeDocument>>, TError = ErrorType<MoveKnowledgeDocument400 | MoveKnowledgeDocument401 | MoveKnowledgeDocument404 | MoveKnowledgeDocument409 | MoveKnowledgeDocument429>>(
+ documentId: string,
+    moveKnowledgeDocumentBody: BodyType<MoveKnowledgeDocumentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof moveKnowledgeDocument>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof moveKnowledgeDocument>>,
+          TError,
+          Awaited<ReturnType<typeof moveKnowledgeDocument>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useMoveKnowledgeDocument<TData = Awaited<ReturnType<typeof moveKnowledgeDocument>>, TError = ErrorType<MoveKnowledgeDocument400 | MoveKnowledgeDocument401 | MoveKnowledgeDocument404 | MoveKnowledgeDocument409 | MoveKnowledgeDocument429>>(
+ documentId: string,
+    moveKnowledgeDocumentBody: BodyType<MoveKnowledgeDocumentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof moveKnowledgeDocument>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useMoveKnowledgeDocument<TData = Awaited<ReturnType<typeof moveKnowledgeDocument>>, TError = ErrorType<MoveKnowledgeDocument400 | MoveKnowledgeDocument401 | MoveKnowledgeDocument404 | MoveKnowledgeDocument409 | MoveKnowledgeDocument429>>(
+ documentId: string,
+    moveKnowledgeDocumentBody: BodyType<MoveKnowledgeDocumentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof moveKnowledgeDocument>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getMoveKnowledgeDocumentQueryOptions(documentId,moveKnowledgeDocumentBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSearchKnowledgeDocumentsUrl = (params: SearchKnowledgeDocumentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/knowledge/search?${stringifiedParams}` : `/api/knowledge/search`
+}
+
+export const searchKnowledgeDocuments = async (params: SearchKnowledgeDocumentsParams, options?: Parameters<typeof apiFetch>[1]): Promise<SearchKnowledgeDocuments200> => {
+
+  return apiFetch<SearchKnowledgeDocuments200>(getSearchKnowledgeDocumentsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getSearchKnowledgeDocumentsQueryKey = (params?: SearchKnowledgeDocumentsParams,) => {
+    return [
+    `/api/knowledge/search`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getSearchKnowledgeDocumentsQueryOptions = <TData = Awaited<ReturnType<typeof searchKnowledgeDocuments>>, TError = ErrorType<SearchKnowledgeDocuments400 | SearchKnowledgeDocuments401 | SearchKnowledgeDocuments404 | SearchKnowledgeDocuments409 | SearchKnowledgeDocuments429>>(params: SearchKnowledgeDocumentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchKnowledgeDocuments>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSearchKnowledgeDocumentsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof searchKnowledgeDocuments>>> = ({ signal }) => searchKnowledgeDocuments(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof searchKnowledgeDocuments>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type SearchKnowledgeDocumentsQueryResult = NonNullable<Awaited<ReturnType<typeof searchKnowledgeDocuments>>>
+export type SearchKnowledgeDocumentsQueryError = ErrorType<SearchKnowledgeDocuments400 | SearchKnowledgeDocuments401 | SearchKnowledgeDocuments404 | SearchKnowledgeDocuments409 | SearchKnowledgeDocuments429>
+
+
+export function useSearchKnowledgeDocuments<TData = Awaited<ReturnType<typeof searchKnowledgeDocuments>>, TError = ErrorType<SearchKnowledgeDocuments400 | SearchKnowledgeDocuments401 | SearchKnowledgeDocuments404 | SearchKnowledgeDocuments409 | SearchKnowledgeDocuments429>>(
+ params: SearchKnowledgeDocumentsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchKnowledgeDocuments>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof searchKnowledgeDocuments>>,
+          TError,
+          Awaited<ReturnType<typeof searchKnowledgeDocuments>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSearchKnowledgeDocuments<TData = Awaited<ReturnType<typeof searchKnowledgeDocuments>>, TError = ErrorType<SearchKnowledgeDocuments400 | SearchKnowledgeDocuments401 | SearchKnowledgeDocuments404 | SearchKnowledgeDocuments409 | SearchKnowledgeDocuments429>>(
+ params: SearchKnowledgeDocumentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchKnowledgeDocuments>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof searchKnowledgeDocuments>>,
+          TError,
+          Awaited<ReturnType<typeof searchKnowledgeDocuments>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSearchKnowledgeDocuments<TData = Awaited<ReturnType<typeof searchKnowledgeDocuments>>, TError = ErrorType<SearchKnowledgeDocuments400 | SearchKnowledgeDocuments401 | SearchKnowledgeDocuments404 | SearchKnowledgeDocuments409 | SearchKnowledgeDocuments429>>(
+ params: SearchKnowledgeDocumentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchKnowledgeDocuments>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useSearchKnowledgeDocuments<TData = Awaited<ReturnType<typeof searchKnowledgeDocuments>>, TError = ErrorType<SearchKnowledgeDocuments400 | SearchKnowledgeDocuments401 | SearchKnowledgeDocuments404 | SearchKnowledgeDocuments409 | SearchKnowledgeDocuments429>>(
+ params: SearchKnowledgeDocumentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchKnowledgeDocuments>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getSearchKnowledgeDocumentsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateCatalogUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/knowledge/workspaces/${workspaceId}/catalogs`
+}
+
+export const createCatalog = async (workspaceId: string,
+    createCatalogBody: CreateCatalogBody, options?: Parameters<typeof apiFetch>[1]): Promise<CreateCatalog201> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<CreateCatalog201>(getCreateCatalogUrl(workspaceId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createCatalogBody)
+  }
+);}
+
+
+
+
+
+export const getCreateCatalogQueryKey = (workspaceId: string,
+    createCatalogBody?: BodyType<CreateCatalogBody>,) => {
+    return [
+    'POST', `/api/knowledge/workspaces/${workspaceId}/catalogs`, createCatalogBody
+    ] as const;
+    }
+
+
+export const getCreateCatalogQueryOptions = <TData = Awaited<ReturnType<typeof createCatalog>>, TError = ErrorType<CreateCatalog400 | CreateCatalog401 | CreateCatalog404 | CreateCatalog409 | CreateCatalog429>>(workspaceId: string,
+    createCatalogBody: BodyType<CreateCatalogBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createCatalog>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCreateCatalogQueryKey(workspaceId,createCatalogBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof createCatalog>>> = ({ signal }) => createCatalog(workspaceId,createCatalogBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: workspaceId !== null && workspaceId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof createCatalog>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CreateCatalogQueryResult = NonNullable<Awaited<ReturnType<typeof createCatalog>>>
+export type CreateCatalogQueryError = ErrorType<CreateCatalog400 | CreateCatalog401 | CreateCatalog404 | CreateCatalog409 | CreateCatalog429>
+
+
+export function useCreateCatalog<TData = Awaited<ReturnType<typeof createCatalog>>, TError = ErrorType<CreateCatalog400 | CreateCatalog401 | CreateCatalog404 | CreateCatalog409 | CreateCatalog429>>(
+ workspaceId: string,
+    createCatalogBody: BodyType<CreateCatalogBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof createCatalog>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof createCatalog>>,
+          TError,
+          Awaited<ReturnType<typeof createCatalog>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCreateCatalog<TData = Awaited<ReturnType<typeof createCatalog>>, TError = ErrorType<CreateCatalog400 | CreateCatalog401 | CreateCatalog404 | CreateCatalog409 | CreateCatalog429>>(
+ workspaceId: string,
+    createCatalogBody: BodyType<CreateCatalogBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createCatalog>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof createCatalog>>,
+          TError,
+          Awaited<ReturnType<typeof createCatalog>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCreateCatalog<TData = Awaited<ReturnType<typeof createCatalog>>, TError = ErrorType<CreateCatalog400 | CreateCatalog401 | CreateCatalog404 | CreateCatalog409 | CreateCatalog429>>(
+ workspaceId: string,
+    createCatalogBody: BodyType<CreateCatalogBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createCatalog>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useCreateCatalog<TData = Awaited<ReturnType<typeof createCatalog>>, TError = ErrorType<CreateCatalog400 | CreateCatalog401 | CreateCatalog404 | CreateCatalog409 | CreateCatalog429>>(
+ workspaceId: string,
+    createCatalogBody: BodyType<CreateCatalogBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createCatalog>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCreateCatalogQueryOptions(workspaceId,createCatalogBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListCatalogChildrenUrl = (workspaceId: string,
+    catalogId: string,) => {
+
+
+
+
+  return `/api/knowledge/workspaces/${workspaceId}/catalogs/${catalogId}/children`
+}
+
+export const listCatalogChildren = async (workspaceId: string,
+    catalogId: string, options?: Parameters<typeof apiFetch>[1]): Promise<ListCatalogChildren200> => {
+
+  return apiFetch<ListCatalogChildren200>(getListCatalogChildrenUrl(workspaceId,catalogId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCatalogChildrenQueryKey = (workspaceId: string,
+    catalogId: string,) => {
+    return [
+    `/api/knowledge/workspaces/${workspaceId}/catalogs/${catalogId}/children`
+    ] as const;
+    }
+
+
+export const getListCatalogChildrenQueryOptions = <TData = Awaited<ReturnType<typeof listCatalogChildren>>, TError = ErrorType<ListCatalogChildren400 | ListCatalogChildren401 | ListCatalogChildren404 | ListCatalogChildren409 | ListCatalogChildren429>>(workspaceId: string,
+    catalogId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCatalogChildren>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCatalogChildrenQueryKey(workspaceId,catalogId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCatalogChildren>>> = ({ signal }) => listCatalogChildren(workspaceId,catalogId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: workspaceId !== null && workspaceId !== undefined && catalogId !== null && catalogId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCatalogChildren>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListCatalogChildrenQueryResult = NonNullable<Awaited<ReturnType<typeof listCatalogChildren>>>
+export type ListCatalogChildrenQueryError = ErrorType<ListCatalogChildren400 | ListCatalogChildren401 | ListCatalogChildren404 | ListCatalogChildren409 | ListCatalogChildren429>
+
+
+export function useListCatalogChildren<TData = Awaited<ReturnType<typeof listCatalogChildren>>, TError = ErrorType<ListCatalogChildren400 | ListCatalogChildren401 | ListCatalogChildren404 | ListCatalogChildren409 | ListCatalogChildren429>>(
+ workspaceId: string,
+    catalogId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCatalogChildren>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCatalogChildren>>,
+          TError,
+          Awaited<ReturnType<typeof listCatalogChildren>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListCatalogChildren<TData = Awaited<ReturnType<typeof listCatalogChildren>>, TError = ErrorType<ListCatalogChildren400 | ListCatalogChildren401 | ListCatalogChildren404 | ListCatalogChildren409 | ListCatalogChildren429>>(
+ workspaceId: string,
+    catalogId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCatalogChildren>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCatalogChildren>>,
+          TError,
+          Awaited<ReturnType<typeof listCatalogChildren>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListCatalogChildren<TData = Awaited<ReturnType<typeof listCatalogChildren>>, TError = ErrorType<ListCatalogChildren400 | ListCatalogChildren401 | ListCatalogChildren404 | ListCatalogChildren409 | ListCatalogChildren429>>(
+ workspaceId: string,
+    catalogId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCatalogChildren>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useListCatalogChildren<TData = Awaited<ReturnType<typeof listCatalogChildren>>, TError = ErrorType<ListCatalogChildren400 | ListCatalogChildren401 | ListCatalogChildren404 | ListCatalogChildren409 | ListCatalogChildren429>>(
+ workspaceId: string,
+    catalogId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCatalogChildren>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListCatalogChildrenQueryOptions(workspaceId,catalogId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateCatalogUrl = (catalogId: string,) => {
+
+
+
+
+  return `/api/knowledge/catalogs/${catalogId}`
+}
+
+export const updateCatalog = async (catalogId: string,
+    updateCatalogBody: UpdateCatalogBody, options?: Parameters<typeof apiFetch>[1]): Promise<UpdateCatalog200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<UpdateCatalog200>(getUpdateCatalogUrl(catalogId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateCatalogBody)
+  }
+);}
+
+
+
+
+
+export const getUpdateCatalogQueryKey = (catalogId: string,
+    updateCatalogBody?: BodyType<UpdateCatalogBody>,) => {
+    return [
+    'PATCH', `/api/knowledge/catalogs/${catalogId}`, updateCatalogBody
+    ] as const;
+    }
+
+
+export const getUpdateCatalogQueryOptions = <TData = Awaited<ReturnType<typeof updateCatalog>>, TError = ErrorType<UpdateCatalog400 | UpdateCatalog401 | UpdateCatalog404 | UpdateCatalog409 | UpdateCatalog429>>(catalogId: string,
+    updateCatalogBody: BodyType<UpdateCatalogBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof updateCatalog>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getUpdateCatalogQueryKey(catalogId,updateCatalogBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof updateCatalog>>> = ({ signal }) => updateCatalog(catalogId,updateCatalogBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: catalogId !== null && catalogId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof updateCatalog>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type UpdateCatalogQueryResult = NonNullable<Awaited<ReturnType<typeof updateCatalog>>>
+export type UpdateCatalogQueryError = ErrorType<UpdateCatalog400 | UpdateCatalog401 | UpdateCatalog404 | UpdateCatalog409 | UpdateCatalog429>
+
+
+export function useUpdateCatalog<TData = Awaited<ReturnType<typeof updateCatalog>>, TError = ErrorType<UpdateCatalog400 | UpdateCatalog401 | UpdateCatalog404 | UpdateCatalog409 | UpdateCatalog429>>(
+ catalogId: string,
+    updateCatalogBody: BodyType<UpdateCatalogBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof updateCatalog>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof updateCatalog>>,
+          TError,
+          Awaited<ReturnType<typeof updateCatalog>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useUpdateCatalog<TData = Awaited<ReturnType<typeof updateCatalog>>, TError = ErrorType<UpdateCatalog400 | UpdateCatalog401 | UpdateCatalog404 | UpdateCatalog409 | UpdateCatalog429>>(
+ catalogId: string,
+    updateCatalogBody: BodyType<UpdateCatalogBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof updateCatalog>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof updateCatalog>>,
+          TError,
+          Awaited<ReturnType<typeof updateCatalog>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useUpdateCatalog<TData = Awaited<ReturnType<typeof updateCatalog>>, TError = ErrorType<UpdateCatalog400 | UpdateCatalog401 | UpdateCatalog404 | UpdateCatalog409 | UpdateCatalog429>>(
+ catalogId: string,
+    updateCatalogBody: BodyType<UpdateCatalogBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof updateCatalog>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useUpdateCatalog<TData = Awaited<ReturnType<typeof updateCatalog>>, TError = ErrorType<UpdateCatalog400 | UpdateCatalog401 | UpdateCatalog404 | UpdateCatalog409 | UpdateCatalog429>>(
+ catalogId: string,
+    updateCatalogBody: BodyType<UpdateCatalogBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof updateCatalog>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getUpdateCatalogQueryOptions(catalogId,updateCatalogBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDeleteCatalogUrl = (catalogId: string,) => {
+
+
+
+
+  return `/api/knowledge/catalogs/${catalogId}`
+}
+
+export const deleteCatalog = async (catalogId: string, options?: Parameters<typeof apiFetch>[1]): Promise<DeleteCatalog204> => {
+
+  return apiFetch<DeleteCatalog204>(getDeleteCatalogUrl(catalogId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteCatalogQueryKey = (catalogId: string,) => {
+    return [
+    'DELETE', `/api/knowledge/catalogs/${catalogId}`
+    ] as const;
+    }
+
+
+export const getDeleteCatalogQueryOptions = <TData = Awaited<ReturnType<typeof deleteCatalog>>, TError = ErrorType<DeleteCatalog400 | DeleteCatalog401 | DeleteCatalog404 | DeleteCatalog409 | DeleteCatalog429>>(catalogId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteCatalog>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDeleteCatalogQueryKey(catalogId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof deleteCatalog>>> = ({ signal }) => deleteCatalog(catalogId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: catalogId !== null && catalogId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof deleteCatalog>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DeleteCatalogQueryResult = NonNullable<Awaited<ReturnType<typeof deleteCatalog>>>
+export type DeleteCatalogQueryError = ErrorType<DeleteCatalog400 | DeleteCatalog401 | DeleteCatalog404 | DeleteCatalog409 | DeleteCatalog429>
+
+
+export function useDeleteCatalog<TData = Awaited<ReturnType<typeof deleteCatalog>>, TError = ErrorType<DeleteCatalog400 | DeleteCatalog401 | DeleteCatalog404 | DeleteCatalog409 | DeleteCatalog429>>(
+ catalogId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteCatalog>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteCatalog>>,
+          TError,
+          Awaited<ReturnType<typeof deleteCatalog>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteCatalog<TData = Awaited<ReturnType<typeof deleteCatalog>>, TError = ErrorType<DeleteCatalog400 | DeleteCatalog401 | DeleteCatalog404 | DeleteCatalog409 | DeleteCatalog429>>(
+ catalogId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteCatalog>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof deleteCatalog>>,
+          TError,
+          Awaited<ReturnType<typeof deleteCatalog>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDeleteCatalog<TData = Awaited<ReturnType<typeof deleteCatalog>>, TError = ErrorType<DeleteCatalog400 | DeleteCatalog401 | DeleteCatalog404 | DeleteCatalog409 | DeleteCatalog429>>(
+ catalogId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteCatalog>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useDeleteCatalog<TData = Awaited<ReturnType<typeof deleteCatalog>>, TError = ErrorType<DeleteCatalog400 | DeleteCatalog401 | DeleteCatalog404 | DeleteCatalog409 | DeleteCatalog429>>(
+ catalogId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof deleteCatalog>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDeleteCatalogQueryOptions(catalogId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getMoveCatalogUrl = (catalogId: string,) => {
+
+
+
+
+  return `/api/knowledge/catalogs/${catalogId}/location`
+}
+
+export const moveCatalog = async (catalogId: string,
+    moveCatalogBody: MoveCatalogBody, options?: Parameters<typeof apiFetch>[1]): Promise<MoveCatalog200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<MoveCatalog200>(getMoveCatalogUrl(catalogId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(moveCatalogBody)
+  }
+);}
+
+
+
+
+
+export const getMoveCatalogQueryKey = (catalogId: string,
+    moveCatalogBody?: BodyType<MoveCatalogBody>,) => {
+    return [
+    'PATCH', `/api/knowledge/catalogs/${catalogId}/location`, moveCatalogBody
+    ] as const;
+    }
+
+
+export const getMoveCatalogQueryOptions = <TData = Awaited<ReturnType<typeof moveCatalog>>, TError = ErrorType<MoveCatalog400 | MoveCatalog401 | MoveCatalog404 | MoveCatalog409 | MoveCatalog429>>(catalogId: string,
+    moveCatalogBody: BodyType<MoveCatalogBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof moveCatalog>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getMoveCatalogQueryKey(catalogId,moveCatalogBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof moveCatalog>>> = ({ signal }) => moveCatalog(catalogId,moveCatalogBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: catalogId !== null && catalogId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof moveCatalog>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type MoveCatalogQueryResult = NonNullable<Awaited<ReturnType<typeof moveCatalog>>>
+export type MoveCatalogQueryError = ErrorType<MoveCatalog400 | MoveCatalog401 | MoveCatalog404 | MoveCatalog409 | MoveCatalog429>
+
+
+export function useMoveCatalog<TData = Awaited<ReturnType<typeof moveCatalog>>, TError = ErrorType<MoveCatalog400 | MoveCatalog401 | MoveCatalog404 | MoveCatalog409 | MoveCatalog429>>(
+ catalogId: string,
+    moveCatalogBody: BodyType<MoveCatalogBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof moveCatalog>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof moveCatalog>>,
+          TError,
+          Awaited<ReturnType<typeof moveCatalog>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useMoveCatalog<TData = Awaited<ReturnType<typeof moveCatalog>>, TError = ErrorType<MoveCatalog400 | MoveCatalog401 | MoveCatalog404 | MoveCatalog409 | MoveCatalog429>>(
+ catalogId: string,
+    moveCatalogBody: BodyType<MoveCatalogBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof moveCatalog>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof moveCatalog>>,
+          TError,
+          Awaited<ReturnType<typeof moveCatalog>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useMoveCatalog<TData = Awaited<ReturnType<typeof moveCatalog>>, TError = ErrorType<MoveCatalog400 | MoveCatalog401 | MoveCatalog404 | MoveCatalog409 | MoveCatalog429>>(
+ catalogId: string,
+    moveCatalogBody: BodyType<MoveCatalogBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof moveCatalog>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useMoveCatalog<TData = Awaited<ReturnType<typeof moveCatalog>>, TError = ErrorType<MoveCatalog400 | MoveCatalog401 | MoveCatalog404 | MoveCatalog409 | MoveCatalog429>>(
+ catalogId: string,
+    moveCatalogBody: BodyType<MoveCatalogBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof moveCatalog>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getMoveCatalogQueryOptions(catalogId,moveCatalogBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCatalogDeletionImpactUrl = (catalogId: string,) => {
+
+
+
+
+  return `/api/knowledge/catalogs/${catalogId}/deletion-impact`
+}
+
+export const getCatalogDeletionImpact = async (catalogId: string, options?: Parameters<typeof apiFetch>[1]): Promise<GetCatalogDeletionImpact200> => {
+
+  return apiFetch<GetCatalogDeletionImpact200>(getGetCatalogDeletionImpactUrl(catalogId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCatalogDeletionImpactQueryKey = (catalogId: string,) => {
+    return [
+    `/api/knowledge/catalogs/${catalogId}/deletion-impact`
+    ] as const;
+    }
+
+
+export const getGetCatalogDeletionImpactQueryOptions = <TData = Awaited<ReturnType<typeof getCatalogDeletionImpact>>, TError = ErrorType<GetCatalogDeletionImpact400 | GetCatalogDeletionImpact401 | GetCatalogDeletionImpact404 | GetCatalogDeletionImpact409 | GetCatalogDeletionImpact429>>(catalogId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCatalogDeletionImpact>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCatalogDeletionImpactQueryKey(catalogId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCatalogDeletionImpact>>> = ({ signal }) => getCatalogDeletionImpact(catalogId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: catalogId !== null && catalogId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCatalogDeletionImpact>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetCatalogDeletionImpactQueryResult = NonNullable<Awaited<ReturnType<typeof getCatalogDeletionImpact>>>
+export type GetCatalogDeletionImpactQueryError = ErrorType<GetCatalogDeletionImpact400 | GetCatalogDeletionImpact401 | GetCatalogDeletionImpact404 | GetCatalogDeletionImpact409 | GetCatalogDeletionImpact429>
+
+
+export function useGetCatalogDeletionImpact<TData = Awaited<ReturnType<typeof getCatalogDeletionImpact>>, TError = ErrorType<GetCatalogDeletionImpact400 | GetCatalogDeletionImpact401 | GetCatalogDeletionImpact404 | GetCatalogDeletionImpact409 | GetCatalogDeletionImpact429>>(
+ catalogId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCatalogDeletionImpact>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCatalogDeletionImpact>>,
+          TError,
+          Awaited<ReturnType<typeof getCatalogDeletionImpact>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCatalogDeletionImpact<TData = Awaited<ReturnType<typeof getCatalogDeletionImpact>>, TError = ErrorType<GetCatalogDeletionImpact400 | GetCatalogDeletionImpact401 | GetCatalogDeletionImpact404 | GetCatalogDeletionImpact409 | GetCatalogDeletionImpact429>>(
+ catalogId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCatalogDeletionImpact>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCatalogDeletionImpact>>,
+          TError,
+          Awaited<ReturnType<typeof getCatalogDeletionImpact>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCatalogDeletionImpact<TData = Awaited<ReturnType<typeof getCatalogDeletionImpact>>, TError = ErrorType<GetCatalogDeletionImpact400 | GetCatalogDeletionImpact401 | GetCatalogDeletionImpact404 | GetCatalogDeletionImpact409 | GetCatalogDeletionImpact429>>(
+ catalogId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCatalogDeletionImpact>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetCatalogDeletionImpact<TData = Awaited<ReturnType<typeof getCatalogDeletionImpact>>, TError = ErrorType<GetCatalogDeletionImpact400 | GetCatalogDeletionImpact401 | GetCatalogDeletionImpact404 | GetCatalogDeletionImpact409 | GetCatalogDeletionImpact429>>(
+ catalogId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCatalogDeletionImpact>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetCatalogDeletionImpactQueryOptions(catalogId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getLocateDocumentUrl = (documentId: string,) => {
+
+
+
+
+  return `/api/knowledge/documents/${documentId}/locate`
+}
+
+export const locateDocument = async (documentId: string, options?: Parameters<typeof apiFetch>[1]): Promise<LocateDocument200> => {
+
+  return apiFetch<LocateDocument200>(getLocateDocumentUrl(documentId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getLocateDocumentQueryKey = (documentId: string,) => {
+    return [
+    `/api/knowledge/documents/${documentId}/locate`
+    ] as const;
+    }
+
+
+export const getLocateDocumentQueryOptions = <TData = Awaited<ReturnType<typeof locateDocument>>, TError = ErrorType<LocateDocument400 | LocateDocument401 | LocateDocument404 | LocateDocument409 | LocateDocument429>>(documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof locateDocument>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getLocateDocumentQueryKey(documentId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof locateDocument>>> = ({ signal }) => locateDocument(documentId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: documentId !== null && documentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof locateDocument>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type LocateDocumentQueryResult = NonNullable<Awaited<ReturnType<typeof locateDocument>>>
+export type LocateDocumentQueryError = ErrorType<LocateDocument400 | LocateDocument401 | LocateDocument404 | LocateDocument409 | LocateDocument429>
+
+
+export function useLocateDocument<TData = Awaited<ReturnType<typeof locateDocument>>, TError = ErrorType<LocateDocument400 | LocateDocument401 | LocateDocument404 | LocateDocument409 | LocateDocument429>>(
+ documentId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof locateDocument>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof locateDocument>>,
+          TError,
+          Awaited<ReturnType<typeof locateDocument>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useLocateDocument<TData = Awaited<ReturnType<typeof locateDocument>>, TError = ErrorType<LocateDocument400 | LocateDocument401 | LocateDocument404 | LocateDocument409 | LocateDocument429>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof locateDocument>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof locateDocument>>,
+          TError,
+          Awaited<ReturnType<typeof locateDocument>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useLocateDocument<TData = Awaited<ReturnType<typeof locateDocument>>, TError = ErrorType<LocateDocument400 | LocateDocument401 | LocateDocument404 | LocateDocument409 | LocateDocument429>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof locateDocument>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useLocateDocument<TData = Awaited<ReturnType<typeof locateDocument>>, TError = ErrorType<LocateDocument400 | LocateDocument401 | LocateDocument404 | LocateDocument409 | LocateDocument429>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof locateDocument>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getLocateDocumentQueryOptions(documentId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateDocumentShareUrl = (documentId: string,) => {
+
+
+
+
+  return `/api/documents/${documentId}/shares`
+}
+
+export const createDocumentShare = async (documentId: string,
+    createDocumentShareBody: CreateDocumentShareBody, options?: Parameters<typeof apiFetch>[1]): Promise<CreateDocumentShare201> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<CreateDocumentShare201>(getCreateDocumentShareUrl(documentId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createDocumentShareBody)
+  }
+);}
+
+
+
+
+
+export const getCreateDocumentShareQueryKey = (documentId: string,
+    createDocumentShareBody?: BodyType<CreateDocumentShareBody>,) => {
+    return [
+    'POST', `/api/documents/${documentId}/shares`, createDocumentShareBody
+    ] as const;
+    }
+
+
+export const getCreateDocumentShareQueryOptions = <TData = Awaited<ReturnType<typeof createDocumentShare>>, TError = ErrorType<CreateDocumentShare400 | CreateDocumentShare401 | CreateDocumentShare404 | CreateDocumentShare409>>(documentId: string,
+    createDocumentShareBody: BodyType<CreateDocumentShareBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createDocumentShare>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCreateDocumentShareQueryKey(documentId,createDocumentShareBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof createDocumentShare>>> = ({ signal }) => createDocumentShare(documentId,createDocumentShareBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: documentId !== null && documentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof createDocumentShare>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CreateDocumentShareQueryResult = NonNullable<Awaited<ReturnType<typeof createDocumentShare>>>
+export type CreateDocumentShareQueryError = ErrorType<CreateDocumentShare400 | CreateDocumentShare401 | CreateDocumentShare404 | CreateDocumentShare409>
+
+
+export function useCreateDocumentShare<TData = Awaited<ReturnType<typeof createDocumentShare>>, TError = ErrorType<CreateDocumentShare400 | CreateDocumentShare401 | CreateDocumentShare404 | CreateDocumentShare409>>(
+ documentId: string,
+    createDocumentShareBody: BodyType<CreateDocumentShareBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof createDocumentShare>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof createDocumentShare>>,
+          TError,
+          Awaited<ReturnType<typeof createDocumentShare>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCreateDocumentShare<TData = Awaited<ReturnType<typeof createDocumentShare>>, TError = ErrorType<CreateDocumentShare400 | CreateDocumentShare401 | CreateDocumentShare404 | CreateDocumentShare409>>(
+ documentId: string,
+    createDocumentShareBody: BodyType<CreateDocumentShareBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createDocumentShare>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof createDocumentShare>>,
+          TError,
+          Awaited<ReturnType<typeof createDocumentShare>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCreateDocumentShare<TData = Awaited<ReturnType<typeof createDocumentShare>>, TError = ErrorType<CreateDocumentShare400 | CreateDocumentShare401 | CreateDocumentShare404 | CreateDocumentShare409>>(
+ documentId: string,
+    createDocumentShareBody: BodyType<CreateDocumentShareBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createDocumentShare>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useCreateDocumentShare<TData = Awaited<ReturnType<typeof createDocumentShare>>, TError = ErrorType<CreateDocumentShare400 | CreateDocumentShare401 | CreateDocumentShare404 | CreateDocumentShare409>>(
+ documentId: string,
+    createDocumentShareBody: BodyType<CreateDocumentShareBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createDocumentShare>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCreateDocumentShareQueryOptions(documentId,createDocumentShareBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListDocumentSharesUrl = (documentId: string,) => {
+
+
+
+
+  return `/api/documents/${documentId}/shares`
+}
+
+export const listDocumentShares = async (documentId: string, options?: Parameters<typeof apiFetch>[1]): Promise<ListDocumentShares200Item[]> => {
+
+  return apiFetch<ListDocumentShares200Item[]>(getListDocumentSharesUrl(documentId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDocumentSharesQueryKey = (documentId: string,) => {
+    return [
+    `/api/documents/${documentId}/shares`
+    ] as const;
+    }
+
+
+export const getListDocumentSharesQueryOptions = <TData = Awaited<ReturnType<typeof listDocumentShares>>, TError = ErrorType<ListDocumentShares400 | ListDocumentShares401 | ListDocumentShares404 | ListDocumentShares409>>(documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocumentShares>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDocumentSharesQueryKey(documentId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDocumentShares>>> = ({ signal }) => listDocumentShares(documentId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: documentId !== null && documentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDocumentShares>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListDocumentSharesQueryResult = NonNullable<Awaited<ReturnType<typeof listDocumentShares>>>
+export type ListDocumentSharesQueryError = ErrorType<ListDocumentShares400 | ListDocumentShares401 | ListDocumentShares404 | ListDocumentShares409>
+
+
+export function useListDocumentShares<TData = Awaited<ReturnType<typeof listDocumentShares>>, TError = ErrorType<ListDocumentShares400 | ListDocumentShares401 | ListDocumentShares404 | ListDocumentShares409>>(
+ documentId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocumentShares>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listDocumentShares>>,
+          TError,
+          Awaited<ReturnType<typeof listDocumentShares>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListDocumentShares<TData = Awaited<ReturnType<typeof listDocumentShares>>, TError = ErrorType<ListDocumentShares400 | ListDocumentShares401 | ListDocumentShares404 | ListDocumentShares409>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocumentShares>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listDocumentShares>>,
+          TError,
+          Awaited<ReturnType<typeof listDocumentShares>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListDocumentShares<TData = Awaited<ReturnType<typeof listDocumentShares>>, TError = ErrorType<ListDocumentShares400 | ListDocumentShares401 | ListDocumentShares404 | ListDocumentShares409>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocumentShares>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useListDocumentShares<TData = Awaited<ReturnType<typeof listDocumentShares>>, TError = ErrorType<ListDocumentShares400 | ListDocumentShares401 | ListDocumentShares404 | ListDocumentShares409>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDocumentShares>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListDocumentSharesQueryOptions(documentId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRevokeDocumentShareUrl = (documentId: string,
+    shareId: string,) => {
+
+
+
+
+  return `/api/documents/${documentId}/shares/${shareId}`
+}
+
+export const revokeDocumentShare = async (documentId: string,
+    shareId: string, options?: Parameters<typeof apiFetch>[1]): Promise<RevokeDocumentShare204> => {
+
+  return apiFetch<RevokeDocumentShare204>(getRevokeDocumentShareUrl(documentId,shareId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevokeDocumentShareQueryKey = (documentId: string,
+    shareId: string,) => {
+    return [
+    'DELETE', `/api/documents/${documentId}/shares/${shareId}`
+    ] as const;
+    }
+
+
+export const getRevokeDocumentShareQueryOptions = <TData = Awaited<ReturnType<typeof revokeDocumentShare>>, TError = ErrorType<RevokeDocumentShare400 | RevokeDocumentShare401 | RevokeDocumentShare404 | RevokeDocumentShare409>>(documentId: string,
+    shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof revokeDocumentShare>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getRevokeDocumentShareQueryKey(documentId,shareId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof revokeDocumentShare>>> = ({ signal }) => revokeDocumentShare(documentId,shareId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: documentId !== null && documentId !== undefined && shareId !== null && shareId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof revokeDocumentShare>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type RevokeDocumentShareQueryResult = NonNullable<Awaited<ReturnType<typeof revokeDocumentShare>>>
+export type RevokeDocumentShareQueryError = ErrorType<RevokeDocumentShare400 | RevokeDocumentShare401 | RevokeDocumentShare404 | RevokeDocumentShare409>
+
+
+export function useRevokeDocumentShare<TData = Awaited<ReturnType<typeof revokeDocumentShare>>, TError = ErrorType<RevokeDocumentShare400 | RevokeDocumentShare401 | RevokeDocumentShare404 | RevokeDocumentShare409>>(
+ documentId: string,
+    shareId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof revokeDocumentShare>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof revokeDocumentShare>>,
+          TError,
+          Awaited<ReturnType<typeof revokeDocumentShare>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useRevokeDocumentShare<TData = Awaited<ReturnType<typeof revokeDocumentShare>>, TError = ErrorType<RevokeDocumentShare400 | RevokeDocumentShare401 | RevokeDocumentShare404 | RevokeDocumentShare409>>(
+ documentId: string,
+    shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof revokeDocumentShare>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof revokeDocumentShare>>,
+          TError,
+          Awaited<ReturnType<typeof revokeDocumentShare>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useRevokeDocumentShare<TData = Awaited<ReturnType<typeof revokeDocumentShare>>, TError = ErrorType<RevokeDocumentShare400 | RevokeDocumentShare401 | RevokeDocumentShare404 | RevokeDocumentShare409>>(
+ documentId: string,
+    shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof revokeDocumentShare>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useRevokeDocumentShare<TData = Awaited<ReturnType<typeof revokeDocumentShare>>, TError = ErrorType<RevokeDocumentShare400 | RevokeDocumentShare401 | RevokeDocumentShare404 | RevokeDocumentShare409>>(
+ documentId: string,
+    shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof revokeDocumentShare>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getRevokeDocumentShareQueryOptions(documentId,shareId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPublicShareUrl = (shareId: string,) => {
+
+
+
+
+  return `/api/public/shares/${shareId}`
+}
+
+export const getPublicShare = async (shareId: string, options?: Parameters<typeof apiFetch>[1]): Promise<GetPublicShare200> => {
+
+  return apiFetch<GetPublicShare200>(getGetPublicShareUrl(shareId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicShareQueryKey = (shareId: string,) => {
+    return [
+    `/api/public/shares/${shareId}`
+    ] as const;
+    }
+
+
+export const getGetPublicShareQueryOptions = <TData = Awaited<ReturnType<typeof getPublicShare>>, TError = ErrorType<GetPublicShare400>>(shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicShare>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicShareQueryKey(shareId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicShare>>> = ({ signal }) => getPublicShare(shareId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: shareId !== null && shareId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicShare>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetPublicShareQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicShare>>>
+export type GetPublicShareQueryError = ErrorType<GetPublicShare400>
+
+
+export function useGetPublicShare<TData = Awaited<ReturnType<typeof getPublicShare>>, TError = ErrorType<GetPublicShare400>>(
+ shareId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicShare>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPublicShare>>,
+          TError,
+          Awaited<ReturnType<typeof getPublicShare>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPublicShare<TData = Awaited<ReturnType<typeof getPublicShare>>, TError = ErrorType<GetPublicShare400>>(
+ shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicShare>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPublicShare>>,
+          TError,
+          Awaited<ReturnType<typeof getPublicShare>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPublicShare<TData = Awaited<ReturnType<typeof getPublicShare>>, TError = ErrorType<GetPublicShare400>>(
+ shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicShare>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetPublicShare<TData = Awaited<ReturnType<typeof getPublicShare>>, TError = ErrorType<GetPublicShare400>>(
+ shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicShare>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetPublicShareQueryOptions(shareId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPublicShareContentUrl = (shareId: string,) => {
+
+
+
+
+  return `/api/public/shares/${shareId}/content`
+}
+
+export const getPublicShareContent = async (shareId: string, options?: Parameters<typeof apiFetch>[1]): Promise<GetPublicShareContent200> => {
+
+  return apiFetch<GetPublicShareContent200>(getGetPublicShareContentUrl(shareId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicShareContentQueryKey = (shareId: string,) => {
+    return [
+    `/api/public/shares/${shareId}/content`
+    ] as const;
+    }
+
+
+export const getGetPublicShareContentQueryOptions = <TData = Awaited<ReturnType<typeof getPublicShareContent>>, TError = ErrorType<GetPublicShareContent400 | GetPublicShareContent404 | GetPublicShareContent409>>(shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicShareContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicShareContentQueryKey(shareId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicShareContent>>> = ({ signal }) => getPublicShareContent(shareId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: shareId !== null && shareId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicShareContent>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetPublicShareContentQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicShareContent>>>
+export type GetPublicShareContentQueryError = ErrorType<GetPublicShareContent400 | GetPublicShareContent404 | GetPublicShareContent409>
+
+
+export function useGetPublicShareContent<TData = Awaited<ReturnType<typeof getPublicShareContent>>, TError = ErrorType<GetPublicShareContent400 | GetPublicShareContent404 | GetPublicShareContent409>>(
+ shareId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicShareContent>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPublicShareContent>>,
+          TError,
+          Awaited<ReturnType<typeof getPublicShareContent>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPublicShareContent<TData = Awaited<ReturnType<typeof getPublicShareContent>>, TError = ErrorType<GetPublicShareContent400 | GetPublicShareContent404 | GetPublicShareContent409>>(
+ shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicShareContent>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPublicShareContent>>,
+          TError,
+          Awaited<ReturnType<typeof getPublicShareContent>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPublicShareContent<TData = Awaited<ReturnType<typeof getPublicShareContent>>, TError = ErrorType<GetPublicShareContent400 | GetPublicShareContent404 | GetPublicShareContent409>>(
+ shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicShareContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetPublicShareContent<TData = Awaited<ReturnType<typeof getPublicShareContent>>, TError = ErrorType<GetPublicShareContent400 | GetPublicShareContent404 | GetPublicShareContent409>>(
+ shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicShareContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetPublicShareContentQueryOptions(shareId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPublicShareAssetAccessUrl = (shareId: string,
+    assetId: string,) => {
+
+
+
+
+  return `/api/public/shares/${shareId}/assets/${assetId}/access`
+}
+
+export const getPublicShareAssetAccess = async (shareId: string,
+    assetId: string, options?: Parameters<typeof apiFetch>[1]): Promise<GetPublicShareAssetAccess200> => {
+
+  return apiFetch<GetPublicShareAssetAccess200>(getGetPublicShareAssetAccessUrl(shareId,assetId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicShareAssetAccessQueryKey = (shareId: string,
+    assetId: string,) => {
+    return [
+    `/api/public/shares/${shareId}/assets/${assetId}/access`
+    ] as const;
+    }
+
+
+export const getGetPublicShareAssetAccessQueryOptions = <TData = Awaited<ReturnType<typeof getPublicShareAssetAccess>>, TError = ErrorType<GetPublicShareAssetAccess400 | GetPublicShareAssetAccess404 | GetPublicShareAssetAccess503>>(shareId: string,
+    assetId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicShareAssetAccess>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicShareAssetAccessQueryKey(shareId,assetId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicShareAssetAccess>>> = ({ signal }) => getPublicShareAssetAccess(shareId,assetId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: shareId !== null && shareId !== undefined && assetId !== null && assetId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicShareAssetAccess>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetPublicShareAssetAccessQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicShareAssetAccess>>>
+export type GetPublicShareAssetAccessQueryError = ErrorType<GetPublicShareAssetAccess400 | GetPublicShareAssetAccess404 | GetPublicShareAssetAccess503>
+
+
+export function useGetPublicShareAssetAccess<TData = Awaited<ReturnType<typeof getPublicShareAssetAccess>>, TError = ErrorType<GetPublicShareAssetAccess400 | GetPublicShareAssetAccess404 | GetPublicShareAssetAccess503>>(
+ shareId: string,
+    assetId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicShareAssetAccess>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPublicShareAssetAccess>>,
+          TError,
+          Awaited<ReturnType<typeof getPublicShareAssetAccess>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPublicShareAssetAccess<TData = Awaited<ReturnType<typeof getPublicShareAssetAccess>>, TError = ErrorType<GetPublicShareAssetAccess400 | GetPublicShareAssetAccess404 | GetPublicShareAssetAccess503>>(
+ shareId: string,
+    assetId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicShareAssetAccess>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPublicShareAssetAccess>>,
+          TError,
+          Awaited<ReturnType<typeof getPublicShareAssetAccess>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPublicShareAssetAccess<TData = Awaited<ReturnType<typeof getPublicShareAssetAccess>>, TError = ErrorType<GetPublicShareAssetAccess400 | GetPublicShareAssetAccess404 | GetPublicShareAssetAccess503>>(
+ shareId: string,
+    assetId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicShareAssetAccess>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetPublicShareAssetAccess<TData = Awaited<ReturnType<typeof getPublicShareAssetAccess>>, TError = ErrorType<GetPublicShareAssetAccess400 | GetPublicShareAssetAccess404 | GetPublicShareAssetAccess503>>(
+ shareId: string,
+    assetId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPublicShareAssetAccess>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetPublicShareAssetAccessQueryOptions(shareId,assetId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getJoinShareUrl = (shareId: string,) => {
+
+
+
+
+  return `/api/shares/${shareId}/join`
+}
+
+export const joinShare = async (shareId: string, options?: Parameters<typeof apiFetch>[1]): Promise<JoinShare200> => {
+
+  return apiFetch<JoinShare200>(getJoinShareUrl(shareId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getJoinShareQueryKey = (shareId: string,) => {
+    return [
+    'POST', `/api/shares/${shareId}/join`
+    ] as const;
+    }
+
+
+export const getJoinShareQueryOptions = <TData = Awaited<ReturnType<typeof joinShare>>, TError = ErrorType<JoinShare400 | JoinShare401 | JoinShare404>>(shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof joinShare>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getJoinShareQueryKey(shareId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof joinShare>>> = ({ signal }) => joinShare(shareId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: shareId !== null && shareId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof joinShare>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type JoinShareQueryResult = NonNullable<Awaited<ReturnType<typeof joinShare>>>
+export type JoinShareQueryError = ErrorType<JoinShare400 | JoinShare401 | JoinShare404>
+
+
+export function useJoinShare<TData = Awaited<ReturnType<typeof joinShare>>, TError = ErrorType<JoinShare400 | JoinShare401 | JoinShare404>>(
+ shareId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof joinShare>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof joinShare>>,
+          TError,
+          Awaited<ReturnType<typeof joinShare>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useJoinShare<TData = Awaited<ReturnType<typeof joinShare>>, TError = ErrorType<JoinShare400 | JoinShare401 | JoinShare404>>(
+ shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof joinShare>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof joinShare>>,
+          TError,
+          Awaited<ReturnType<typeof joinShare>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useJoinShare<TData = Awaited<ReturnType<typeof joinShare>>, TError = ErrorType<JoinShare400 | JoinShare401 | JoinShare404>>(
+ shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof joinShare>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useJoinShare<TData = Awaited<ReturnType<typeof joinShare>>, TError = ErrorType<JoinShare400 | JoinShare401 | JoinShare404>>(
+ shareId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof joinShare>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getJoinShareQueryOptions(shareId,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

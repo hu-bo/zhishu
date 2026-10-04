@@ -9,8 +9,9 @@ import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
 import * as Y from "yjs";
 import { Connection, Server } from "@hocuspocus/server";
 import {
+  CURRENT_DOCUMENT_SCHEMA_VERSION,
   validateCollaborationPresence,
-  validateDocumentContent,
+  validateDocumentContentForSchemaVersion,
   type OperationBatch,
   type DocumentContent,
 } from "@zhishu/document-contracts";
@@ -18,6 +19,7 @@ import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import type { Database } from "../../../database/index.js";
 import type { AppConfig } from "../../config.js";
+import type { OperationsMetrics } from "../health/operations-metrics.js";
 import { DocumentRepository } from "../documents/document.repository.js";
 import type { CollaborationSessionClaims } from "./session-ticket.js";
 import { verifySessionTicket } from "./session-ticket.js";
@@ -148,7 +150,10 @@ function validateUpdateBytes(update: Uint8Array): void {
   }
 }
 
-export function projectDocumentContent(document: Y.Doc): DocumentContent {
+export function projectDocumentContent(
+  document: Y.Doc,
+  schemaVersion: number = CURRENT_DOCUMENT_SCHEMA_VERSION,
+): DocumentContent {
   let projected: Record<string, unknown>;
   try {
     projected = yDocToProsemirrorJSON(document, "content");
@@ -160,30 +165,35 @@ export function projectDocumentContent(document: Y.Doc): DocumentContent {
     Array.isArray(normalized.content) || normalized.content !== undefined
       ? normalized
       : { ...normalized, content: [] };
-  const validation = validateDocumentContent(content);
+  const validation = validateDocumentContentForSchemaVersion(content, schemaVersion);
   if (!validation.success) throw closeError("invalid-document-content");
   return validation.data;
 }
 
 function collectAssetReferences(
   content: DocumentContent,
-): Array<{ assetId: string; blockId: string }> {
-  const references: Array<{ assetId: string; blockId: string }> = [];
+): Array<{ assetId: string; blockId: string; mediaType: string }> {
+  const references: Array<{ assetId: string; blockId: string; mediaType: string }> = [];
   const pending: unknown[] = [...content.content];
   while (pending.length > 0) {
     const value = pending.pop();
     if (typeof value !== "object" || value === null || Array.isArray(value)) continue;
     const block = value as {
       type?: unknown;
-      attrs?: { assetId?: unknown; blockId?: unknown };
+      attrs?: { assetId?: unknown; blockId?: unknown; mediaType?: unknown };
       content?: unknown;
     };
     if (
-      block.type === "image" &&
+      (block.type === "image" || block.type === "pdfAttachment") &&
       typeof block.attrs?.assetId === "string" &&
-      typeof block.attrs.blockId === "string"
+      typeof block.attrs.blockId === "string" &&
+      typeof block.attrs.mediaType === "string"
     ) {
-      references.push({ assetId: block.attrs.assetId, blockId: block.attrs.blockId });
+      references.push({
+        assetId: block.attrs.assetId,
+        blockId: block.attrs.blockId,
+        mediaType: block.attrs.mediaType,
+      });
     }
     if (Array.isArray(block.content)) pending.push(...block.content);
   }
@@ -194,6 +204,7 @@ function writeBodyAndStructureState(
   document: Y.Doc,
   state: StoredStructureState,
   operationId: string,
+  schemaVersion: number,
 ): void {
   const editorValidation = validateContentForEditor(state.content, collaborationEditorSchema);
   if (!editorValidation.success) throw closeError("invalid-document-content");
@@ -207,7 +218,9 @@ function writeBodyAndStructureState(
     writeStoredStructureState(document, state, operationId);
   }, "server-structure-operation");
 
-  if (!sameDocumentContent(projectDocumentContent(document), editorValidation.content)) {
+  if (
+    !sameDocumentContent(projectDocumentContent(document, schemaVersion), editorValidation.content)
+  ) {
     throw closeError("body-structure-projection-mismatch");
   }
 }
@@ -215,6 +228,7 @@ function writeBodyAndStructureState(
 function createValidatedUpdateCandidate(
   document: Y.Doc,
   updateBytes: Uint8Array,
+  schemaVersion: number,
 ): {
   candidate: Y.Doc;
   baseStateVector: Uint8Array;
@@ -229,8 +243,8 @@ function createValidatedUpdateCandidate(
     return {
       candidate,
       baseStateVector,
-      currentContent: projectDocumentContent(document),
-      nextContent: projectDocumentContent(candidate),
+      currentContent: projectDocumentContent(document, schemaVersion),
+      nextContent: projectDocumentContent(candidate, schemaVersion),
     };
   } catch (error) {
     candidate.destroy();
@@ -294,10 +308,20 @@ function changesServerOwnedStructure(document: Y.Doc, updateBytes: Uint8Array): 
     }
     return false;
   };
-  if (decoded.structs.some((struct) => referencesProtectedParent(struct))) return true;
+  // Reconnect sync messages also contain already accepted server-owned items.
+  // Only new items can mutate the protected maps.
+  if (
+    decoded.structs.some(
+      (struct) =>
+        struct.id.clock + struct.length > Y.getState(document.store, struct.id.client) &&
+        referencesProtectedParent(struct),
+    )
+  )
+    return true;
   for (const [clientId, ranges] of decoded.ds.clients) {
     const existingStructs = document.store.clients.get(clientId) ?? [];
     for (const struct of existingStructs) {
+      if (struct.deleted) continue;
       if (!referencesProtectedParent(struct)) continue;
       if (
         ranges.some(
@@ -371,6 +395,7 @@ export function createCollaborationServer(
   db: Database,
   pool: Pool,
   onOwnerLockLost: () => void = () => undefined,
+  metrics?: Pick<OperationsMetrics, "setCollaborationState">,
 ) {
   const repository = new DocumentRepository(db);
   const allowedOrigins = new Set(config.COLLABORATION_ALLOWED_ORIGINS);
@@ -381,6 +406,16 @@ export function createCollaborationServer(
   const awarenessUpdateTimes = new WeakMap<Connection<CollaborationContext>, number[]>();
   const maxStatelessPayloadBytes = config.COLLABORATION_MAX_UPDATE_BYTES * 3 + 32_768;
   let ownerLeaseClient: PoolClient | undefined;
+  const publishCollaborationMetrics = () => {
+    metrics?.setCollaborationState({
+      websocketConnections: rawConnections.size,
+      activeSessions: [...roomConnections.values()].reduce(
+        (total, clients) => total + clients.size,
+        0,
+      ),
+      activeRooms: roomConnections.size,
+    });
+  };
   const server = new Server<CollaborationContext>({
     port: config.COLLABORATION_PORT,
     address: config.COLLABORATION_HOST,
@@ -411,9 +446,17 @@ export function createCollaborationServer(
       }
 
       for (const state of presenceStates) {
-        if (rateLimited || !validateCollaborationPresence(state.zhishu).success) {
+        const session = connection.context.collaborationSession;
+        const validated = validateCollaborationPresence(state.zhishu);
+        if (rateLimited || !session || !validated.success) {
           // Awareness is untrusted, temporary display data; invalid presence never blocks edits.
           delete state.zhishu;
+        } else {
+          state.zhishu = {
+            ...validated.data,
+            displayName: session.displayName,
+            color: session.presenceColor,
+          };
         }
       }
     },
@@ -466,6 +509,7 @@ export function createCollaborationServer(
       const clients = roomConnections.get(documentName);
       clients?.delete(socketId);
       if (clients?.size === 0) roomConnections.delete(documentName);
+      publishCollaborationMetrics();
     },
     async onTokenSync({ documentName, token, connection, connectionConfig }) {
       const session = verifySessionTicket(token, config.COLLABORATION_TOKEN_SECRET);
@@ -551,9 +595,14 @@ export function createCollaborationServer(
       }
       const document = new Y.Doc();
       try {
-        const updates = await repository.loadUpdates(key.documentId, key.generationId);
-        for (const update of updates)
-          Y.applyUpdate(document, update.updateBytes, "postgres-replay");
+        await repository.replayYjsState(
+          {
+            documentId: key.documentId,
+            generationId: key.generationId,
+            targetSeq: active.durableSeq,
+          },
+          (updateBytes) => Y.applyUpdate(document, updateBytes, "postgres-replay"),
+        );
         return document;
       } catch (error) {
         document.destroy();
@@ -621,7 +670,7 @@ export function createCollaborationServer(
       }
       const sourceUpdateHash = updateHash(updateBytes);
       const { candidate, baseStateVector, currentContent, nextContent } =
-        createValidatedUpdateCandidate(document, updateBytes);
+        createValidatedUpdateCandidate(document, updateBytes, session.schemaVersion);
       try {
         const currentStructure = readStoredStructureState(document);
         if (!currentStructure) throw closeError("invalid-structure-state");
@@ -638,6 +687,7 @@ export function createCollaborationServer(
         const persistedUpdateBytes = Y.encodeStateAsUpdate(candidate, baseStateVector);
         validateUpdateBytes(persistedUpdateBytes);
         const persistedUpdateHash = updateHash(persistedUpdateBytes);
+        const contentChanged = !sameDocumentContent(currentContent, nextContent);
         try {
           const receipt = await repository.persistUpdate({
             documentId: key.documentId,
@@ -650,11 +700,11 @@ export function createCollaborationServer(
             content: nextContent,
             assetReferences: collectAssetReferences(nextContent),
             contentChanged:
-              !sameDocumentContent(currentContent, nextContent) &&
+              contentChanged &&
               (hasMeaningfulDocumentContent(currentContent) ||
                 hasMeaningfulDocumentContent(nextContent)),
           });
-          injectPostCommitCrash(config, !sameDocumentContent(currentContent, nextContent));
+          injectPostCommitCrash(config, contentChanged);
           pendingReceipts.set(connection, {
             generationId: session.generationId,
             updateHash: receipt.updateHash,
@@ -782,7 +832,7 @@ export function createCollaborationServer(
             );
             return;
           }
-          const currentContent = projectDocumentContent(document);
+          const currentContent = projectDocumentContent(document, session.schemaVersion);
           if (currentState.revision === 0 && currentContent.content.length > 0) {
             connection.sendStateless(
               structureOperationMessage({
@@ -853,8 +903,25 @@ export function createCollaborationServer(
           let updateBytes: Uint8Array;
           try {
             Y.applyUpdate(scratch, Y.encodeStateAsUpdate(document));
-            writeBodyAndStructureState(scratch, applied.state, operationId);
+            writeBodyAndStructureState(scratch, applied.state, operationId, session.schemaVersion);
             updateBytes = Y.encodeStateAsUpdate(scratch, baseVector);
+          } catch (error) {
+            logStorageFailure(
+              "collaboration-structure-projection-failed",
+              key.documentId,
+              key.generationId,
+              error,
+            );
+            connection.sendStateless(
+              structureOperationMessage({
+                operationId,
+                status: "rejected",
+                revision: currentState.revision,
+                durableSeq: active.durableSeq,
+                code: "structure-update-invalid",
+              }),
+            );
+            return;
           } finally {
             scratch.destroy();
           }
@@ -1030,7 +1097,11 @@ export function createCollaborationServer(
       return;
     }
     rawConnections.add(socket);
-    socket.once("close", () => rawConnections.delete(socket));
+    publishCollaborationMetrics();
+    socket.once("close", () => {
+      rawConnections.delete(socket);
+      publishCollaborationMetrics();
+    });
   });
 
   const reserveRoomConnection = (socketId: string, documentName: string): boolean => {
@@ -1047,6 +1118,7 @@ export function createCollaborationServer(
     const nextClients = clients ?? new Set<string>();
     nextClients.add(socketId);
     roomConnections.set(documentName, nextClients);
+    publishCollaborationMetrics();
     return true;
   };
 

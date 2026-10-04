@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { EditorStructureAction } from "@zhishu/editor-core";
 import { useEditorEvents, useEditorInstance, useEditorSelector } from "@zhishu/editor-react";
+import { EditorIcon } from "./editor-icon.js";
 
 interface BlockMenuTarget {
   id: string;
@@ -15,6 +16,9 @@ type BlockMenuActionId =
 export interface EditorBlockMenuMessages {
   handleLabel: string;
   menuLabel: string;
+  blockActionsGroup: string;
+  blockTypeGroup: string;
+  blockPositionGroup: string;
   duplicate: string;
   delete: string;
   paragraph: string;
@@ -32,6 +36,9 @@ export interface EditorBlockMenuMessages {
 const defaultMessages: EditorBlockMenuMessages = {
   handleLabel: "Block 操作",
   menuLabel: "Block 操作菜单",
+  blockActionsGroup: "块操作",
+  blockTypeGroup: "转换类型",
+  blockPositionGroup: "调整位置",
   duplicate: "复制 Block",
   delete: "删除 Block",
   paragraph: "转为段落",
@@ -85,8 +92,17 @@ export function EditorBlockMenu({ messages, className }: EditorBlockMenuProps) {
     const { selection } = controller.editor.state;
     let blockId: string | undefined;
     const selectedNode = (
-      selection as typeof selection & { node?: { attrs: Record<string, unknown> } }
+      selection as typeof selection & {
+        node?: { attrs: Record<string, unknown>; type: { name: string } };
+      }
     ).node;
+    const selectedTable = selectedNode?.type.name === "table";
+    if (!selectedTable && isInsideTable(selection.$from)) {
+      targetRef.current = null;
+      setTarget(null);
+      setMenuOpen(false);
+      return;
+    }
     if (selectedNode && typeof selectedNode.attrs.blockId === "string") {
       blockId = selectedNode.attrs.blockId;
     }
@@ -226,6 +242,23 @@ export function EditorBlockMenu({ messages, className }: EditorBlockMenuProps) {
     },
     { id: "move-up", disabled: !editable || !structureAllowed || busy || !location?.previousId },
     { id: "move-down", disabled: !editable || !structureAllowed || busy || !location?.nextId },
+  ];
+  const actionGroups: Array<{
+    id: string;
+    label: string;
+    actionIds: BlockMenuActionId[];
+  }> = [
+    { id: "block-actions", label: labels.blockActionsGroup, actionIds: ["duplicate", "delete"] },
+    {
+      id: "block-type",
+      label: labels.blockTypeGroup,
+      actionIds: ["paragraph", "heading", "code"],
+    },
+    {
+      id: "block-position",
+      label: labels.blockPositionGroup,
+      actionIds: ["move-up", "move-down"],
+    },
   ];
 
   useEffect(() => {
@@ -404,13 +437,14 @@ export function EditorBlockMenu({ messages, className }: EditorBlockMenuProps) {
         className={className ? `zhishu-ui-block-handle ${className}` : "zhishu-ui-block-handle"}
         style={{ left: `${target.x}px`, top: `${target.y}px` }}
         aria-label={labels.handleLabel}
+        title={labels.handleLabel}
         aria-controls={menuId}
         aria-expanded={menuOpen}
         aria-haspopup="menu"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => setMenuOpen((open) => !open)}
       >
-        ⋮
+        <EditorIcon name="more" />
       </button>
       {menuOpen && (
         <div
@@ -427,17 +461,32 @@ export function EditorBlockMenu({ messages, className }: EditorBlockMenuProps) {
               {labels.structureUnavailable}
             </p>
           )}
-          {actions.map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              role="menuitem"
-              disabled={action.disabled}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => void execute(action.id)}
+          {actionGroups.map((group) => (
+            <div
+              key={group.id}
+              className="zhishu-ui-block-menu-group"
+              role="group"
+              aria-label={group.label}
             >
-              {actionLabels[action.id]}
-            </button>
+              <p className="zhishu-ui-block-menu-group-label">{group.label}</p>
+              {group.actionIds.map((actionId) => {
+                const action = actions.find((item) => item.id === actionId);
+                if (!action) return null;
+                return (
+                  <button
+                    key={action.id}
+                    type="button"
+                    role="menuitem"
+                    disabled={action.disabled}
+                    data-danger={action.id === "delete" ? "true" : undefined}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => void execute(action.id)}
+                  >
+                    {actionLabels[action.id]}
+                  </button>
+                );
+              })}
+            </div>
           ))}
         </div>
       )}
@@ -446,4 +495,14 @@ export function EditorBlockMenu({ messages, className }: EditorBlockMenuProps) {
       </span>
     </>
   );
+}
+
+function isInsideTable(position: {
+  depth: number;
+  node(depth: number): { type: { name: string } };
+}) {
+  for (let depth = position.depth; depth > 0; depth -= 1) {
+    if (position.node(depth).type.name === "table") return true;
+  }
+  return false;
 }

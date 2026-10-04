@@ -14,16 +14,26 @@ import {
   validateDocumentContent,
   type DocumentContent,
 } from "@zhishu/document-contracts";
-import { EditorBlockMenu, EditorShell, EditorToolbar } from "@zhishu/editor-ui";
+import {
+  EditorBlockMenu,
+  defaultEditorNodeViews,
+  EditorShell,
+  EditorToolbar,
+} from "@zhishu/editor-ui";
 import {
   EditorProvider,
   EditorSurface,
   useEditorEvents,
   useEditorInstance,
   useEditorSelector,
+  type EditorHostServices,
 } from "@zhishu/editor-react";
 import "@zhishu/editor-ui/styles.css";
 import { CollaborativeEditorDemo } from "./collaborative-editor-demo.js";
+import { LifecycleDemo } from "./lifecycle-demo.js";
+import { reactImageNodeViewExtension } from "./react-node-view-demo.js";
+import { visualReviewContent } from "./visual-review-content.js";
+import { createKnowledgePresets } from "@zhishu/document-contracts/examples";
 import "./style.css";
 
 const consumerParagraphNodeView = Extension.create({
@@ -59,26 +69,6 @@ const consumerParagraphNodeView = Extension.create({
   },
 });
 
-const firstContent: DocumentContent = {
-  type: "doc",
-  content: [
-    {
-      type: "heading",
-      attrs: { blockId: "block_first_title", level: 1 },
-      content: [{ type: "text", text: "一份独立文档" }],
-    },
-    {
-      type: "paragraph",
-      attrs: { blockId: "block_first_body" },
-      content: [
-        { type: "text", text: "在这里输入中文，" },
-        { type: "text", text: "切换标题与撤销后", marks: [{ type: "bold" }] },
-        { type: "text", text: "，下方实例仍保持独立。" },
-      ],
-    },
-  ],
-};
-
 const secondContent: DocumentContent = {
   type: "doc",
   content: [
@@ -87,7 +77,66 @@ const secondContent: DocumentContent = {
       attrs: { blockId: "block_second_title", level: 2 },
       content: [{ type: "text", text: "第二个编辑器" }],
     },
+    {
+      type: "taskItem",
+      attrs: { blockId: "block_second_task", checked: false },
+      content: [{ type: "text", text: "准备版本发布" }],
+    },
     { type: "paragraph", attrs: { blockId: "block_second_body" } },
+    {
+      type: "image",
+      attrs: {
+        blockId: "block_second_image",
+        assetId: "asset_second_image_preview",
+        mediaType: "image/png",
+        alt: "大尺寸图片占位，用于检查深色主题与正文宽度约束",
+        width: 2400,
+        height: 1600,
+      },
+    },
+  ],
+};
+
+const rejectVisualReviewAsset: NonNullable<EditorHostServices["resolveAssetURL"]> = async () => {
+  throw new Error("视觉验收样例未连接附件存储。");
+};
+
+const conversionContent: DocumentContent = {
+  type: "doc",
+  content: [
+    {
+      type: "taskList",
+      attrs: { blockId: "block_conversion_tasks" },
+      content: [
+        {
+          type: "taskItem",
+          attrs: { blockId: "block_conversion_parent", checked: false },
+          content: [{ type: "text", text: "准备版本发布" }],
+        },
+        {
+          type: "taskList",
+          attrs: { blockId: "block_conversion_subtasks" },
+          content: [
+            {
+              type: "taskItem",
+              attrs: { blockId: "block_conversion_changelog", checked: true },
+              content: [{ type: "text", text: "检查更新日志" }],
+            },
+            {
+              type: "taskList",
+              attrs: { blockId: "block_conversion_checks" },
+              content: [
+                {
+                  type: "taskItem",
+                  attrs: { blockId: "block_conversion_announcement", checked: false },
+                  content: [{ type: "text", text: "确认发布公告" }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
   ],
 };
 
@@ -232,17 +281,61 @@ function EditorCard({
   documentId,
   content,
   extensions,
+  theme = "light",
+  assetResolver,
+  simulatedUploads = false,
 }: {
   title: string;
   documentId: string;
   content: DocumentContent;
   extensions?: Extensions;
+  theme?: "light" | "dark";
+  assetResolver?: EditorHostServices["resolveAssetURL"];
+  simulatedUploads?: boolean;
 }) {
   const [editable, setEditable] = useState(true);
   const [loading, setLoading] = useState(false);
   const [currentContent, setCurrentContent] = useState(content);
   const [contentRevision, setContentRevision] = useState(0);
   const [loadFeedback, setLoadFeedback] = useState("");
+  const uploadAttemptsRef = useRef(0);
+
+  const hostServices: EditorHostServices = {
+    confirmExternalLink: (href) => window.confirm(`即将打开外部链接：\n${href}\n\n是否继续？`),
+    openExternalLink: (href) => {
+      window.open(href, "_blank", "noopener,noreferrer");
+    },
+    ...(assetResolver ? { resolveAssetURL: assetResolver } : {}),
+    ...(simulatedUploads
+      ? {
+          requestUpload: async (file: File, signal: AbortSignal) => {
+            const attempt = ++uploadAttemptsRef.current;
+            await new Promise<void>((resolve, reject) => {
+              const timer = window.setTimeout(() => {
+                signal.removeEventListener("abort", onAbort);
+                resolve();
+              }, 900);
+              const onAbort = () => {
+                window.clearTimeout(timer);
+                signal.removeEventListener("abort", onAbort);
+                reject(new DOMException("示例上传已取消。", "AbortError"));
+              };
+              signal.addEventListener("abort", onAbort, { once: true });
+              if (signal.aborted) onAbort();
+            });
+            if (attempt === 1) {
+              throw new Error("本地示例：模拟首次上传失败，可重试或取消。");
+            }
+            return {
+              assetId: `asset_demo_upload_${attempt}`,
+              fileName: file.name,
+              mediaType: file.type || "image/png",
+            };
+          },
+          cancelUpload: (file: File) => setLoadFeedback(`已取消附件 ${file.name}`),
+        }
+      : {}),
+  };
 
   const loadSavedContent = () => {
     const saved = localStorage.getItem(`zhishu-example:${documentId}`);
@@ -273,22 +366,22 @@ function EditorCard({
     <EditorProvider
       instanceKey={`${documentId}:${contentRevision}`}
       options={{ documentId, content: currentContent, ...(extensions ? { extensions } : {}) }}
+      nodeViews={defaultEditorNodeViews}
       loading={loading}
       editable={editable}
       readOnlyReason={editable ? undefined : "演示只读模式"}
-      hostServices={{
-        confirmExternalLink: (href) => window.confirm(`即将打开外部链接：\n${href}\n\n是否继续？`),
-        openExternalLink: (href) => {
-          window.open(href, "_blank", "noopener,noreferrer");
-        },
-      }}
+      hostServices={hostServices}
     >
       <EditorShell
-        className="editor-card"
+        className={`editor-card${theme === "dark" ? " editor-card--dark" : ""}`}
         ariaLabel={`${title}编辑器`}
         surfaceLabel={`${title}正文`}
         surfaceClassName="editor-surface"
         outline
+        outlinePlacement="end"
+        contentMaxWidth={896}
+        statisticsFooter
+        stickyToolbar
         find
         selectionMenu
         blockMenu
@@ -397,28 +490,43 @@ function ConversionDemo() {
   const [schema] = useState(() => createEditorSchema());
 
   const exportHtml = () => {
-    const result = exportDocumentHtml(firstContent, schema);
-    setReport(JSON.stringify(result.report));
+    const result = exportDocumentHtml(conversionContent, schema);
+    const imported = result.success ? importDocumentHtml(result.value, schema) : result;
+    setReport(
+      JSON.stringify({
+        exported: result.report,
+        htmlRoundTrip: imported.success ? imported.report : imported.error,
+        taskTreePreserved: imported.success && imported.value.content[0]?.type === "taskList",
+      }),
+    );
     if (result.success) setHtml(result.value);
   };
 
   const importUnsafeHtml = () => {
     const result = importDocumentHtml(
-      '<p>安全<strong>内容</strong> <a href="javascript:alert(1)">危险链接</a><script>window.__zhishuUnsafeHtmlRan=true</script><img alt="图片替代文字" src="x" onerror="window.__zhishuUnsafeHtmlRan=true"></p>',
+      '<p>安全<strong>内容</strong> <a href="javascript:alert(1)">危险链接</a><script>window.__zhishuUnsafeHtmlRan=true</script><img alt="图片替代文字" src="x" onerror="window.__zhishuUnsafeHtmlRan=true"></p><div data-type="taskList"><div data-type="taskItem" data-checked="false"><input type="checkbox" disabled><span data-task-content>准备版本发布</span></div><div data-type="taskList"><div data-type="taskItem" data-checked="true"><input type="checkbox" checked disabled><span data-task-content>检查更新日志</span></div></div></div>',
       schema,
     );
-    setReport(JSON.stringify({ success: result.success, report: result.report }));
+    setReport(
+      JSON.stringify({
+        success: result.success,
+        report: result.report,
+        taskTreePreserved:
+          result.success && result.value.content.some((block) => block.type === "taskList"),
+      }),
+    );
     if (result.success) setHtml(JSON.stringify(result.value, null, 2));
   };
 
   const checkPlainText = () => {
-    const imported = importPlainText("第一行\n第二行\n\n第三段");
-    const exported = imported.success ? exportPlainText(imported.value) : imported;
+    const exported = exportPlainText(conversionContent);
+    const imported = exported.success ? importPlainText(exported.value) : exported;
     setReport(
       JSON.stringify({
-        imported: imported.report,
         exported: exported.report,
-        roundTrip: exported.success ? exported.value : exported.error.message,
+        plainText: exported.success ? exported.value : exported.error.message,
+        imported: imported.report,
+        roundTrip: imported.success ? imported.value.content.length : imported.error.message,
       }),
     );
   };
@@ -733,21 +841,48 @@ function InitializationRetryDemo() {
 }
 
 function App() {
+  const [presetIndex, setPresetIndex] = useState(-1);
+  const presets = createKnowledgePresets();
+  const selectedPreset = presets[presetIndex];
   return (
     <main className="playground">
       <header className="page-heading">
         <p className="eyebrow">公开包消费样例</p>
         <h1>嵌入式文档编辑器</h1>
-        <p>组件从工作区公开导出入口导入；两个实例各自管理正文、焦点和历史记录。</p>
+        <p>
+          组件从工作区公开入口导入；两个实例使用独立主题。第一个实例的附件上传由本地服务模拟，用于查看忙碌、失败、重试和取消反馈。
+        </p>
       </header>
       <div className="editor-grid">
+        <label>
+          预设知识文档{" "}
+          <select
+            value={presetIndex}
+            onChange={(event) => setPresetIndex(Number(event.target.value))}
+          >
+            <option value={-1}>视觉验收样本</option>
+            {presets.map((preset, index) => (
+              <option key={preset.id} value={index}>
+                {preset.title}
+              </option>
+            ))}
+          </select>
+        </label>
         <EditorCard
-          title="项目说明"
+          key={selectedPreset?.id ?? "visual-review"}
+          title={selectedPreset?.title ?? "视觉验收样本"}
           documentId="doc_first"
-          content={firstContent}
-          extensions={[consumerParagraphNodeView]}
+          content={selectedPreset?.content ?? visualReviewContent}
+          extensions={[consumerParagraphNodeView, reactImageNodeViewExtension]}
+          simulatedUploads
         />
-        <EditorCard title="会议记录" documentId="doc_second" content={secondContent} />
+        <EditorCard
+          title="会议记录"
+          documentId="doc_second"
+          content={secondContent}
+          theme="dark"
+          assetResolver={rejectVisualReviewAsset}
+        />
       </div>
       <EditorMountDemo />
       <BlockCommandDemo />
@@ -763,6 +898,10 @@ if (!root) throw new Error("Example root is missing.");
 createRoot(root).render(
   window.location.pathname === "/collaboration" ? (
     <CollaborativeEditorDemo />
+  ) : window.location.pathname === "/lifecycle" ? (
+    <StrictMode>
+      <LifecycleDemo />
+    </StrictMode>
   ) : (
     <StrictMode>
       <App />

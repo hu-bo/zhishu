@@ -8,14 +8,25 @@ import {
   type FocusEvent,
   type KeyboardEvent,
 } from "react";
-import { useEditorEvents, useEditorInstance, useEditorSelector } from "@zhishu/editor-react";
+import {
+  useEditorEvents,
+  useEditorInstance,
+  useEditorSelector,
+  useEditorStructureAction,
+} from "@zhishu/editor-react";
+import { EditorStructureFeedback } from "./editor-structure-feedback.js";
 
 export interface EditorSelectionMenuMessages {
   label: string;
   bold: string;
   italic: string;
   strike: string;
+  underline: string;
+  highlight: string;
+  clearFormatting: string;
+  link: string;
   code: string;
+  callout: string;
 }
 
 const defaultMessages: EditorSelectionMenuMessages = {
@@ -23,7 +34,12 @@ const defaultMessages: EditorSelectionMenuMessages = {
   bold: "加粗",
   italic: "斜体",
   strike: "删除线",
+  underline: "下划线",
+  highlight: "高亮",
+  clearFormatting: "清除格式",
+  link: "链接",
   code: "行内代码",
+  callout: "转换为提示块",
 };
 
 const useClientLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -37,10 +53,12 @@ interface MenuPosition {
 export interface EditorSelectionMenuProps {
   messages?: Partial<EditorSelectionMenuMessages>;
   className?: string;
+  onOpenLink?: () => void;
 }
 
-export function EditorSelectionMenu({ messages, className }: EditorSelectionMenuProps) {
+export function EditorSelectionMenu({ messages, className, onOpenLink }: EditorSelectionMenuProps) {
   const { controller } = useEditorInstance();
+  const calloutAction = useEditorStructureAction();
   const isEditable = useEditorSelector((state) => state.isEditable);
   const formatting = useEditorSelector((state) => state.formatting);
   const [position, setPosition] = useState<MenuPosition | null>(null);
@@ -191,7 +209,8 @@ export function EditorSelectionMenu({ messages, className }: EditorSelectionMenu
     buttons.item(nextIndex)?.focus();
   }
 
-  if (!position || !controller || controller.isDestroyed) return null;
+  if (!position || !controller || controller.isDestroyed)
+    return <EditorStructureFeedback action={calloutAction} />;
   const style: CSSProperties = {
     left: `${position.x}px`,
     top: `${position.y}px`,
@@ -217,10 +236,42 @@ export function EditorSelectionMenu({ messages, className }: EditorSelectionMenu
       run: () => controller.toggleStrike(),
     },
     {
+      id: "underline",
+      label: labels.underline,
+      pressed: formatting.underline,
+      run: () => controller.toggleUnderline(),
+    },
+    {
+      id: "highlight",
+      label: labels.highlight,
+      pressed: formatting.highlight,
+      run: () => {
+        if (formatting.highlight === true) controller.unsetHighlight();
+        else controller.setHighlightColor("yellow");
+      },
+    },
+    {
+      id: "clear-formatting",
+      label: labels.clearFormatting,
+      run: () => controller.clearFormatting(),
+    },
+    ...(onOpenLink ? [{ id: "link", label: labels.link, run: onOpenLink }] : []),
+    {
       id: "code",
       label: labels.code,
       pressed: formatting.code,
       run: () => controller.toggleCode(),
+    },
+    {
+      id: "callout",
+      label: labels.callout,
+      disabled: !calloutAction.allowed || calloutAction.busy || calloutAction.canRetry,
+      run: () =>
+        void calloutAction.run({
+          type: "wrap-callout",
+          targetBlockIds: controller.getSelectedBlockIds(),
+          theme: "info",
+        }),
     },
   ];
 
@@ -240,7 +291,7 @@ export function EditorSelectionMenu({ messages, className }: EditorSelectionMenu
           type="button"
           aria-label={action.label}
           aria-pressed={action.pressed === "mixed" ? "mixed" : action.pressed}
-          disabled={!isEditable}
+          disabled={!isEditable || action.disabled}
           tabIndex={index === 0 ? 0 : -1}
           onMouseDown={(event) => event.preventDefault()}
           onClick={action.run}

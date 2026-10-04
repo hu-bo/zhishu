@@ -25,6 +25,25 @@ export function normalizeTiptapDocumentJSON(input: unknown): unknown {
     if (typeof value !== "object" || value === null || Array.isArray(value)) continue;
     const record = value as Record<string, unknown>;
     if (
+      (record.type === "paragraph" || record.type === "heading") &&
+      typeof record.attrs === "object" &&
+      record.attrs !== null &&
+      !Array.isArray(record.attrs) &&
+      (record.attrs as Record<string, unknown>).align === null
+    ) {
+      delete (record.attrs as Record<string, unknown>).align;
+      if (Object.keys(record.attrs as Record<string, unknown>).length === 0) delete record.attrs;
+    }
+    if (
+      record.type === "horizontalRule" &&
+      typeof record.attrs === "object" &&
+      record.attrs !== null &&
+      !Array.isArray(record.attrs) &&
+      (record.attrs as Record<string, unknown>).label === ""
+    ) {
+      delete (record.attrs as Record<string, unknown>).label;
+    }
+    if (
       record.type === "codeBlock" &&
       typeof record.attrs === "object" &&
       record.attrs !== null &&
@@ -42,6 +61,19 @@ export function normalizeTiptapDocumentJSON(input: unknown): unknown {
       const attrs = record.attrs as Record<string, unknown>;
       if (attrs.width === null) delete attrs.width;
       if (attrs.height === null) delete attrs.height;
+    }
+    if (
+      (record.type === "tableCell" || record.type === "tableHeader") &&
+      typeof record.attrs === "object" &&
+      record.attrs !== null &&
+      !Array.isArray(record.attrs)
+    ) {
+      const attrs = record.attrs as Record<string, unknown>;
+      if (attrs.colspan === 1) delete attrs.colspan;
+      if (attrs.rowspan === 1) delete attrs.rowspan;
+      if (attrs.colwidth === null) delete attrs.colwidth;
+      if (attrs.align === null) delete attrs.align;
+      if (Object.keys(attrs).length === 0) delete record.attrs;
     }
     if (Array.isArray(record.marks)) {
       for (const mark of record.marks) {
@@ -67,6 +99,7 @@ export function createEditorSchema(options: EditorSchemaOptions = {}): Schema {
     additionalExtensions: [...(options.additionalExtensions ?? []), ...(options.extensions ?? [])],
     onLinkClick: options.onLinkClick,
     collaborative: options.collaborative,
+    placeholder: options.placeholder,
   });
   return getSchema(extensions);
 }
@@ -78,7 +111,10 @@ export function validateContentForEditor(
   const validation = validateDocumentContent(input);
   if (!validation.success) return validation;
   try {
-    schema.nodeFromJSON(validation.data as JSONContent).check();
+    // Empty persisted documents acquire an editable paragraph when mounted.
+    const editorContent =
+      validation.data.content.length === 0 ? createEmptyDocumentContent() : validation.data;
+    schema.nodeFromJSON(editorContent as JSONContent).check();
     return { success: true, content: validation.data };
   } catch {
     return {

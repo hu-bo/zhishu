@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { prosemirrorJSONToYXmlFragment, yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { createEditorSchema } from "@zhishu/editor-core";
+import { CURRENT_DOCUMENT_SCHEMA_VERSION } from "@zhishu/document-contracts";
 import type { CollaborationSessionInfo, OperationBatch } from "@zhishu/editor-collaboration";
 import { HocuspocusCollaborationSession } from "@zhishu/editor-collaboration/hocuspocus";
 import * as Y from "yjs";
@@ -171,7 +172,7 @@ try {
       {
         method: "POST",
         headers: authorization,
-        body: JSON.stringify({ schemaVersion: 1, extensions: [] }),
+        body: JSON.stringify({ schemaVersion: CURRENT_DOCUMENT_SCHEMA_VERSION, extensions: [] }),
       },
     );
 
@@ -264,7 +265,7 @@ try {
       {
         method: "POST",
         headers: authorization,
-        body: JSON.stringify({ schemaVersion: 1, extensions: [] }),
+        body: JSON.stringify({ schemaVersion: CURRENT_DOCUMENT_SCHEMA_VERSION, extensions: [] }),
       },
     );
 

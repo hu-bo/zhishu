@@ -18,7 +18,7 @@
 | DC-04 | 编辑操作与结果      | 插入/删除/移动/替换、目标前置条件、批次原子性、结构化错误           | M1                                          |
 | DC-05 | 运行时校验          | 大小/深度/节点数量、属性白名单、URL 协议、错误路径、未知扩展处理    | M1                                          |
 | DC-06 | 内容迁移            | 显式版本迁移、可重复执行、失败保留原件、迁移前后审计信息            | M1 定约；M2 执行链                          |
-| DC-07 | 资产与锚点引用      | assetId、替代文本、Block/选区定位、锚点失效与代次绑定               | M2 合约已完成；图片引用接入，锚点解析待接入 |
+| DC-07 | 资产与锚点引用      | assetId、替代文本、Block/选区定位、锚点失效与代次绑定               | M2 合约及协同解析已接入；对象存储验收待完成 |
 | DC-08 | AI 编辑提案与流事件 | 请求标识、序号、草稿、目标约束、完整提案、结束/失败事件             | M3                                          |
 | DC-09 | 引用和文档事件      | 来源文档/版本/Block、持久化快照事件、索引所需版本信息               | M3                                          |
 
@@ -28,23 +28,23 @@
 
 公共入口：根入口提供基础类型、内容/快照验证、Block ID 操作和迁移接口；`/operations` 提供原子编辑操作；`/events` 提供持久化事件；`/ai` 提供可选创作协议。AI 入口不引入模型 SDK，基础入口不加载 AI 专属定义。
 
-app-server 与 app-web 使用不同 Zod 主版本，共享包不导出任何一方的 Zod 实例。D-01 已选定：HTTP 入参/响应仍由 app-server 的 Zod route contract 拥有；文档内容在 OpenAPI 3.1 `components.schemas` 中直接引用共享 JSON Schema。服务端通过共享包的 validator 做运行时语义校验，未来 content route 的 Zod schema 只负责调用该 validator 并引用组件，不复制节点结构。OpenAPI 离线导出脚本断言规范版本、`DocumentContent` 到 `DocumentBlock` 的 `$ref` 和 Block Schema 存在。这样不会因两端 Zod 主版本不同生成两份结构，也不以 `any` 代替内容定义。
+app-server 与 app-web 使用不同 Zod 主版本，共享包不导出任何一方的 Zod 实例。D-01 已选定：HTTP 入参/响应仍由 app-server 的 Zod route contract 拥有；文档内容在 OpenAPI 3.1 `components.schemas` 中直接引用共享 JSON Schema。`GET/PUT /api/documents/:id/content` 的 Zod route contract 由共享 validator 执行语义校验，OpenAPI 导出阶段把读写、导入导出和历史正文字段绑定到共享 `DocumentContent` 组件，不复制节点结构。OpenAPI 离线导出脚本断言规范版本、`DocumentContent` 到 `DocumentBlock` 的 `$ref` 和 Block Schema 存在。这样不会因两端 Zod 主版本不同生成两份结构，也不以 `any` 代替内容定义。
 
-实现入口：`packages/document-contracts/src/schema.ts`、`src/validation.ts`、`src/snapshots.ts`、`src/identity.ts`；操作实现位于 `src/operations.ts`，迁移接口位于 `src/migration.ts`；OpenAPI 装配在 `apps/app-server/src/plugins/openapi.ts`。图片 Block 只保存同文档 `assetId`、PNG/JPEG/WebP MIME、替代文本和可选尺寸，不允许保存对象 URL。服务端在正文写入事务中复核 ready asset 并按当前头部/保留版本 durableSeq 维护引用。表格和锚点解析仍未实现。默认内容限制为 2 MiB、20,000 节点、64 层。
+实现入口：`packages/document-contracts/src/schema.ts`、`src/validation.ts`、`src/snapshots.ts`、`src/identity.ts`；操作实现位于 `src/operations.ts`，迁移接口位于 `src/migration.ts`；OpenAPI 装配在 `apps/app-server/src/plugins/openapi.ts`。图片 Block 保存同文档 `assetId`、PNG/JPEG/WebP MIME、替代文本和可选尺寸；PDF Block 保存同文档 `assetId`、`application/pdf` MIME 和文件名；两者都不允许保存对象 URL。任务项以稳定 `blockId` 和 `checked` 状态保存；递归 `taskList` 仅允许包含 `taskItem` 或另一个 `taskList`。Schema v3 增加稳定 table Block；表格限 100 行、20 列、矩形网格、段落单元格、跨度范围和单元格宽度上限。Schema v4 增加 paragraph/heading 的 `align` 属性、`underline` mark 和带受限颜色的 `highlight.attrs.color`；合法对齐为 left/center/right，高亮为 yellow/green/blue/pink/purple。v1–v3 文档拒绝这些 v4 格式，v3 到 v4 的服务端迁移保留原内容。旧的顶层 `link.href` 在编辑器归一化时转为 Tiptap `link.attrs.href`。服务端在正文事务中校验形状和 Block ID 唯一性。JSON 保留表格和文字格式；HTML 导入/导出保留合并单元格、对齐、下划线与高亮。Chromium 浏览器验收已通过 Schema v4 保存以及对齐/高亮/下划线 HTML 往返。纯文本按制表符分隔并报告表格格式降级。服务端在正文写入事务中复核 ready asset 的文档归属和 MIME，并按当前头部/保留版本 durableSeq 维护引用。默认内容限制为 2 MiB、20,000 节点、64 层。
 
 ## 4. 内容与版本字段
 
-| 对象                    | 必要信息                                                                                               | 语义                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| `DocumentContent`       | `type: doc`、节点数组                                                                                  | 纯内容，可在新文档尚未分配 documentId 时使用                            |
-| `DocumentSnapshot`      | documentId、schemaVersion、extensions、snapshotRevision、content；协同快照增加 generationId/durableSeq | 普通快照无代次游标；协同快照 generationId/durableSeq 必须成对出现       |
-| `Block`                 | 节点 type、`attrs.blockId`、合法 attrs、content                                                        | 扩展定义哪些节点可独立寻址；文本与 Mark 无 blockId                      |
-| `ExtensionRequirement`  | 扩展名、内容格式版本、是否必需                                                                         | 格式兼容声明；不等于 npm 包版本，也不装载任意代码                       |
-| `OperationBatch`        | operationId、目标代次、操作列表、前置条件                                                              | 一次逻辑变更，全部通过校验才应用                                        |
-| `Anchor`                | documentId、generationId、anchorVersion、起止 Block ID、Yjs relative position 编码                     | 代次绑定； contracts 检查文档/代次/Block 是否仍有效，协同适配器解析范围 |
-| `AssetReference`        | assetId、媒体类型、尺寸/替代文本等内容属性                                                             | 不保存 URL、上传令牌或存储键；服务端每次读取重新授权                    |
-| `SourceReference`       | 来源 documentId、版本、blockId、知识域引用                                                             | 可回溯引用；是否有权访问由服务端决定                                    |
-| `CollaborationPresence` | 协议版本、显示名、颜色、可选 Yjs relative-position 选区                                                | ≤2 KiB 临时不可信数据；不进入快照，不代表身份或权限                     |
+| 对象                    | 必要信息                                                                                                  | 语义                                                                     |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `DocumentContent`       | `type: doc`、节点数组                                                                                     | 纯内容，可在新文档尚未分配 documentId 时使用                             |
+| `DocumentSnapshot`      | documentId、schemaVersion、extensions、snapshotRevision、content；协同快照增加 generationId/durableSeq    | 普通快照无代次游标；协同快照 generationId/durableSeq 必须成对出现        |
+| `Block`                 | 节点 type、`attrs.blockId`、合法 attrs、content                                                           | 扩展定义哪些节点可独立寻址；文本与 Mark 无 blockId                       |
+| `ExtensionRequirement`  | 扩展名、内容格式版本、是否必需                                                                            | 格式兼容声明；不等于 npm 包版本，也不装载任意代码                        |
+| `OperationBatch`        | operationId、目标代次、操作列表、前置条件                                                                 | 一次逻辑变更，全部通过校验才应用                                         |
+| `Anchor`                | documentId、generationId、anchorVersion、起止 Block ID、Yjs relative position 编码及可选位置/块内偏移提示 | 代次绑定；协同适配器解析范围，并可在结构重建后按位置与稳定 Block ID 恢复 |
+| `AssetReference`        | assetId、媒体类型、尺寸/替代文本等内容属性                                                                | 不保存 URL、上传令牌或存储键；服务端每次读取重新授权                     |
+| `SourceReference`       | 来源 documentId、版本、blockId、知识域引用                                                                | 可回溯引用；是否有权访问由服务端决定                                     |
+| `CollaborationPresence` | 协议版本、显示名、颜色、可选 Yjs relative-position 选区                                                   | ≤2 KiB 临时不可信数据；不进入快照，不代表身份或权限                      |
 
 `schemaVersion` 表示内容格式，`generationId` 表示协同文档代次，`snapshotRevision` 表示 JSON 快照版本，`durableSeq` 表示该代次服务端已持久化更新的位置；这些字段不得混作一个版本号。元数据另有 `metadataRevision`，由 documents 模块维护。
 
@@ -85,9 +85,9 @@ Block ID 固定为 `block_` 加 UUID；`createBlockId()` 创建新身份。复�
 
 `generationId` 与 `durableSeq` 必须成对解释；快照 `content` 始终使用 DC-01 的内容树。`snapshotRevision` 在同一 generation 中单调递增，表示 JSON 快照版本；`durableSeq` 表示快照包含的最大已持久化 Yjs 更新序列。`extensions` 是兼容性声明，不是运行时插件清单；客户端不得据此动态加载代码。
 
-DC-07 新增 `AssetReferenceSchema` 和 `AnchorSchema`，并随内容 schemas 进入 OpenAPI components。资产身份只能是 `assetId`；alt 可为空字符串表达装饰性图片，尺寸可选且有上限，客户端不得把短时下载地址或对象存储内部键写入快照。当前内容树尚未包含图片/附件 Node，引用 Schema 本身不授权访问资产。
+DC-07 新增 `AssetReferenceSchema` 和 `AnchorSchema`，并随内容 schemas 进入 OpenAPI components。资产身份只能是 `assetId`；图片 alt 可为空字符串表达装饰性图片，尺寸可选且有上限；PDF 附件使用 `application/pdf` 和文件名。客户端不得把短时下载地址或对象存储内部键写入快照。图片与 PDF Block 可保存稳定引用，引用 Schema 本身不授权访问资产。
 
-选区锚点用 `documentId` + `generationId` 限定作用域，以 `anchorVersion` 和 `encoding: yjs-relative-position-v1` 标识格式，记录起止 Block ID 及 base64 编码的两个相对位置。contracts 不依赖 Yjs 包、不解码位置；`checkAnchorTarget()` 先返回 `stale-document`、`stale-generation`、`target-missing` 或 `current`。`current` 只表示代次和目标仍存在；Yjs adapter 还须解码并把相对位置解析到当前文档，失败时向调用方报告 position-unresolvable，不得猜测邻近位置。拆分、合并、删除后的锚点重定位规则由编辑器协同 adapter 实现，并保留无法映射的失效状态。
+选区锚点用 `documentId` + `generationId` 限定作用域，以 `anchorVersion` 和 `encoding: yjs-relative-position-v1` 标识格式，记录起止 Block ID 及 base64 编码的两个相对位置。contracts 不依赖 Yjs 包、不解码位置；`checkAnchorContext()` 只检查文档和代次，`checkAnchorTarget()` 另外检查捕获时的 Block ID。Tiptap adapter 可额外记录创建时的编辑器 revision、绝对位置、块内偏移、起始 Block 长度和选区文本长度。编辑器最多保留最近 512 个文档变更映射；Yjs 相对位置有效时优先使用，远端结构命令重建正文且相对位置失效时用现存 Block ID 与块内偏移恢复，拆分时可跨接新生成的相邻 Block，合并时可在首块 ID 保留且偏移有效时恢复。其他情况再使用历史映射；不可确定的位置返回失效状态，不猜测邻近内容。锚点只保存选区长度等提示，不保存选中的文本；编辑器销毁后不会保留映射历史。
 
 ## 5. Block 身份与操作不变量
 
@@ -167,9 +167,21 @@ AI 流只约定编辑器可消费的通用事件：`started`、`text-delta`、`p
 
 npm 包版本、`schemaVersion`、扩展内容版本、协同协议版本分别维护。依赖同一格式的包发布需要在兼容矩阵中列出读取/写入范围；升级任一包都不自动迁移已保存文档。
 
-`createContentMigrationExecutor()` 接收唯一 source-version 步骤表和目标 Schema validator。步骤只能向前、同一 source 不允许分叉；执行前克隆输入，按路径记录成功步骤，最终校验失败或迁移抛错时返回未修改的原件和安全错误报告。目标 Schema 版本必须由调用方显式匹配，防止错误地以另一版 validator 宣告可写。当前仓库只有 Schema v1，尚无历史版本迁移可以注册，因此没有实际旧文档升级样例。协同文档迁移的 DB 事务、版本快照、新 generation 创建/切换和旧代次写拒绝仍由 M2 服务端负责；不能在每个客户端首次打开时各自迁移。
+`createContentMigrationExecutor()` 接收唯一 source-version 步骤表和目标 Schema validator。每步以稳定 `id` 和简短 `summary` 标识，只能向前迁移且同一 source 不允许分叉；执行前克隆输入，每步保存 JSON 中间快照，最终校验失败或迁移抛错时返回未修改的原件和安全错误报告。目标 Schema 版本必须由调用方显式匹配，防止错误地以另一版 validator 宣告可写。早期 v3 验收的格式范围为 Schema v1、v2 和 v3（当前 v5 范围见下节）：v1 接受扁平任务项但拒绝递归 `taskList` 和表格，v2 增加递归任务清单但拒绝表格，v3 增加有界表格；已注册的 1→2 与 2→3 步骤保留原内容。JSON 导入、模板复制及可写协同会话使用同一迁移链，普通正文和结构操作按 generation 的 Schema 版本校验。目标 migration snapshots 在文档创建/代次切换事务内写入独立表；audit event 只保存 migrationId、步骤 ID、摘要和版本范围，不包含正文快照；永久删除文档时快照行级联清理。协同源/目标正文分别保留在旧/新 generation，目标 JSON 也经 outbox 投影。迁移 `0020_spotty_living_tribunal.sql` 建立快照表、`0021_public_starjammers.sql` 将 generation 默认 Schema 版本升至 3，均已应用到项目本地 PostgreSQL；项目本地 PostgreSQL/HTTP 验收已覆盖 v1/v2 导入与协同旧代次迁移到 v3，确认旧代次退休、迁移快照落库；对快照写入注入失败后原代次保持活动，移除注入后重试成功。旧 Schema 代次通过本地临时测试记录模拟，未改共享数据库。
 
 需要覆盖旧版输入、新版读取、扩展缺失、迁移失败、空文档、嵌套边界、重复 ID 和恶意超深结构的规范样例。JSON 往返保持语义与必需属性；不得在序列化时悄悄丢弃未知数据。
+
+`@zhishu/document-contracts/examples` 单独导出 `createKnowledgePresets()`，生成产品规范、系统架构和团队协作指南三篇中文文档。每次生成均分配新 blockId 并通过当前内容校验，覆盖标题、列表、任务、代码与表格；不包含演示成员或外部资源。示例与服务端显式初始化复用同一来源，不会把业务目录/标签混入正文契约。
+
+### 当前格式：Schema v5
+
+当前写入格式为 v5，读取/迁移支持 v1～v5。v4 增加下划线、多色高亮与段落/标题对齐；v5 增加 `callout`、行内 `statusTag` 与 `horizontalRule.attrs.label`。v1～v4 校验器拒绝 v5 格式，旧客户端不能打开 v5 可写协同会话。4→5 迁移保留原内容，不自动插入新节点。
+
+`callout` 是有稳定 blockId 的非空块容器，theme 只允许 info/tip/warning/success/danger。`statusTag` 是行内原子节点，status 只允许 todo/in-progress/in-review/done/blocked，表达正文文本状态。分隔线标签最多 80 个字符，不含交互状态。新增节点参与递归校验、结构操作、统计、搜索、JSON/HTML 往返及历史读取；Markdown 对主题、状态外观和带标签分隔线报告降级。
+
+状态标签采用固定外观，不携带文字 Mark；混合选区格式命令作用于正文文字并保留标签状态。HTML 导入套用标签的文字格式时报告降级，避免两种编辑模式出现不同的持久化结果。
+
+普通文档升级和历史恢复均创建新 generation，保留旧 generation 的格式及快照。不能将旧历史的 schemaVersion 改成当前版本；空历史正文保留为空内容，编辑器显示的空段落不回写历史。
 
 ## 8. 包交付与完成条件
 

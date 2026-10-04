@@ -16,4 +16,11 @@ export default [
       ],
     },
   },
+  {
+    // File-based routing: route files export the `Route` config object that
+    // references local components — a pattern fast-refresh cannot model, and
+    // which TanStack Router generates for every route.
+    files: ['src/routes/**/*.{ts,tsx}'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
 ];

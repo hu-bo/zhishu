@@ -16,6 +16,12 @@ const environmentSchema = z
     DATABASE_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
     DATABASE_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
     TENANT_MAX_DOCUMENTS: z.coerce.number().int().min(1).max(1_000_000).default(10_000),
+    TENANT_MAX_ASSET_BYTES: z.coerce
+      .number()
+      .int()
+      .min(1_048_576)
+      .max(1_099_511_627_776)
+      .default(10_737_418_240),
     ASSET_STORAGE_ENDPOINT: z
       .string()
       .url()
@@ -33,6 +39,10 @@ const environmentSchema = z
     ASSET_STORAGE_AUTO_CREATE_BUCKET: z
       .enum(["true", "false"])
       .default("false")
+      .transform((value) => value === "true"),
+    ASSET_STORAGE_CHECK_ON_STARTUP: z
+      .enum(["true", "false"])
+      .default("true")
       .transform((value) => value === "true"),
     ASSET_UPLOAD_MAX_BYTES: z.coerce.number().int().min(1_024).max(104_857_600).default(10_485_760),
     ASSET_UPLOAD_SESSION_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3_600),
@@ -109,13 +119,14 @@ const environmentSchema = z
       });
     }
     if (
-      Boolean(config.ASSET_STORAGE_ENDPOINT) !==
-      Boolean(config.ASSET_STORAGE_ACCESS_KEY_ID && config.ASSET_STORAGE_SECRET_ACCESS_KEY)
+      Boolean(config.ASSET_STORAGE_ACCESS_KEY_ID) !==
+        Boolean(config.ASSET_STORAGE_SECRET_ACCESS_KEY) ||
+      (Boolean(config.ASSET_STORAGE_ACCESS_KEY_ID) && !config.ASSET_STORAGE_ENDPOINT)
     ) {
       context.addIssue({
         code: "custom",
         path: ["ASSET_STORAGE_ACCESS_KEY_ID"],
-        message: "Object storage endpoint and both credentials must be configured together.",
+        message: "Object storage credentials must be provided as a pair with an endpoint.",
       });
     }
     if (config.COLLABORATION_PORT === config.PORT) {

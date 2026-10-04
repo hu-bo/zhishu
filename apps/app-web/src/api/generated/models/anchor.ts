@@ -6,7 +6,7 @@
  */
 
 /**
- * Generation-bound text selection encoded as opaque Yjs relative positions.
+ * Generation-bound selection encoded as opaque Yjs relative positions with optional same-editor position mapping hints.
  */
 export interface Anchor {
   /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
@@ -25,6 +25,38 @@ export interface Anchor {
      * @pattern ^block_[A-Za-z0-9_-]{1,64}$
      */
   endBlockId: string;
+  /** @minimum 0 */
+  positionRevision?: number;
+  /**
+     * @minimum 0
+     * @maximum 9007199254740991
+     */
+  startPosition?: number;
+  /**
+     * @minimum 0
+     * @maximum 9007199254740991
+     */
+  endPosition?: number;
+  /**
+     * @minimum 0
+     * @maximum 9007199254740991
+     */
+  startOffset?: number;
+  /**
+     * @minimum 0
+     * @maximum 9007199254740991
+     */
+  endOffset?: number;
+  /**
+     * @minimum 0
+     * @maximum 9007199254740991
+     */
+  startBlockLength?: number;
+  /**
+     * @minimum 0
+     * @maximum 9007199254740991
+     */
+  selectedTextLength?: number;
   /**
      * @minLength 4
      * @maxLength 8192

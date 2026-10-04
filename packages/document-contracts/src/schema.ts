@@ -1,5 +1,38 @@
 import { Type, type Static } from "@sinclair/typebox";
 
+export const LEGACY_DOCUMENT_SCHEMA_VERSION = 1 as const;
+export const TASK_LIST_DOCUMENT_SCHEMA_VERSION = 2 as const;
+export const TABLE_DOCUMENT_SCHEMA_VERSION = 3 as const;
+export const TEXT_FORMATS_DOCUMENT_SCHEMA_VERSION = 4 as const;
+export const CALLOUT_DOCUMENT_SCHEMA_VERSION = 5 as const;
+export const CURRENT_DOCUMENT_SCHEMA_VERSION = CALLOUT_DOCUMENT_SCHEMA_VERSION;
+export const SUPPORTED_DOCUMENT_SCHEMA_VERSIONS = [
+  LEGACY_DOCUMENT_SCHEMA_VERSION,
+  TASK_LIST_DOCUMENT_SCHEMA_VERSION,
+  TABLE_DOCUMENT_SCHEMA_VERSION,
+  TEXT_FORMATS_DOCUMENT_SCHEMA_VERSION,
+  CALLOUT_DOCUMENT_SCHEMA_VERSION,
+] as const;
+
+export const HIGHLIGHT_COLORS = ["yellow", "green", "blue", "pink", "purple"] as const;
+export const TEXT_ALIGNMENTS = ["left", "center", "right"] as const;
+export const CALLOUT_THEMES = ["info", "tip", "warning", "success", "danger"] as const;
+export const CALLOUT_THEME_LABELS: Record<(typeof CALLOUT_THEMES)[number], string> = {
+  info: "信息",
+  tip: "提示",
+  warning: "警告",
+  success: "成功",
+  danger: "危险",
+};
+export const DOCUMENT_STATUSES = ["todo", "in-progress", "in-review", "done", "blocked"] as const;
+export const DOCUMENT_STATUS_LABELS: Record<(typeof DOCUMENT_STATUSES)[number], string> = {
+  todo: "待办",
+  "in-progress": "进行中",
+  "in-review": "评审中",
+  done: "已完成",
+  blocked: "阻塞",
+};
+
 const blockId = Type.String({
   pattern: "^block_[A-Za-z0-9_-]{1,64}$",
   description: "Stable identity for an addressable block.",
@@ -9,9 +42,36 @@ const inlineMark = Type.Union([
   Type.Object({ type: Type.Literal("bold") }, { additionalProperties: false }),
   Type.Object({ type: Type.Literal("italic") }, { additionalProperties: false }),
   Type.Object({ type: Type.Literal("strike") }, { additionalProperties: false }),
+  Type.Object({ type: Type.Literal("underline") }, { additionalProperties: false }),
+  Type.Object(
+    {
+      type: Type.Literal("highlight"),
+      attrs: Type.Object(
+        { color: Type.Union(HIGHLIGHT_COLORS.map((color) => Type.Literal(color))) },
+        { additionalProperties: false },
+      ),
+    },
+    { additionalProperties: false },
+  ),
   Type.Object({ type: Type.Literal("code") }, { additionalProperties: false }),
   Type.Object(
     {
+      type: Type.Literal("link"),
+      attrs: Type.Object(
+        {
+          href: Type.String({
+            pattern: "^(https?:\\/\\/|mailto:)[^\\s]+$",
+            maxLength: 2048,
+          }),
+        },
+        { additionalProperties: false },
+      ),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      // Retained for v1-v3 content; normalizeDocumentContent upgrades it to Tiptap's attrs shape.
       type: Type.Literal("link"),
       href: Type.String({
         pattern: "^(https?:\\/\\/|mailto:)[^\\s]+$",
@@ -35,8 +95,56 @@ const hardBreakNode = Type.Object(
   { type: Type.Literal("hardBreak") },
   { additionalProperties: false },
 );
-const inlineNode = Type.Union([textNode, hardBreakNode]);
+const statusTagNode = Type.Object(
+  {
+    type: Type.Literal("statusTag"),
+    attrs: Type.Object(
+      { status: Type.Union(DOCUMENT_STATUSES.map((status) => Type.Literal(status))) },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+const inlineNode = Type.Union([textNode, hardBreakNode, statusTagNode]);
 const blockAttrs = Type.Object({ blockId }, { additionalProperties: false });
+const textAlignment = Type.Optional(
+  Type.Union(TEXT_ALIGNMENTS.map((alignment) => Type.Literal(alignment))),
+);
+const paragraphNodeSchema = Type.Object(
+  {
+    type: Type.Literal("paragraph"),
+    attrs: Type.Object({ blockId, align: textAlignment }, { additionalProperties: false }),
+    content: Type.Optional(Type.Array(inlineNode, { maxItems: 100_000 })),
+  },
+  { additionalProperties: false },
+);
+const taskItemAttrs = Type.Object(
+  { blockId, checked: Type.Optional(Type.Boolean({ default: false })) },
+  { additionalProperties: false },
+);
+const taskItemNodeSchema = Type.Object(
+  {
+    type: Type.Literal("taskItem"),
+    attrs: taskItemAttrs,
+    content: Type.Optional(Type.Array(inlineNode, { maxItems: 100_000 })),
+  },
+  { additionalProperties: false },
+);
+export const TaskListSchema = Type.Recursive(
+  (taskList) =>
+    Type.Object(
+      {
+        type: Type.Literal("taskList"),
+        attrs: blockAttrs,
+        content: Type.Array(Type.Union([taskItemNodeSchema, taskList]), {
+          minItems: 1,
+          maxItems: 10_000,
+        }),
+      },
+      { additionalProperties: false },
+    ),
+  { $id: "TaskList" },
+);
 const assetReferenceProperties = {
   assetId: Type.String({ pattern: "^asset_[A-Za-z0-9_-]{1,64}$" }),
   mediaType: Type.String({
@@ -54,14 +162,82 @@ export const AssetReferenceSchema = Type.Object(assetReferenceProperties, {
     "Stable asset identity and accessible presentation metadata; never a URL, upload token, or storage key.",
 });
 
+const tableCellAttrs = Type.Object(
+  {
+    colspan: Type.Optional(Type.Integer({ minimum: 1, maximum: 20, default: 1 })),
+    rowspan: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, default: 1 })),
+    colwidth: Type.Optional(
+      Type.Union([
+        Type.Null(),
+        Type.Array(Type.Union([Type.Null(), Type.Integer({ minimum: 1, maximum: 32_768 })]), {
+          minItems: 1,
+          maxItems: 20,
+        }),
+      ]),
+    ),
+    align: Type.Optional(
+      Type.Union([
+        Type.Literal("left"),
+        Type.Literal("center"),
+        Type.Literal("right"),
+        Type.Null(),
+      ]),
+    ),
+  },
+  { additionalProperties: false },
+);
+const tableCellContent = Type.Array(paragraphNodeSchema, { minItems: 1, maxItems: 100 });
+export const TableCellSchema = Type.Object(
+  {
+    type: Type.Literal("tableCell"),
+    attrs: Type.Optional(tableCellAttrs),
+    content: tableCellContent,
+  },
+  { $id: "TableCell", additionalProperties: false },
+);
+export const TableHeaderSchema = Type.Object(
+  {
+    type: Type.Literal("tableHeader"),
+    attrs: Type.Optional(tableCellAttrs),
+    content: tableCellContent,
+  },
+  { $id: "TableHeader", additionalProperties: false },
+);
+export const TableRowSchema = Type.Object(
+  {
+    type: Type.Literal("tableRow"),
+    content: Type.Array(Type.Union([Type.Ref(TableCellSchema), Type.Ref(TableHeaderSchema)]), {
+      minItems: 1,
+      maxItems: 20,
+    }),
+  },
+  { $id: "TableRow", additionalProperties: false },
+);
+export const TableSchema = Type.Object(
+  {
+    type: Type.Literal("table"),
+    attrs: blockAttrs,
+    content: Type.Array(Type.Ref(TableRowSchema), { minItems: 1, maxItems: 100 }),
+  },
+  {
+    $id: "Table",
+    additionalProperties: false,
+    description: "A rectangular table with paragraph-only cells and bounded row/column spans.",
+  },
+);
+
 export const DocumentBlockSchema = Type.Recursive(
   (self) =>
     Type.Union([
+      paragraphNodeSchema,
       Type.Object(
         {
-          type: Type.Literal("paragraph"),
-          attrs: blockAttrs,
-          content: Type.Optional(Type.Array(inlineNode, { maxItems: 100_000 })),
+          type: Type.Literal("callout"),
+          attrs: Type.Object(
+            { blockId, theme: Type.Union(CALLOUT_THEMES.map((theme) => Type.Literal(theme))) },
+            { additionalProperties: false },
+          ),
+          content: Type.Array(self, { minItems: 1, maxItems: 10_000 }),
         },
         { additionalProperties: false },
       ),
@@ -69,7 +245,11 @@ export const DocumentBlockSchema = Type.Recursive(
         {
           type: Type.Literal("heading"),
           attrs: Type.Object(
-            { blockId, level: Type.Optional(Type.Integer({ minimum: 1, maximum: 6, default: 1 })) },
+            {
+              blockId,
+              level: Type.Optional(Type.Integer({ minimum: 1, maximum: 6, default: 1 })),
+              align: textAlignment,
+            },
             { additionalProperties: false },
           ),
           content: Type.Optional(Type.Array(inlineNode, { maxItems: 100_000 })),
@@ -140,8 +320,20 @@ export const DocumentBlockSchema = Type.Recursive(
         },
         { additionalProperties: false },
       ),
+      TaskListSchema,
+      taskItemNodeSchema,
+      Type.Ref(TableSchema),
       Type.Object(
-        { type: Type.Literal("horizontalRule"), attrs: blockAttrs },
+        {
+          type: Type.Literal("horizontalRule"),
+          attrs: Type.Object(
+            {
+              blockId,
+              label: Type.Optional(Type.String({ maxLength: 80 })),
+            },
+            { additionalProperties: false },
+          ),
+        },
         { additionalProperties: false },
       ),
       Type.Object(
@@ -162,6 +354,21 @@ export const DocumentBlockSchema = Type.Recursive(
         },
         { additionalProperties: false },
       ),
+      Type.Object(
+        {
+          type: Type.Literal("pdfAttachment"),
+          attrs: Type.Object(
+            {
+              blockId,
+              assetId: assetReferenceProperties.assetId,
+              mediaType: Type.Literal("application/pdf"),
+              fileName: Type.String({ minLength: 1, maxLength: 255 }),
+            },
+            { additionalProperties: false },
+          ),
+        },
+        { additionalProperties: false },
+      ),
     ]),
   { $id: "DocumentBlock" },
 );
@@ -175,7 +382,7 @@ export const DocumentContentSchema = Type.Object(
     $id: "DocumentContent",
     $schema: "https://json-schema.org/draft/2020-12/schema",
     additionalProperties: false,
-    description: "Version 1 structured document content.",
+    description: "Version 5 structured document content.",
   },
 );
 
@@ -247,6 +454,15 @@ export const AnchorSchema = Type.Object(
     encoding: Type.Literal("yjs-relative-position-v1"),
     startBlockId: blockId,
     endBlockId: blockId,
+    positionRevision: Type.Optional(Type.Integer({ minimum: 0 })),
+    startPosition: Type.Optional(Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })),
+    endPosition: Type.Optional(Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })),
+    startOffset: Type.Optional(Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })),
+    endOffset: Type.Optional(Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })),
+    startBlockLength: Type.Optional(Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })),
+    selectedTextLength: Type.Optional(
+      Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
+    ),
     start: Type.String({
       minLength: 4,
       maxLength: 8_192,
@@ -261,7 +477,8 @@ export const AnchorSchema = Type.Object(
   {
     $id: "Anchor",
     additionalProperties: false,
-    description: "Generation-bound text selection encoded as opaque Yjs relative positions.",
+    description:
+      "Generation-bound selection encoded as opaque Yjs relative positions with optional same-editor position mapping hints.",
   },
 );
 
@@ -298,6 +515,27 @@ const replaceBlockOperation = Type.Object(
   },
   { additionalProperties: false },
 );
+const wrapBlockOperation = Type.Object(
+  {
+    type: Type.Literal("wrap-block"),
+    ...operationTarget,
+    wrapper: Type.Union([
+      Type.Ref(DocumentBlockSchema),
+      Type.Object(
+        {
+          type: Type.Literal("callout"),
+          attrs: Type.Object(
+            { blockId, theme: Type.Union(CALLOUT_THEMES.map((theme) => Type.Literal(theme))) },
+            { additionalProperties: false },
+          ),
+          content: Type.Array(Type.Ref(DocumentBlockSchema), { maxItems: 10_000 }),
+        },
+        { additionalProperties: false },
+      ),
+    ]),
+  },
+  { additionalProperties: false },
+);
 const moveBlockOperation = Type.Object(
   {
     type: Type.Literal("move-block"),
@@ -312,6 +550,7 @@ export const OperationSchema = Type.Union([
   insertBlockOperation,
   deleteBlockOperation,
   replaceBlockOperation,
+  wrapBlockOperation,
   moveBlockOperation,
 ]);
 
@@ -336,6 +575,10 @@ export type DocumentContent = Static<typeof DocumentContentSchema>;
 export type DocumentBlock = Static<typeof DocumentBlockSchema>;
 export type DocumentSnapshot = Static<typeof DocumentSnapshotSchema>;
 export type AssetReference = Static<typeof AssetReferenceSchema>;
+export type Table = Static<typeof TableSchema>;
+export type TableRow = Static<typeof TableRowSchema>;
+export type TableCell = Static<typeof TableCellSchema>;
+export type TableHeader = Static<typeof TableHeaderSchema>;
 export type Anchor = Static<typeof AnchorSchema>;
 export type ExtensionRequirement = Static<typeof ExtensionRequirementSchema>;
 export type CollaborationPresence = Static<typeof CollaborationPresenceSchema>;
@@ -345,6 +588,11 @@ export type DocumentOperation = Static<typeof OperationSchema>;
 export const documentContractJsonSchemas = [
   DocumentContentSchema,
   DocumentBlockSchema,
+  TaskListSchema,
+  TableSchema,
+  TableRowSchema,
+  TableCellSchema,
+  TableHeaderSchema,
   DocumentSnapshotSchema,
   CollaborationPresenceSchema,
   AssetReferenceSchema,

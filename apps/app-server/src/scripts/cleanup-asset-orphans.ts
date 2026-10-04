@@ -25,6 +25,7 @@ try {
   await storage.initialize();
   const service = new AssetService(new AssetRepository(createDatabase(pool)), storage, {
     maxBytes: config.ASSET_UPLOAD_MAX_BYTES,
+    maxTenantBytes: config.TENANT_MAX_ASSET_BYTES,
     uploadTtlSeconds: config.ASSET_UPLOAD_SESSION_TTL_SECONDS,
     accessUrlTtlSeconds: config.ASSET_ACCESS_URL_TTL_SECONDS,
     orphanRetentionSeconds: config.ASSET_ORPHAN_RETENTION_SECONDS,

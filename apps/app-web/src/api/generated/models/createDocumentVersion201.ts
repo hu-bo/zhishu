@@ -5,6 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CreateDocumentVersion201Kind } from './createDocumentVersion201Kind';
+import type { CreateDocumentVersion201SourceMode } from './createDocumentVersion201SourceMode';
 
 export type CreateDocumentVersion201 = {
   /** @pattern ^ver_[A-Za-z0-9_-]{1,64}$ */
@@ -13,6 +14,12 @@ export type CreateDocumentVersion201 = {
   documentId: string;
   /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
   generationId: string;
+  sourceMode: CreateDocumentVersion201SourceMode;
+  /**
+     * @minimum 0
+     * @exclusiveMinimum
+     */
+  snapshotRevision: number | null;
   name: string;
   kind: CreateDocumentVersion201Kind;
   /** @minimum 0 */

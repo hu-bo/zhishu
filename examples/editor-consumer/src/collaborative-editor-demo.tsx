@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ySyncPluginKey } from "@tiptap/y-tiptap";
-import { createTiptapCollaborationExtension } from "@zhishu/editor-collaboration/tiptap";
+import { CURRENT_DOCUMENT_SCHEMA_VERSION } from "@zhishu/document-contracts";
 import { HocuspocusCollaborationSession } from "@zhishu/editor-collaboration/hocuspocus";
 import type { CollaborationSessionInfo } from "@zhishu/editor-collaboration";
 import { EditorProvider, useEditorCollaborationStatus } from "@zhishu/editor-react";
@@ -14,9 +14,7 @@ type CreatedDocument = { id: string; generationId: string };
 type CollaborativeDemoSession = {
   documentId: string;
   generationId: string;
-  document: Y.Doc;
   session: HocuspocusCollaborationSession;
-  extension: ReturnType<typeof createTiptapCollaborationExtension>;
 };
 
 async function requestJson<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -46,6 +44,7 @@ function SessionStatus() {
 export function CollaborativeEditorDemo() {
   const [demo, setDemo] = useState<CollaborativeDemoSession | null>(null);
   const [error, setError] = useState("");
+  const [hostError, setHostError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -68,7 +67,10 @@ export function CollaborativeEditorDemo() {
             {
               method: "POST",
               headers: authorization,
-              body: JSON.stringify({ schemaVersion: 1, extensions: [] }),
+              body: JSON.stringify({
+                schemaVersion: CURRENT_DOCUMENT_SCHEMA_VERSION,
+                extensions: [],
+              }),
             },
           );
         const info = await createSession();
@@ -84,9 +86,7 @@ export function CollaborativeEditorDemo() {
         setDemo({
           documentId: created.id,
           generationId: info.generationId,
-          document,
           session,
-          extension: createTiptapCollaborationExtension(document),
         });
       } catch (cause) {
         if (active) setError(cause instanceof Error ? cause.message : "协同会话初始化失败");
@@ -111,15 +111,15 @@ export function CollaborativeEditorDemo() {
       <header className="page-heading">
         <p className="eyebrow">构建产物公开 API 消费验收</p>
         <h1>Tiptap / React 协同结构操作</h1>
-        <p>先输入一段正文，再从 Block 操作菜单复制；操作应经服务端提交并获得持久化回执。</p>
+        <p>从 Block 操作菜单或斜线菜单执行结构操作；操作应经服务端提交并获得持久化回执。</p>
       </header>
       <EditorProvider
+        hostServices={{ reportError: (cause) => setHostError(cause.message) }}
         instanceKey={`${demo.documentId}:${demo.generationId}`}
         options={{
           documentId: demo.documentId,
           generationId: demo.generationId,
           collaborative: true,
-          extensions: [demo.extension],
           collaborationStructure: {
             mode: "disabled",
             isRemoteTransaction: (transaction) =>
@@ -131,12 +131,15 @@ export function CollaborativeEditorDemo() {
         }}
         collaboration={demo.session}
       >
+        {hostError && <p role="alert">编辑操作失败：{hostError}</p>}
         <EditorShell
           ariaLabel="真实 Tiptap React 协同编辑器"
           surfaceLabel="协同文档正文"
           surfaceClassName="editor-surface"
           title={<SessionStatus />}
           blockMenu
+          find
+          slashMenu
         />
       </EditorProvider>
     </main>

@@ -1,11 +1,15 @@
-import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
+import { createHash, randomUUID } from "node:crypto";
+import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { Database } from "../../../database/index.js";
+import { DomainError } from "../../shared/domain-error.js";
 import {
   assetReferences,
   assets,
+  apiIdempotencyRecords,
   documentAcl,
   documentGenerations,
+  documentJsonAssetReferences,
+  documentJsonVersionAssetReferences,
   documents,
 } from "../../../database/schema/index.js";
 import { hasDocumentAction } from "../documents/document.repository.js";
@@ -24,7 +28,9 @@ export class AssetRepository {
     objectKey: string;
     file: CreateAssetUploadInput;
     maxBytes: number;
+    maxTenantBytes: number;
     expiresAt: Date;
+    idempotency?: { key: string; requestHash: string };
   }): Promise<AssetRecord | null> {
     if (input.file.size > input.maxBytes) return null;
     return this.db.transaction(async (tx) => {
@@ -53,6 +59,88 @@ export class AssetRepository {
       ) {
         return null;
       }
+      const keyHash = input.idempotency
+        ? createHash("sha256").update(input.idempotency.key).digest("hex")
+        : null;
+      if (input.idempotency && keyHash) {
+        const lockKey = [
+          input.principal.tenantId,
+          input.principal.identityId,
+          "assets.upload.create",
+          keyHash,
+        ].join(":");
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 718269))`);
+        const [record] = await tx
+          .select()
+          .from(apiIdempotencyRecords)
+          .where(
+            and(
+              eq(apiIdempotencyRecords.tenantId, input.principal.tenantId),
+              eq(apiIdempotencyRecords.subjectId, input.principal.identityId),
+              eq(apiIdempotencyRecords.operationId, "assets.upload.create"),
+              eq(apiIdempotencyRecords.keyHash, keyHash),
+            ),
+          )
+          .for("update")
+          .limit(1);
+        if (record && record.expiresAt.getTime() <= Date.now()) {
+          await tx
+            .delete(apiIdempotencyRecords)
+            .where(
+              and(
+                eq(apiIdempotencyRecords.tenantId, input.principal.tenantId),
+                eq(apiIdempotencyRecords.subjectId, input.principal.identityId),
+                eq(apiIdempotencyRecords.operationId, "assets.upload.create"),
+                eq(apiIdempotencyRecords.keyHash, keyHash),
+              ),
+            );
+        } else if (record) {
+          if (record.requestHash !== input.idempotency.requestHash) {
+            throw new DomainError(
+              "IDEMPOTENCY_KEY_REUSED",
+              "Idempotency-Key was reused with a different request",
+            );
+          }
+          const assetId = record.responseBody.assetId;
+          if (typeof assetId !== "string") {
+            throw new Error("Stored asset upload idempotency response is invalid");
+          }
+          const [existingAsset] = await tx
+            .select()
+            .from(assets)
+            .where(
+              and(
+                eq(assets.id, assetId),
+                eq(assets.tenantId, input.principal.tenantId),
+                eq(assets.documentId, input.documentId),
+                eq(assets.createdBy, input.principal.identityId),
+              ),
+            )
+            .limit(1);
+          if (existingAsset) return existingAsset;
+          throw new Error("Idempotent asset upload session no longer exists");
+        }
+      }
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`tenant-assets:${input.principal.tenantId}`}, 718268))`,
+      );
+      const [tenantAssetUsage] = await tx
+        .select({ bytes: sql<string>`coalesce(sum(${assets.declaredSize}), 0)::text` })
+        .from(assets)
+        .where(
+          and(
+            eq(assets.tenantId, input.principal.tenantId),
+            inArray(assets.status, ["uploading", "receiving", "uploaded", "ready", "failed"]),
+          ),
+        );
+      const usedBytes = Number(tenantAssetUsage?.bytes ?? 0);
+      if (usedBytes + input.file.size > input.maxTenantBytes) {
+        throw new DomainError("RESOURCE_LIMIT", "The tenant asset storage limit has been reached", {
+          limitBytes: input.maxTenantBytes,
+          usedBytes,
+          requestedBytes: input.file.size,
+        });
+      }
       const [asset] = await tx
         .insert(assets)
         .values({
@@ -67,6 +155,17 @@ export class AssetRepository {
           uploadExpiresAt: input.expiresAt,
         })
         .returning();
+      if (asset && input.idempotency && keyHash) {
+        await tx.insert(apiIdempotencyRecords).values({
+          tenantId: input.principal.tenantId,
+          subjectId: input.principal.identityId,
+          operationId: "assets.upload.create",
+          keyHash,
+          requestHash: input.idempotency.requestHash,
+          responseStatus: 201,
+          responseBody: { assetId: asset.id },
+        });
+      }
       return asset ?? null;
     });
   }
@@ -79,12 +178,18 @@ export class AssetRepository {
         .where(and(eq(assets.id, assetId), eq(assets.tenantId, principal.tenantId)))
         .for("update")
         .limit(1);
-      if (!asset || asset.status !== "uploading") return null;
+      if (!asset || !["uploading", "failed"].includes(asset.status)) return null;
       if (!(await this.documentActionAllowed(tx, asset, principal, "write"))) return null;
       const [receiving] = await tx
         .update(assets)
-        .set({ status: "receiving" })
-        .where(and(eq(assets.id, asset.id), eq(assets.status, "uploading")))
+        .set({
+          status: "receiving",
+          actualSize: null,
+          sha256: null,
+          uploadedAt: null,
+          completedAt: null,
+        })
+        .where(and(eq(assets.id, asset.id), inArray(assets.status, ["uploading", "failed"])))
         .returning();
       return receiving ?? null;
     });
@@ -273,6 +378,22 @@ export class AssetRepository {
         ),
       )
       .leftJoin(
+        documentJsonAssetReferences,
+        and(
+          eq(documentJsonAssetReferences.tenantId, assets.tenantId),
+          eq(documentJsonAssetReferences.documentId, assets.documentId),
+          eq(documentJsonAssetReferences.assetId, assets.id),
+        ),
+      )
+      .leftJoin(
+        documentJsonVersionAssetReferences,
+        and(
+          eq(documentJsonVersionAssetReferences.tenantId, assets.tenantId),
+          eq(documentJsonVersionAssetReferences.documentId, assets.documentId),
+          eq(documentJsonVersionAssetReferences.assetId, assets.id),
+        ),
+      )
+      .leftJoin(
         documents,
         and(eq(documents.tenantId, assets.tenantId), eq(documents.id, assets.documentId)),
       )
@@ -286,6 +407,8 @@ export class AssetRepository {
             eq(assets.status, "ready"),
             lt(assets.createdAt, input.before),
             isNull(assetReferences.assetId),
+            isNull(documentJsonAssetReferences.assetId),
+            isNull(documentJsonVersionAssetReferences.assetId),
           ),
           isNull(documents.id),
         ),

@@ -18,8 +18,19 @@ import {
   documentAssetParamsSchema,
 } from "./asset.schema.js";
 import type { AppConfig } from "../../config.js";
+import { z } from "zod";
 
 const bearerSecurity = [{ bearerAuth: [] }];
+const idempotencyKeyHeadersSchema = z
+  .object({
+    "idempotency-key": z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^[A-Za-z0-9._~-]+$/)
+      .optional(),
+  })
+  .passthrough();
 
 export async function assetRoutes(
   app: FastifyInstance,
@@ -35,12 +46,15 @@ export async function assetRoutes(
         tags: ["assets"],
         security: bearerSecurity,
         params: assetDocumentParamsSchema,
+        headers: idempotencyKeyHeadersSchema,
         body: createAssetUploadBodySchema,
         response: {
           201: assetUploadSchema,
           400: errorResponseSchema,
           401: errorResponseSchema,
           404: errorResponseSchema,
+          409: errorResponseSchema,
+          429: errorResponseSchema,
           503: errorResponseSchema,
         },
       },
@@ -51,7 +65,12 @@ export async function assetRoutes(
       return reply
         .code(201)
         .send(
-          await service.createUpload(request.principal, request.params.documentId, request.body),
+          await service.createUpload(
+            request.principal,
+            request.params.documentId,
+            request.body,
+            request.headers["idempotency-key"],
+          ),
         );
     },
   );

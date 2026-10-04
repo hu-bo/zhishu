@@ -80,7 +80,7 @@ try {
     updateBytes: new Uint8Array([1]),
     contentChanged: true,
     content: firstContent,
-    assetReferences: [{ assetId, blockId: "block_projection_image" }],
+    assetReferences: [{ assetId, blockId: "block_projection_image", mediaType: "image/png" }],
   });
   assert.equal(firstReceipt.durableSeq, 1);
 

@@ -21,6 +21,8 @@ const claimsSchema = z
       )
       .max(128),
     subject: z.string().min(1).max(256),
+    displayName: z.string().min(1).max(80),
+    presenceColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/u),
     readOnly: z.boolean(),
     issuedAt: z.number().int().positive(),
     expiresAt: z.number().int().positive(),

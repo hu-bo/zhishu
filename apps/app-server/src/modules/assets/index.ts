@@ -11,13 +11,19 @@ export async function assetsModule(
   exportMode = false,
 ): Promise<void> {
   const storage =
-    config.ASSET_STORAGE_ENDPOINT && !exportMode ? new AssetObjectStorage(config) : null;
+    config.ASSET_STORAGE_ENDPOINT &&
+    config.ASSET_STORAGE_ACCESS_KEY_ID &&
+    config.ASSET_STORAGE_SECRET_ACCESS_KEY &&
+    !exportMode
+      ? new AssetObjectStorage(config)
+      : null;
   if (storage) {
     app.addHook("onClose", async () => storage.close());
-    await storage.initialize();
+    if (config.ASSET_STORAGE_CHECK_ON_STARTUP) await storage.initialize();
   }
   const service = new AssetService(new AssetRepository(app.db), storage, {
     maxBytes: config.ASSET_UPLOAD_MAX_BYTES,
+    maxTenantBytes: config.TENANT_MAX_ASSET_BYTES,
     uploadTtlSeconds: config.ASSET_UPLOAD_SESSION_TTL_SECONDS,
     accessUrlTtlSeconds: config.ASSET_ACCESS_URL_TTL_SECONDS,
     orphanRetentionSeconds: config.ASSET_ORPHAN_RETENTION_SECONDS,

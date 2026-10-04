@@ -14,6 +14,10 @@ view?: ListDocumentsView;
  * @maxLength 200
  */
 q?: string;
+/**
+ * @pattern ^ws_[A-Za-z0-9_-]{1,64}$
+ */
+workspaceId?: string;
 sort?: ListDocumentsSort;
 direction?: ListDocumentsDirection;
 /**

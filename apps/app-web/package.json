@@ -28,6 +28,7 @@
     "@tiptap/y-tiptap": "^3.0.7",
     "@zhishu/editor-collaboration": "workspace:^",
     "@zhishu/editor-core": "workspace:^",
+    "@zhishu/document-contracts": "workspace:^",
     "@zhishu/editor-react": "workspace:^",
     "@zhishu/editor-ui": "workspace:^",
     "class-variance-authority": "0.7.1",

@@ -1,0 +1,522 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createCollaborationSession } from '@/api/generated/app-api';
+import type { CreateCollaborationSessionBody, GetDocument200 } from '@/api/generated/models';
+import { errorMessage } from '@/api/api-error';
+import {
+  createDocumentDraftExport,
+  registerUnconfirmedChangeProbe,
+  subscribeAccessToken,
+} from '@/api/transport';
+import {
+  EditorProvider,
+  useEditorCollaborationStatus,
+  useEditorInstance,
+} from '@zhishu/editor-react';
+import { defaultEditorNodeViews } from '@zhishu/editor-ui';
+import { HocuspocusCollaborationSession } from '@zhishu/editor-collaboration/hocuspocus';
+import type { CollaborationSessionInfo } from '@zhishu/editor-collaboration';
+import { CURRENT_DOCUMENT_SCHEMA_VERSION } from '@zhishu/document-contracts';
+import { ySyncPluginKey } from '@tiptap/y-tiptap';
+import * as Y from 'yjs';
+import { DocumentVersionsPanel } from './document-versions-panel';
+import { DocumentEditorShell } from './document-editor-shell';
+import { PanelDialog } from '@/components/ui/panel-dialog';
+import { createDocumentAssetServices } from './document-asset-services';
+import { currentCacheIdentity, useOfflineState, writeScopedRecord } from '@/features/offline/cache';
+import {
+  currentTabId,
+  deleteRecord,
+  readCollaborationCheckpoint,
+  type CollaborationCheckpoint,
+} from '@/features/offline/storage';
+import { downloadLocalDraft } from '@/features/offline/draft-download';
+
+type ActiveSession = {
+  key: string;
+  info: CollaborationSessionInfo;
+  session: HocuspocusCollaborationSession;
+  checkpointKey: string;
+};
+
+type SessionFailure = { key: string; message: string };
+export type DocumentCollaborationSnapshot = Pick<
+  CollaborationSessionInfo,
+  'generationId' | 'schemaVersion' | 'extensions' | 'durableSeq'
+> & { documentId: string };
+
+function UnconfirmedChangesProbe({
+  sessionKey,
+  document,
+  session,
+  checkpointKey,
+  sessionInfo,
+  recovery,
+}: {
+  sessionKey: string;
+  document: GetDocument200;
+  session: HocuspocusCollaborationSession;
+  checkpointKey: string;
+  sessionInfo: CollaborationSessionInfo;
+  recovery: Awaited<ReturnType<typeof readCollaborationCheckpoint>>;
+}) {
+  const status = useEditorCollaborationStatus();
+  const { controller } = useEditorInstance();
+  const { identity } = useOfflineState();
+  const discarded = useRef(false);
+  const pendingRevision = useRef<number | null>(null);
+  useEffect(() => {
+    if (!controller || !identity) return;
+    // Re-baseline the pending structure revision for this session instance.
+    pendingRevision.current = null;
+    let active = true;
+    let content = controller.getSnapshot();
+    const persist = () => {
+      if (
+        !active ||
+        discarded.current ||
+        controller.isDestroyed ||
+        currentCacheIdentity() !== identity
+      )
+        return;
+      const pendingUpdates = session.getPendingUpdateBytes();
+      if (pendingUpdates.length && pendingRevision.current === null)
+        pendingRevision.current = session.getStructureRevision();
+      if (!pendingUpdates.length) pendingRevision.current = null;
+      const checkpoint: CollaborationCheckpoint = {
+        documentId: document.id,
+        workspaceId: document.workspaceId,
+        generationId: sessionInfo.generationId,
+        schemaVersion: sessionInfo.schemaVersion,
+        extensions: [...sessionInfo.extensions],
+        structureRevision: pendingRevision.current ?? session.getStructureRevision(),
+        title: document.title,
+        content,
+        pendingUpdates,
+        updatedAt: Date.now(),
+        tabId: currentTabId(),
+      };
+      void writeScopedRecord(identity, 'collaboration', checkpointKey, checkpoint).catch(
+        () => undefined,
+      );
+    };
+    const unlisten = controller.subscribe((event) => {
+      if (event.docChanged) {
+        content = controller.getSnapshot();
+        persist();
+      }
+    });
+    const unsubscribe = session.subscribe(persist);
+    window.addEventListener('pagehide', persist);
+    persist();
+    return () => {
+      persist();
+      active = false;
+      unlisten();
+      unsubscribe();
+      window.removeEventListener('pagehide', persist);
+    };
+  }, [controller, identity, document, session, checkpointKey, sessionInfo]);
+  useEffect(() => {
+    const unregister = registerUnconfirmedChangeProbe(
+      () =>
+        !!recovery ||
+        status?.persistence === 'pending' ||
+        status?.persistence === 'failed' ||
+        (status?.pendingUpdateCount ?? 0) > 0,
+      () => {
+        if (recovery?.value.content)
+          return createDocumentDraftExport({ ...recovery.value, content: recovery.value.content });
+        if (!controller || controller.isDestroyed) return null;
+        return createDocumentDraftExport({
+          title: document.title,
+          schemaVersion: CURRENT_DOCUMENT_SCHEMA_VERSION,
+          extensions: document.extensions,
+          content: controller.getSnapshot(),
+        });
+      },
+      async () => {
+        discarded.current = true;
+        try {
+          if (identity) {
+            await deleteRecord(identity, 'collaboration', checkpointKey);
+            if (recovery) await deleteRecord(identity, 'collaboration', recovery.key);
+          }
+        } catch (cause) {
+          discarded.current = false;
+          throw cause;
+        }
+      },
+    );
+    return () => {
+      unregister();
+    };
+  }, [controller, document, sessionKey, status, identity, checkpointKey, recovery]);
+  return null;
+}
+
+function CachedDraftProbe({
+  cached,
+  identity,
+}: {
+  cached: NonNullable<Awaited<ReturnType<typeof readCollaborationCheckpoint>>>;
+  identity: string | null;
+}) {
+  useEffect(
+    () =>
+      registerUnconfirmedChangeProbe(
+        () => cached.value.pendingUpdates.length > 0,
+        () =>
+          cached.value.content
+            ? createDocumentDraftExport({ ...cached.value, content: cached.value.content })
+            : null,
+        async () => {
+          if (identity) await deleteRecord(identity, 'collaboration', cached.key);
+        },
+      ),
+    [cached, identity],
+  );
+  return null;
+}
+
+export function DocumentCollaborationEditor({
+  document,
+  viewMode,
+  onStatusChange,
+  versionsOpen,
+  onVersionsOpenChange,
+}: {
+  document: GetDocument200;
+  viewMode: 'edit' | 'read';
+  onStatusChange?: (snapshot: DocumentCollaborationSnapshot | null) => void;
+  versionsOpen: boolean;
+  onVersionsOpenChange: (open: boolean) => void;
+}) {
+  const offline = useOfflineState();
+  const identity = offline.identity;
+  const [cachedCheckpoint, setCachedCheckpoint] =
+    useState<Awaited<ReturnType<typeof readCollaborationCheckpoint>>>(null);
+  const [recoveryConflict, setRecoveryConflict] =
+    useState<Awaited<ReturnType<typeof readCollaborationCheckpoint>>>(null);
+  const assetServices = useMemo(() => createDocumentAssetServices(document.id), [document.id]);
+  const [attempt, setAttempt] = useState(0);
+  const [accessTokenRevision, setAccessTokenRevision] = useState(0);
+  const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
+  const [failure, setFailure] = useState<SessionFailure | null>(null);
+  const extensionsKey = JSON.stringify(
+    document.extensions.map(({ name, version, required }) => ({ name, version, required })),
+  );
+  const sessionKey = `${document.id}:${document.generationId}:${document.schemaVersion}:${accessTokenRevision}:${attempt}`;
+  const currentSession = activeSession?.key === sessionKey ? activeSession : null;
+  const currentFailure = failure?.key === sessionKey ? failure : null;
+  const sessionEligible = offline.verified && (offline.online || currentSession !== null);
+  useEffect(() => {
+    let active = true;
+    if (identity)
+      void readCollaborationCheckpoint(identity, document.id)
+        .then((value) => {
+          if (active) setCachedCheckpoint(value);
+        })
+        .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [identity, document.id]);
+
+  useEffect(() => () => assetServices.dispose(), [assetServices]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeAccessToken(() =>
+      setAccessTokenRevision((revision) => revision + 1),
+    );
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    let yDocument: Y.Doc | undefined;
+    let collaboration: HocuspocusCollaborationSession | undefined;
+    const abortController = new AbortController();
+    const sessionBody = {
+      schemaVersion: CURRENT_DOCUMENT_SCHEMA_VERSION,
+      extensions: JSON.parse(extensionsKey) as CreateCollaborationSessionBody['extensions'],
+    };
+    const requestSession = (signal?: AbortSignal) =>
+      createCollaborationSession(document.id, sessionBody, signal ? { signal } : undefined);
+
+    const startTimer = setTimeout(() => {
+      // Reset prior status inside the deferred start so the effect body stays
+      // free of synchronous state updates.
+      onStatusChange?.(null);
+      setFailure(null);
+      void (async () => {
+        try {
+          if (!offline.online || !offline.verified) return;
+          const info = await requestSession(abortController.signal);
+          if (!active) return;
+          let latestDurableSeq = info.durableSeq;
+          yDocument = new Y.Doc();
+          collaboration = new HocuspocusCollaborationSession({
+            document: yDocument,
+            session: info,
+            refreshSession: () => requestSession(),
+            onPersisted: (receipt) => {
+              latestDurableSeq = Math.max(latestDurableSeq, receipt.durableSeq);
+              setActiveSession((current) => {
+                if (current?.key !== sessionKey) return current;
+                return {
+                  ...current,
+                  info: { ...current.info, durableSeq: latestDurableSeq },
+                };
+              });
+              onStatusChange?.({
+                documentId: document.id,
+                generationId: info.generationId,
+                schemaVersion: info.schemaVersion,
+                extensions: info.extensions,
+                durableSeq: latestDurableSeq,
+              });
+            },
+          });
+          await collaboration.waitUntilSynced();
+          if (!active) return;
+          const cached = identity
+            ? await readCollaborationCheckpoint(identity, document.id).catch(() => null)
+            : null;
+          if (!active) return;
+          let checkpointKey = `${document.id}:${info.generationId}:${currentTabId()}`;
+          if (cached?.value.pendingUpdates.length) {
+            const value = cached.value;
+            if (
+              !info.readOnly &&
+              value.generationId === info.generationId &&
+              value.schemaVersion === info.schemaVersion &&
+              value.workspaceId === document.workspaceId &&
+              value.structureRevision === collaboration.getStructureRevision()
+            ) {
+              collaboration.restorePendingUpdates(value.pendingUpdates);
+              const persisted = await collaboration.waitForPersisted(undefined, 15_000);
+              if (!active) return;
+              if (persisted.status !== 'persisted')
+                throw new Error('本机协同草稿尚未获得保存确认，请稍后重试。');
+              if (identity)
+                await deleteRecord(identity, 'collaboration', cached.key).catch(() => undefined);
+              setRecoveryConflict(null);
+            } else {
+              setRecoveryConflict(cached);
+              checkpointKey = `${checkpointKey}:recovery-${crypto.randomUUID()}`;
+            }
+          }
+          const nextSession = {
+            key: sessionKey,
+            info: { ...info, durableSeq: latestDurableSeq },
+            session: collaboration,
+            checkpointKey,
+          };
+          setActiveSession(nextSession);
+          onStatusChange?.({
+            documentId: document.id,
+            generationId: info.generationId,
+            schemaVersion: info.schemaVersion,
+            extensions: info.extensions,
+            durableSeq: latestDurableSeq,
+          });
+        } catch (error) {
+          collaboration?.destroy();
+          yDocument?.destroy();
+          if (active && !abortController.signal.aborted) {
+            setFailure({ key: sessionKey, message: errorMessage(error) });
+          }
+        }
+      })();
+    }, 50);
+
+    return () => {
+      active = false;
+      clearTimeout(startTimer);
+      abortController.abort();
+      collaboration?.destroy();
+      yDocument?.destroy();
+    };
+    // offline.online is intentionally excluded: connectivity flaps must not
+    // tear down an established session (retries go through `attempt`);
+    // document.workspaceId is stable for the lifetime of a mounted document.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    accessTokenRevision,
+    attempt,
+    document.generationId,
+    document.id,
+    document.schemaVersion,
+    extensionsKey,
+    onStatusChange,
+    sessionKey,
+    identity,
+    offline.verified,
+    sessionEligible,
+  ]);
+
+  const editorOptions = useMemo(() => {
+    if (!currentSession) return null;
+    return {
+      documentId: document.id,
+      generationId: currentSession.info.generationId,
+      collaborative: true,
+      collaborationStructure: {
+        mode: 'disabled' as const,
+        isRemoteTransaction: (transaction: { getMeta(key: unknown): unknown }) =>
+          Boolean(
+            (transaction.getMeta(ySyncPluginKey) as { isChangeOrigin?: boolean } | undefined)
+              ?.isChangeOrigin,
+          ),
+      },
+    };
+  }, [currentSession, document.id]);
+
+  const editorHostServices = assetServices.hostServices;
+
+  if (
+    (!offline.online || !offline.verified) &&
+    !currentSession &&
+    cachedCheckpoint?.value.content
+  ) {
+    const value = cachedCheckpoint.value;
+    return (
+      <EditorProvider
+        instanceKey={`${document.id}:offline`}
+        options={{ documentId: document.id, content: value.content }}
+        nodeViews={defaultEditorNodeViews}
+        hostServices={editorHostServices}
+        editable={false}
+        readOnlyReason="本机缓存，联网并登录后校验权限。"
+      >
+        <CachedDraftProbe cached={cachedCheckpoint} identity={identity} />
+        <DocumentEditorShell
+          ariaLabel="离线文档缓存"
+          editingControls={false}
+          footerSlot={
+            <p role="status">
+              本机缓存只读。
+              {value.pendingUpdates.length
+                ? '包含尚未确认的协同草稿，联网后会核对版本。'
+                : '联网后重新校验权限和内容。'}
+              <button
+                type="button"
+                className="ml-3 underline"
+                onClick={() => downloadLocalDraft({ ...value, content: value.content! })}
+              >
+                导出本机内容
+              </button>
+            </p>
+          }
+        />
+      </EditorProvider>
+    );
+  }
+
+  if (currentFailure) {
+    return (
+      <section className="rounded-2xl border bg-card px-6 py-10 text-center">
+        <h2 className="font-semibold">无法连接正文协同会话</h2>
+        <p role="alert" className="mt-2 text-sm text-muted-foreground">
+          {currentFailure.message}
+        </p>
+        <button
+          type="button"
+          className="mt-4 rounded-lg border px-4 py-2 text-sm font-medium outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => setAttempt((value) => value + 1)}
+        >
+          重试连接
+        </button>
+      </section>
+    );
+  }
+
+  if (!currentSession || !editorOptions) {
+    return (
+      <section
+        className="rounded-2xl border bg-card px-6 py-10 text-center text-sm text-muted-foreground"
+        role="status"
+        aria-live="polite"
+      >
+        正在申请会话并同步正文…
+      </section>
+    );
+  }
+
+  return (
+    <EditorProvider
+      instanceKey={sessionKey}
+      options={editorOptions}
+      nodeViews={defaultEditorNodeViews}
+      collaboration={currentSession.session}
+      hostServices={editorHostServices}
+      editable={!currentSession.info.readOnly && viewMode === 'edit'}
+      readOnlyReason={
+        currentSession.info.readOnly
+          ? '你有权查看这篇文档，但没有编辑权限。'
+          : viewMode === 'read'
+            ? '当前为阅读模式。'
+            : undefined
+      }
+    >
+      {recoveryConflict?.value.content && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted p-3 text-sm"
+        >
+          <span>本机协同草稿的权限或结构版本已变化，未自动合并。请导出草稿后核对内容。</span>
+          <button
+            type="button"
+            className="underline"
+            onClick={() =>
+              downloadLocalDraft({
+                ...recoveryConflict.value,
+                content: recoveryConflict.value.content!,
+              })
+            }
+          >
+            导出本机草稿
+          </button>
+          <button
+            type="button"
+            className="underline"
+            onClick={() => {
+              if (identity)
+                void deleteRecord(identity, 'collaboration', recoveryConflict.key)
+                  .then(() => setRecoveryConflict(null))
+                  .catch(() => undefined);
+            }}
+          >
+            放弃这份本机草稿
+          </button>
+        </div>
+      )}
+      <UnconfirmedChangesProbe
+        sessionKey={sessionKey}
+        document={document}
+        session={currentSession.session}
+        sessionInfo={currentSession.info}
+        checkpointKey={currentSession.checkpointKey}
+        recovery={recoveryConflict}
+      />
+      <DocumentEditorShell
+        ariaLabel="文档协同编辑器"
+        editingControls={!currentSession.info.readOnly && viewMode === 'edit'}
+      />
+      <PanelDialog
+        open={versionsOpen}
+        onOpenChange={onVersionsOpenChange}
+        title="版本历史"
+        description="查看已保存的版本、比较差异，或创建新的协同文档代次。"
+      >
+        <DocumentVersionsPanel
+          document={document}
+          session={currentSession.info}
+          sessionKey={sessionKey}
+        />
+      </PanelDialog>
+    </EditorProvider>
+  );
+}

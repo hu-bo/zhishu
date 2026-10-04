@@ -11,6 +11,7 @@
     "smoke:post-commit-crash": "tsx src/post-commit-crash-smoke.ts",
     "smoke:capacity": "tsx src/capacity-smoke.ts",
     "smoke:structure": "tsx src/structure-smoke.ts",
+    "smoke:performance": "tsx src/performance-smoke.ts",
     "build": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

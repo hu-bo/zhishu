@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./examples": {
+      "types": "./dist/examples.d.ts",
+      "import": "./dist/examples.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"

@@ -6,7 +6,7 @@ import * as Y from "yjs";
 const MAX_OPERATION_RECEIPTS = 10_000;
 const MAX_TOMBSTONES = 100_000;
 const MAX_STRUCTURE_BYTES = 5 * 1024 * 1024;
-const containerTypes = new Set(["blockquote", "bulletList", "orderedList", "listItem"]);
+const containerTypes = new Set(["blockquote", "callout", "bulletList", "orderedList", "listItem"]);
 
 export const structureMetaMapName = "zhishu.structure.v1";
 export const structureNodeMapName = "zhishu.structure.nodes.v1";
@@ -65,7 +65,8 @@ function projectContent(content: DocumentContent): ProjectedStructure {
   const orders = new Map<string, string>();
   const visit = (block: DocumentBlock): void => {
     const id = blockId(block);
-    const serialized = structuredClone(block) as unknown as Record<string, unknown>;
+    // Only this top-level content property is removed; nested data is read by JSON.stringify.
+    const serialized = { ...block } as unknown as Record<string, unknown>;
     if (containerTypes.has(block.type)) {
       const children = ((block as unknown as { content?: DocumentBlock[] }).content ??
         []) as DocumentBlock[];
@@ -102,19 +103,46 @@ function collectContentBlockIds(content: DocumentContent): Set<string> {
   return ids;
 }
 
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (isBlock(value)) {
-    return `{${Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
-      .join(",")}}`;
+function comparableObject(value: Record<string, unknown>): Record<string, unknown> {
+  if ((value.type !== "tableCell" && value.type !== "tableHeader") || !isBlock(value.attrs))
+    return value;
+  const attrs = { ...value.attrs };
+  if (attrs.colspan === 1) delete attrs.colspan;
+  if (attrs.rowspan === 1) delete attrs.rowspan;
+  if (attrs.colwidth === null) delete attrs.colwidth;
+  if (attrs.align === null) delete attrs.align;
+  const result = { ...value };
+  if (Object.keys(attrs).length === 0) delete result.attrs;
+  else result.attrs = attrs;
+  return result;
+}
+
+function sameJsonValue(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => sameJsonValue(value, right[index]))
+    );
   }
-  return JSON.stringify(value) ?? "null";
+  if (!isBlock(left) || !isBlock(right)) return false;
+  const leftObject = comparableObject(left),
+    rightObject = comparableObject(right);
+  const keys = Object.keys(leftObject);
+  return (
+    keys.length === Object.keys(rightObject).length &&
+    keys.every(
+      (key) => Object.hasOwn(rightObject, key) && sameJsonValue(leftObject[key], rightObject[key]),
+    )
+  );
 }
 
 export function sameDocumentContent(left: DocumentContent, right: DocumentContent): boolean {
-  return canonicalJson(left) === canonicalJson(right);
+  // Inputs are validated JSON. Preserve key-order/table-default semantics without copying
+  // every text string into multiple megabyte-sized canonical serializations per keystroke.
+  return sameJsonValue(left, right);
 }
 
 export type ContentProjectionResult =
@@ -165,17 +193,18 @@ export function projectContentUpdateToStructure(
   return { success: true, state: next };
 }
 
-function estimateStructureBytes(state: StoredStructureState): number {
-  const projection = projectContent(state.content);
-  const encoder = new TextEncoder();
-  let bytes = encoder.encode(JSON.stringify(projection.rootIds)).byteLength;
+function estimateStructureBytes(
+  state: StoredStructureState,
+  projection = projectContent(state.content),
+): number {
+  let bytes = Buffer.byteLength(JSON.stringify(projection.rootIds));
   for (const [id, value] of projection.nodes)
-    bytes += encoder.encode(id).byteLength + encoder.encode(value).byteLength;
+    bytes += Buffer.byteLength(id) + Buffer.byteLength(value);
   for (const [id, value] of projection.orders)
-    bytes += encoder.encode(id).byteLength + encoder.encode(value).byteLength;
-  for (const id of state.tombstones) bytes += encoder.encode(id).byteLength;
+    bytes += Buffer.byteLength(id) + Buffer.byteLength(value);
+  for (const id of state.tombstones) bytes += Buffer.byteLength(id);
   for (const [id, value] of Object.entries(state.operations)) {
-    bytes += encoder.encode(id).byteLength + encoder.encode(JSON.stringify(value)).byteLength;
+    bytes += Buffer.byteLength(id) + Buffer.byteLength(JSON.stringify(value));
   }
   return bytes;
 }
@@ -210,20 +239,17 @@ export function readStoredStructureState(document: Y.Doc): StoredStructureState 
   const rootIds = parseIdList(rootValue);
   if (!rootIds) return null;
 
-  let serializedBytes = new TextEncoder().encode(rootValue).byteLength;
+  let serializedBytes = Buffer.byteLength(rootValue);
   for (const [id, value] of nodes) {
-    serializedBytes +=
-      new TextEncoder().encode(id).byteLength + new TextEncoder().encode(value).byteLength;
+    serializedBytes += Buffer.byteLength(id) + Buffer.byteLength(value);
   }
   for (const [id, value] of orders) {
-    serializedBytes +=
-      new TextEncoder().encode(id).byteLength + new TextEncoder().encode(value).byteLength;
+    serializedBytes += Buffer.byteLength(id) + Buffer.byteLength(value);
   }
   for (const [id, value] of operations) {
-    serializedBytes +=
-      new TextEncoder().encode(id).byteLength + new TextEncoder().encode(value).byteLength;
+    serializedBytes += Buffer.byteLength(id) + Buffer.byteLength(value);
   }
-  for (const id of tombstones.keys()) serializedBytes += new TextEncoder().encode(id).byteLength;
+  for (const id of tombstones.keys()) serializedBytes += Buffer.byteLength(id);
   if (serializedBytes > MAX_STRUCTURE_BYTES || tombstones.size > MAX_TOMBSTONES) return null;
 
   const visited = new Set<string>();
@@ -338,7 +364,7 @@ export function writeStoredStructureState(
   if (
     projection.nodes.size > 20_000 ||
     projection.orders.size > 20_000 ||
-    estimateStructureBytes(next) > MAX_STRUCTURE_BYTES ||
+    estimateStructureBytes(next, projection) > MAX_STRUCTURE_BYTES ||
     next.tombstones.length > MAX_TOMBSTONES
   ) {
     throw new Error("structure-node-capacity");

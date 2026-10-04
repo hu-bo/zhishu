@@ -1,7 +1,16 @@
 import { Value } from "@sinclair/typebox/value";
-import { DocumentBlockSchema, DocumentContentSchema, DocumentSnapshotSchema } from "./schema.js";
+import {
+  DocumentBlockSchema,
+  DocumentContentSchema,
+  DocumentSnapshotSchema,
+  TableCellSchema,
+  TableHeaderSchema,
+  TableRowSchema,
+  TableSchema,
+  TaskListSchema,
+} from "./schema.js";
 import type { DocumentSnapshot, ExtensionRequirement } from "./schema.js";
-import { validateDocumentContent } from "./validation.js";
+import { validateDocumentContentForSchemaVersion } from "./validation.js";
 
 export interface SnapshotIssue {
   path: string;
@@ -12,7 +21,15 @@ export type SnapshotValidationResult =
   { success: true; data: DocumentSnapshot } | { success: false; issues: SnapshotIssue[] };
 
 export function validateDocumentSnapshot(input: unknown): SnapshotValidationResult {
-  const references = [DocumentContentSchema, DocumentBlockSchema];
+  const references = [
+    DocumentContentSchema,
+    DocumentBlockSchema,
+    TaskListSchema,
+    TableSchema,
+    TableRowSchema,
+    TableCellSchema,
+    TableHeaderSchema,
+  ];
   if (!Value.Check(DocumentSnapshotSchema, references, input)) {
     return {
       success: false,
@@ -23,7 +40,7 @@ export function validateDocumentSnapshot(input: unknown): SnapshotValidationResu
     };
   }
   const snapshot = input as DocumentSnapshot;
-  const content = validateDocumentContent(snapshot.content);
+  const content = validateDocumentContentForSchemaVersion(snapshot.content, snapshot.schemaVersion);
   if (!content.success)
     return {
       success: false,

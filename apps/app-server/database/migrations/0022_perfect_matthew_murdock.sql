@@ -1,0 +1,1 @@
+ALTER TABLE "document_generations" ALTER COLUMN "schema_version" SET DEFAULT 4;

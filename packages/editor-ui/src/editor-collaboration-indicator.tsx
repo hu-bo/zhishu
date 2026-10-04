@@ -3,6 +3,7 @@ import type { EditorCollaborationStatus } from "@zhishu/editor-react";
 export interface EditorCollaborationIndicatorProps {
   status: EditorCollaborationStatus;
   className?: string;
+  onRetry?: () => void;
 }
 
 function connectionLabel(connection: EditorCollaborationStatus["connection"]): string {
@@ -32,7 +33,7 @@ function persistenceLabel(status: EditorCollaborationStatus): string {
     case "pending":
       return `正在保存${status.pendingUpdateCount ? `（${status.pendingUpdateCount} 项）` : ""}`;
     case "persisted":
-      return `已保存${status.durableSeq === undefined ? "" : ` · 序号 ${status.durableSeq}`}`;
+      return "已保存";
     case "failed":
       return "保存失败";
     case "unknown":
@@ -47,28 +48,53 @@ function persistenceLabel(status: EditorCollaborationStatus): string {
 export function EditorCollaborationIndicator({
   status,
   className,
+  onRetry,
 }: EditorCollaborationIndicatorProps) {
   return (
-    <div
+    <details
       className={
         className ? `zhishu-collaboration-indicator ${className}` : "zhishu-collaboration-indicator"
       }
       role="group"
       aria-label="协同状态"
     >
-      <span data-state={status.connection}>
-        <span className="zhishu-sr-only">连接：</span>
-        {connectionLabel(status.connection)}
-      </span>
-      <span data-state={status.sync}>
-        <span className="zhishu-sr-only">同步：</span>
-        {syncLabel(status.sync)}
-      </span>
-      <span data-state={status.persistence ?? "unknown"}>
-        <span className="zhishu-sr-only">持久化：</span>
+      <summary
+        data-state={status.persistence ?? "unknown"}
+        aria-label={`${persistenceLabel(status)}；展开连接和同步详情`}
+      >
         {persistenceLabel(status)}
-      </span>
-      {status.errorCode && <span className="zhishu-sr-only">错误代码：{status.errorCode}</span>}
-    </div>
+      </summary>
+      <div className="zhishu-collaboration-status-details">
+        <dl>
+          <div data-state={status.connection}>
+            <dt>连接</dt>
+            <dd>{connectionLabel(status.connection)}</dd>
+          </div>
+          <div data-state={status.sync}>
+            <dt>正文同步</dt>
+            <dd>{syncLabel(status.sync)}</dd>
+          </div>
+          <div data-state={status.persistence ?? "unknown"}>
+            <dt>服务端保存</dt>
+            <dd>
+              {persistenceLabel(status)}
+              {status.pendingUpdateCount ? `（${status.pendingUpdateCount} 项）` : ""}
+            </dd>
+          </div>
+          {status.durableSeq !== undefined && (
+            <div>
+              <dt>服务端序号</dt>
+              <dd>{status.durableSeq}</dd>
+            </div>
+          )}
+        </dl>
+        {status.errorCode && <p>错误代码：{status.errorCode}</p>}
+        {status.connection === "denied" && onRetry && (
+          <button type="button" onClick={onRetry}>
+            重试连接
+          </button>
+        )}
+      </div>
+    </details>
   );
 }

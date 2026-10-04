@@ -42,17 +42,16 @@ try {
     .orderBy(asc(documents.id));
 
   for (const row of activeGenerations) {
-    const updates = await repository.loadUpdates(row.documentId, row.generationId, row.durableSeq);
-    if (
-      updates.length !== row.durableSeq ||
-      updates.some(({ durableSeq }, index) => durableSeq !== index + 1)
-    ) {
-      throw new Error(`Yjs update sequence gap for document ${row.documentId}`);
-    }
-
     const ydoc = new Y.Doc();
     try {
-      for (const update of updates) Y.applyUpdate(ydoc, update.updateBytes, "projection-backfill");
+      await repository.replayYjsState(
+        {
+          documentId: row.documentId,
+          generationId: row.generationId,
+          targetSeq: row.durableSeq,
+        },
+        (updateBytes) => Y.applyUpdate(ydoc, updateBytes, "projection-backfill"),
+      );
       const content = projectDocumentContent(ydoc);
       const changed = await repository.backfillProjectionSnapshot({
         tenantId: row.tenantId,

@@ -15,5 +15,28 @@ services:
       timeout: 5s
       retries: 10
 
+  garage:
+    image: dxflrs/garage:v2.4.1
+    profiles: [storage]
+    command: ["/garage", "server", "--single-node", "--default-bucket"]
+    environment:
+      GARAGE_DEFAULT_ACCESS_KEY: GK00000000000000000000000000000000
+      GARAGE_DEFAULT_SECRET_KEY: zhishu-local-secret-key-change-me-please-00000000000000000000000000000000
+      GARAGE_DEFAULT_BUCKET: zhishu-private-assets
+    ports:
+      - "127.0.0.1:3900:3900"
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  garage_meta:
+  garage_data:

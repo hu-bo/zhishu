@@ -1,15 +1,63 @@
 # Repository Guide
 
-工程使用 pnpm workspace，后端位于 `apps/server`，数据库位于内部目录 `apps/server/database`，Compose 位于 `deploy/compose.yaml`。目前仅包含后端。
+知书面向在线文档编辑与团队知识库管理，追求现代极简、适合持续写作与阅读的生产级体验。吸收 Notion、Linear、Slite 的信息层级与交互质感，保留知书名称与中文产品文案。
+
+工程使用 pnpm workspace：
+
+- `apps/app-web`：React 19、TypeScript、Vite、Tailwind CSS；沿用 TanStack Router/Query、Base UI、Orval 等现有选型。
+- `apps/app-server`：Fastify 后端；数据库和 migration 位于 `apps/app-server/database`。
+- `packages/editor-core`、`packages/editor-react`、`packages/editor-ui`：通用编辑器能力。
+- `packages/document-contracts`、`packages/editor-collaboration`：内容契约与协同适配。
+- `examples/*`：独立消费与演示；`deploy/compose.yaml`：Compose 配置。
 
 ## Architecture
 
-feature 在 src/modules 内组装 repository 与 service；业务层不依赖 Fastify。
-Zod route contract 驱动 validation 和 OpenAPI；domain-error 由 root handler 映射。
-OpenAPI 离线导出不连接数据库，正常启动先检查数据库。database 与 src 一起编译，入口为 dist/src/server.js。
+- 编辑器缺失能力先补到对应 package，再由应用打通业务。`editor-core` 负责扩展、命令、内容转换与能力判断；`editor-react` 负责生命周期、状态订阅、宿主服务和 NodeView 适配；`editor-ui` 负责布局、排版、主题与交互组件。
+- 应用负责工作区、文档树、身份、权限、搜索、保存、附件、分享与版本，通过公开 API、主题变量和插槽组合编辑器。通用编辑行为与样式沉淀到包内，包保持独立消费能力。
+- 新节点、Mark 或持久化属性同步更新 document-contracts、校验、转换与版本兼容；需要时补齐协同及服务端支持，覆盖保存重开、历史读取和导入导出。
+- 后端 feature 在 `src/modules` 内组装 repository 与 service；业务层不依赖 Fastify。Zod route contract 驱动 validation 和 OpenAPI；domain-error 由 root handler 映射。前端 API 客户端由 OpenAPI 生成。
+- OpenAPI 离线导出不连接数据库，正常启动先检查数据库。database 与 src 一起编译，后端入口为 `dist/src/server.js`。
+
+## Visual Design
+
+| 项目       | 约定                                                                                                                                                      |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 字体       | 正文使用 Inter、苹方与系统无衬线回退；代码、快捷键和技术标签使用 Fira Code / JetBrains Mono 与系统等宽回退。中文标题与内容标签以可读性为先。              |
+| 背景与文字 | 浅色使用 Slate 50/100 工作区和白色面板；暗色使用 Slate 900/950。正文使用高对比 Slate 900/100；次级说明按背景选择可读的 Slate 色阶。                       |
+| 强调色     | Indigo/Violet 紫蓝色，主色参考 `#6366f1` / Indigo 600；选中、焦点与轻提示使用低透明度强调色背景。                                                         |
+| 边界与层级 | Slate 200/800 细边框、轻微阴影、适度圆角；浮层适当增强阴影，正文区域保持安静、轻量。                                                                      |
+| 动效       | 短促的颜色过渡、轻微缩放、浮层淡入与状态点反馈；支持 `prefers-reduced-motion`。任务完成礼花应可关闭，仅响应本地用户完成动作，避免远端更新或重放重复触发。 |
+| 主题       | 颜色、尺寸、圆角、阴影与状态通过语义变量管理。editor-ui 使用包级变量与隔离样式，应用显式映射主题；亮色、暗色、跟随系统覆盖完整界面。                      |
+
+## Layout & Navigation
+
+- 桌面采用全高三栏：左侧知识库导航、中间文档画布、右侧大纲与元信息。顶部为紧凑文档页头，编辑区顶部为固定工具栏，底部为统计与保存状态。明确各区域滚动责任，正文优先获得可用宽度。
+- 最新参考入口为 `syncscribe/src/App.tsx`、`KnowledgeSidebar.tsx`、`DocumentHeader.tsx`、`TableOfContents.tsx`、`GlobalSearchModal.tsx`（后四者位于 `src/components`）。参考侧栏约 288px、收起约 56px，右栏约 288px；这些是桌面起点，中小屏按正文空间收起侧栏并转换为抽屉。
+- 左栏提供工作区切换、快速搜索、收藏、最近、所有文档、回收站，以及递归多级目录。目录支持展开、新建子页、原位重命名、删除和拖拽排序反馈；目录关系与排序由应用/服务端维护，与正文块排序分开。
+- 页头提供可点击的真实祖先面包屑、Emoji 图标、标题、编辑/阅读切换、收藏、分享与导出；文档支持彩色标签。业务详情按需展开，避免大量卡片将正文挤出首屏。
+- 全局搜索使用 Cmd/Ctrl+K，目标覆盖有权限文档的标题与正文，支持方向键、Enter、Escape、无结果与失败反馈。快捷键按焦点与弹层作用域处理，与编辑器链接操作协调。
+- 右栏默认展示 H1/H2/H3 大纲，支持定位、随阅读位置高亮和收起；以稳定 blockId 定位，适配重复标题、多编辑器和正文独立滚动。作者、时间、标签、状态、相关文档由应用注入。
+- 阅读模式隐藏编辑动作，保留查找、大纲、复制与有权限的分享/导出；用户选择阅读模式与服务端只读权限分别管理。布局或模式变化保持正文、草稿和协同会话连续。
+
+## Editor Experience
+
+- 基于现有 Tiptap 编辑器提供固定分组工具栏、光标附近的 `/` 分类命令菜单和选区浮动菜单；覆盖粗体、斜体、下划线、删除线、代码、多色高亮、链接、对齐与转换为 Callout。所有入口共享能力判断、格式状态与键盘操作语义。
+- 通用扩展目标：五主题 Callout（info/tip/warning/success/danger，可切换与删除）；可切换的内联状态标签（待办/进行中/评审中/已完成/阻塞）；带语言选择、语法高亮与复制反馈的代码块；原位编辑的带标签分隔线；带身份色、头像和职位提示的成员提及；支持勾选反馈、完成划线置灰的任务清单。
+- 成员提及由应用提供真实可见成员，通知与权限由服务端处理。文档内状态标签与业务工作流通过明确接口关联。
+- 编辑器包提供字数、字符数与预计阅读时间展示，支持中文与中英混排；保存状态来自真实保存结果，连接成功、内容同步与服务端持久化确认分别表达。
+- 交互覆盖只读、禁用、忙碌、失败重试与取消；浮层适配视口边缘，关闭后恢复焦点/选区；中文输入法组合期间不抢占 Enter、方向键与快捷键。
+
+## Persistence & Delivery
+
+- 服务端继续作为共享文档、目录、权限与版本的权威来源。普通文档保持显式保存和修订冲突处理，协同文档保持现有会话、结构操作通道与 durable ack。
+- 离线体验目标为缓存目录与正文、刷新恢复、重新联网后同步；LocalStorage 适合界面偏好与轻量元信息，正文/待同步内容优先 IndexedDB。缓存按身份、工作区、文档及内容版本隔离，恢复时校验权限与服务端修订，处理冲突并保留未确认草稿。
+- 支持 Markdown、独立 HTML、结构化 JSON 与浏览器打印/PDF。沿用现有知书 JSON 文档包及内容契约，原始 Tiptap JSON 如需开放则提供明确转换；导出范围、附件限制和格式损失应可理解。打印样式只呈现正文并处理代码、表格与分页。
+- 开发示例或显式初始化流程提供 3 篇高质量产品规范/架构知识库预设文档；初始化可重复执行且不重复写入，不覆盖已有或正在协同的内容。演示用户、双屏测试按钮留在示例中。
+- 按现有 feature/package 边界组织组件、扩展、类型、工具与 hooks，保持 TypeScript 类型完整，避免滥用 `any`。复用现有基础组件、状态来源和错误处理。
+- 交付检查桌面/移动端、亮暗主题、键盘焦点、输入法、长标题/长文档、重复标题、空态与异常恢复。参考源码中的静态菜单、本地筛选和缓存只作为参考实现，完成情况以实际业务链路与验收结果为准。
 
 ## Commands
 
-使用 `pnpm format` 格式化，`pnpm check` 检查格式、lint、类型、build 与 OpenAPI。
-`pnpm db:generate` 生成 migration，`pnpm db:migrate` 显式执行；已发布 migration 不回写。
-根目录 .env 由 server 和 Drizzle 共用，环境变量优先。
+- 使用 `pnpm format` 格式化，`pnpm check` 检查格式、lint、类型、build、OpenAPI 与前端生成漂移。
+- `pnpm db:generate` 生成 migration，`pnpm db:migrate` 显式执行；已发布 migration 不回写。
+- 根目录 `.env` 由 app-server 和 Drizzle 共用，环境变量优先。

@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --zhishu-ui-bg: #f8fafc;
+    --zhishu-ui-card: #ffffff;
+    --zhishu-ui-border: #e2e8f0;
+    --zhishu-ui-text-primary: #0f172a;
+    --zhishu-ui-text-secondary: #475569;
+    --zhishu-ui-text-muted: #94a3b8;
+    --zhishu-ui-accent: #4f46e5;
+    --zhishu-ui-accent-hover: #4338ca;
+    --zhishu-ui-accent-light: #eef2ff;
+    --zhishu-ui-sidebar-w: 288px;
+    --zhishu-ui-sidebar-collapsed-w: 56px;
+    --zhishu-ui-detail-w: 288px;
+    --zhishu-ui-content-max: 896px;
+  }
+
+  .dark {
+    --zhishu-ui-bg: #090d16;
+    --zhishu-ui-card: #0f172a;
+    --zhishu-ui-border: #1e293b;
+    --zhishu-ui-text-primary: #f8fafc;
+    --zhishu-ui-text-secondary: #cbd5e1;
+    --zhishu-ui-text-muted: #64748b;
+    --zhishu-ui-accent: #6366f1;
+    --zhishu-ui-accent-hover: #818cf8;
+    --zhishu-ui-accent-light: #1e1b4b;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}
+
+/* Print view for WEB-14 clean document printing */
+@media print {
+  header, nav, aside, .no-print {
+    display: none !important;
+  }
+  body, main {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .print-document-container {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 2cm !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  table {
+    page-break-inside: auto;
+  }
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  thead {
+    display: table-header-group;
+  }
+}

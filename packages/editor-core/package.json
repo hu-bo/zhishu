@@ -25,9 +25,14 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@tiptap/extension-code-block": "3.31.3",
+    "@tiptap/extension-placeholder": "3.31.3",
+    "@tiptap/extension-table": "3.31.3",
     "@tiptap/extension-unique-id": "^3.30.3",
     "@tiptap/starter-kit": "^3.30.3",
-    "@zhishu/document-contracts": "workspace:*"
+    "@zhishu/document-contracts": "workspace:*",
+    "highlight.js": "^11.12.0",
+    "lowlight": "^3.3.0"
   },
   "peerDependencies": {
     "@tiptap/core": "^3.30.3",

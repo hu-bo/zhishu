@@ -1,95 +1,486 @@
+.zhishu-ui-shell,
+.zhishu-ui-theme {
+  --zhishu-editor-surface: var(--zhishu-ui-surface, var(--card, #fff));
+  --zhishu-editor-canvas: var(--zhishu-ui-canvas, #f8fafc);
+  --zhishu-editor-text: var(--zhishu-ui-text, var(--foreground, #0f172a));
+  --zhishu-editor-muted: var(--zhishu-ui-muted, var(--muted-foreground, #475569));
+  --zhishu-editor-border: var(--zhishu-ui-border, var(--border, #e2e8f0));
+  --zhishu-editor-border-subtle: var(--zhishu-ui-border-subtle, #f1f5f9);
+  --zhishu-editor-accent: var(--zhishu-ui-accent, var(--primary, #4f46e5));
+  --zhishu-editor-accent-soft: var(
+    --zhishu-ui-accent-soft,
+    color-mix(in srgb, var(--zhishu-editor-accent) 12%, var(--zhishu-editor-surface))
+  );
+  --zhishu-editor-hover: var(--zhishu-ui-hover, #f1f5f9);
+  --zhishu-editor-focus: var(--zhishu-ui-focus, var(--zhishu-editor-accent));
+  --zhishu-editor-danger: var(--zhishu-ui-danger, var(--destructive, #be123c));
+  --zhishu-editor-success: var(--zhishu-ui-success, #047857);
+  --zhishu-editor-warning: var(--zhishu-ui-warning, #a16207);
+  --zhishu-editor-shadow: var(--zhishu-ui-shadow, 0 10px 32px -24px rgb(15 23 42 / 24%));
+  --zhishu-editor-floating-shadow: var(
+    --zhishu-ui-floating-shadow,
+    0 16px 40px -20px rgb(15 23 42 / 28%)
+  );
+  --zhishu-editor-selection-surface: var(--zhishu-ui-selection-surface, #0f172a);
+  --zhishu-editor-selection-text: var(--zhishu-ui-selection-text, #f8fafc);
+  --zhishu-editor-selection-border: var(--zhishu-ui-selection-border, #334155);
+  --zhishu-editor-radius: var(--zhishu-ui-radius, 14px);
+  --zhishu-editor-radius-compact: var(--zhishu-ui-radius-compact, 7px);
+  --zhishu-editor-radius-control: var(--zhishu-ui-radius-control, 9px);
+  --zhishu-editor-radius-floating: var(--zhishu-ui-radius-floating, 11px);
+  --zhishu-editor-control-height: var(--zhishu-ui-control-height, 44px);
+  --zhishu-editor-outline-width: var(--zhishu-ui-outline-width, 220px);
+  --zhishu-editor-code-background: var(--zhishu-ui-code-background, #0f172a);
+  --zhishu-editor-code-header: var(--zhishu-ui-code-header, #1e293b);
+  --zhishu-editor-code-border: var(--zhishu-ui-code-border, #334155);
+  --zhishu-editor-code-text: var(--zhishu-ui-code-text, #e2e8f0);
+  --zhishu-editor-code-muted: var(--zhishu-ui-code-muted, #94a3b8);
+  --zhishu-editor-code-keyword: var(--zhishu-ui-code-keyword, #c4b5fd);
+  --zhishu-editor-code-string: var(--zhishu-ui-code-string, #86efac);
+  --zhishu-editor-code-number: var(--zhishu-ui-code-number, #fcd34d);
+  --zhishu-editor-code-title: var(--zhishu-ui-code-title, #93c5fd);
+  --zhishu-editor-code-variable: var(--zhishu-ui-code-variable, #f9a8d4);
+  --zhishu-editor-code-deletion: var(--zhishu-ui-code-deletion, #fda4af);
+}
+
 .zhishu-ui-shell {
   display: flex;
+  box-sizing: border-box;
+  min-height: 440px;
   min-width: 0;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--zhishu-ui-border, #d8dee8);
-  border-radius: var(--zhishu-ui-radius, 12px);
-  background: var(--zhishu-ui-surface, #fff);
-  color: var(--zhishu-ui-text, #202632);
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius);
+  background: var(--zhishu-editor-surface);
+  color: var(--zhishu-editor-text);
+  box-shadow: var(--zhishu-editor-shadow);
 }
 
-.zhishu-collaboration-indicator {
+.zhishu-ui-shell [data-type="taskItem"] {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-width: 0;
+  margin-block: 0.25rem;
+}
+
+.zhishu-ui-shell [data-type="taskItem"] > [data-task-content] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.zhishu-ui-shell [data-type="taskList"] {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  margin: 0.35rem 0 0.55rem 0.1rem;
+  padding-inline-start: clamp(0.65rem, 2vw, 1.15rem);
+  border-inline-start: 1px solid var(--zhishu-editor-border);
+}
+
+.zhishu-ui-shell [data-type="taskItem"] > input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  margin: 0.15rem 0 0;
+  accent-color: var(--zhishu-editor-accent);
+  cursor: pointer;
+}
+
+.zhishu-ui-shell [data-type="taskItem"] > input[type="checkbox"]:disabled {
+  opacity: 0.78;
+  cursor: not-allowed;
+}
+
+.zhishu-ui-shell [data-type="taskItem"] > input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--zhishu-editor-accent);
+  outline-offset: 2px;
+}
+
+.zhishu-ui-shell [data-type="taskItem"][data-checked="true"] > [data-task-content] {
+  color: var(--zhishu-editor-muted);
+  text-decoration: line-through;
+}
+
+.zhishu-ui-shell [data-callout-theme] {
+  --zhishu-callout-accent: var(--zhishu-editor-accent);
+  min-width: 0;
+  margin-block: 1rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid
+    color-mix(in srgb, var(--zhishu-callout-accent) 28%, var(--zhishu-editor-border));
+  border-inline-start: 3px solid var(--zhishu-callout-accent);
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: color-mix(in srgb, var(--zhishu-callout-accent) 7%, var(--zhishu-editor-surface));
+  color: var(--zhishu-editor-text);
+}
+.zhishu-ui-shell [data-callout-theme="tip"] {
+  --zhishu-callout-accent: var(--zhishu-ui-tip, #7c3aed);
+}
+.zhishu-ui-shell [data-callout-theme="warning"] {
+  --zhishu-callout-accent: var(--zhishu-editor-warning);
+}
+.zhishu-ui-shell [data-callout-theme="success"] {
+  --zhishu-callout-accent: var(--zhishu-editor-success);
+}
+.zhishu-ui-shell [data-callout-theme="danger"] {
+  --zhishu-callout-accent: var(--zhishu-editor-danger);
+}
+.zhishu-ui-callout-header,
+.zhishu-ui-callout-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.zhishu-ui-callout-header {
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+.zhishu-ui-callout-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+.zhishu-ui-callout-content {
+  min-width: 0;
+}
+.zhishu-ui-callout-content > :first-child {
+  margin-top: 0;
+}
+.zhishu-ui-callout-content > :last-child {
+  margin-bottom: 0;
+}
+.zhishu-ui-shell .zhishu-ui-callout-actions :is(button, select),
+.zhishu-ui-shell .zhishu-ui-divider :is(button, input) {
+  box-sizing: border-box;
+  min-height: 30px;
+  max-width: 100%;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: var(--zhishu-editor-surface);
+  color: var(--zhishu-editor-text);
+  font: inherit;
+  font-size: 0.75rem;
+}
+.zhishu-ui-shell .zhishu-ui-divider {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block: 1.2rem;
+  color: var(--zhishu-editor-muted);
+}
+.zhishu-ui-shell .zhishu-ui-surface .ProseMirror .zhishu-ui-divider > hr {
+  flex: 1 1 16px;
+  min-width: 16px;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--zhishu-editor-border);
+}
+.zhishu-ui-divider-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  max-width: 100%;
+  align-items: center;
+}
+.zhishu-ui-divider-form input {
+  width: 140px;
+  min-width: 0;
+}
+.zhishu-ui-shell [data-status-tag] {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 0 0.3rem;
+  border-radius: 5px;
+  border: 1px solid var(--zhishu-editor-border);
+  background: var(--zhishu-editor-hover);
+  color: var(--zhishu-editor-text);
+  font-size: 0.8em;
+  font-weight: 600;
+  vertical-align: baseline;
+}
+.zhishu-ui-shell [data-status-tag="in-progress"],
+.zhishu-ui-shell [data-status-tag="in-review"] {
+  background: var(--zhishu-editor-accent-soft);
+}
+.zhishu-ui-shell [data-status-tag="done"] {
+  background: color-mix(in srgb, var(--zhishu-editor-success) 12%, var(--zhishu-editor-surface));
+}
+.zhishu-ui-shell [data-status-tag="blocked"] {
+  background: color-mix(in srgb, var(--zhishu-editor-danger) 12%, var(--zhishu-editor-surface));
+}
+.zhishu-ui-status-tag select {
+  min-height: 28px;
+  max-width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.zhishu-ui-node-error {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 1rem;
-  color: var(--zhishu-muted-foreground, #59665f);
-  font:
-    500 0.75rem/1.5 system-ui,
-    sans-serif;
+  gap: 0.4rem;
+  color: var(--zhishu-editor-danger);
+  font-size: 0.8rem;
+}
+.zhishu-ui-shell :is(.zhishu-ui-callout, .zhishu-ui-divider)[data-selected="true"] {
+  outline: 2px solid var(--zhishu-editor-focus);
+  outline-offset: 2px;
+}
+.zhishu-ui-shell
+  :is(.zhishu-ui-callout, .zhishu-ui-divider, .zhishu-ui-status-tag)
+  :is(button, input, select):focus-visible {
+  outline: 2px solid var(--zhishu-editor-focus);
+  outline-offset: 2px;
+}
+@media (pointer: coarse) {
+  .zhishu-ui-shell
+    :is(.zhishu-ui-callout, .zhishu-ui-divider, .zhishu-ui-status-tag)
+    :is(button, input, select) {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
-.zhishu-collaboration-indicator > span {
+.zhishu-collaboration-indicator {
+  position: relative;
+  display: inline-block;
+}
+
+.zhishu-collaboration-indicator > summary {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  min-height: 1.5rem;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: 999px;
+  background: var(--zhishu-editor-surface);
+  color: var(--zhishu-editor-muted);
+  cursor: pointer;
+  font:
+    600 0.75rem/1.4 system-ui,
+    sans-serif;
+  list-style: none;
 }
 
-.zhishu-collaboration-indicator > span:not(.zhishu-sr-only)::before {
-  width: 0.45rem;
-  height: 0.45rem;
+.zhishu-collaboration-indicator > summary::-webkit-details-marker {
+  display: none;
+}
+
+.zhishu-collaboration-indicator > summary::before {
+  width: 7px;
+  height: 7px;
   flex: 0 0 auto;
   border-radius: 50%;
   background: currentColor;
   content: "";
 }
 
-.zhishu-collaboration-participants {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+.zhishu-collaboration-status-details {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(300px, calc(100vw - 24px));
+  padding: 12px;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-floating);
+  background: var(--zhishu-editor-surface);
+  box-shadow: var(--zhishu-editor-floating-shadow);
+  color: var(--zhishu-editor-text);
+  font:
+    400 0.76rem/1.5 system-ui,
+    sans-serif;
 }
 
-.zhishu-collaboration-participant,
-.zhishu-collaboration-participant-more {
+.zhishu-collaboration-status-details dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.zhishu-collaboration-status-details dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.zhishu-collaboration-status-details dt {
+  color: var(--zhishu-editor-muted);
+}
+
+.zhishu-collaboration-status-details dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+}
+
+.zhishu-collaboration-status-details p {
+  margin: 9px 0 0;
+  color: var(--zhishu-editor-danger);
+}
+
+.zhishu-collaboration-status-details button {
+  min-height: 36px;
+  margin-top: 10px;
+  padding: 0 10px;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: var(--zhishu-editor-hover);
+  color: var(--zhishu-editor-text);
+  cursor: pointer;
+}
+
+.zhishu-collaboration-participants {
+  position: relative;
+  display: inline-block;
+  min-width: 0;
+}
+
+.zhishu-collaboration-participants > summary {
   display: inline-flex;
-  max-width: 8rem;
   align-items: center;
-  gap: 6px;
-  overflow: hidden;
-  padding: 3px 8px;
-  border: 1px solid var(--zhishu-ui-border, #d8dee8);
-  border-radius: 999px;
-  background: var(--zhishu-ui-surface, #fff);
-  color: var(--zhishu-ui-text, #202632);
+  gap: 8px;
+  min-height: 36px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.zhishu-collaboration-participants > summary::-webkit-details-marker {
+  display: none;
+}
+
+.zhishu-collaboration-avatar-stack {
+  display: inline-flex;
+  align-items: center;
+  padding-inline-start: 2px;
+}
+
+.zhishu-collaboration-avatar,
+.zhishu-collaboration-participant-more {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-inline-start: -4px;
+  border: 2px solid var(--zhishu-editor-surface);
+  border-radius: 50%;
+  background: var(--zhishu-presence-color, #64748b);
+  color: #fff;
+  font:
+    700 0.72rem/1 system-ui,
+    sans-serif;
+}
+
+.zhishu-collaboration-participant-more {
+  background: var(--zhishu-editor-hover);
+  color: var(--zhishu-editor-text);
+  font-size: 0.65rem;
+}
+
+.zhishu-collaboration-participants-count {
+  color: var(--zhishu-editor-text);
   font:
     500 0.75rem/1.5 system-ui,
     sans-serif;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.zhishu-collaboration-participant::before {
-  width: 0.5rem;
-  height: 0.5rem;
+.zhishu-collaboration-participants-details {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  width: min(280px, calc(100vw - 24px));
+  padding: 12px;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-floating);
+  background: var(--zhishu-editor-surface);
+  box-shadow: var(--zhishu-editor-floating-shadow);
+  color: var(--zhishu-editor-text);
+}
+
+.zhishu-collaboration-participants-details > p {
+  margin: 0 0 8px;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.zhishu-collaboration-participants-details ul {
+  display: grid;
+  gap: 7px;
+  max-height: min(260px, 45vh);
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.zhishu-collaboration-participants-details li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+.zhishu-collaboration-participant-dot {
+  width: 9px;
+  height: 9px;
   flex: 0 0 auto;
-  border-radius: 50%;
   background: var(--zhishu-presence-color, #687386);
-  content: "";
+  border-radius: 50%;
+}
+
+.zhishu-collaboration-self {
+  margin-inline-start: auto;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.72rem;
 }
 
 .zhishu-collaboration-indicator [data-state="pending"],
 .zhishu-collaboration-indicator [data-state="connecting"],
 .zhishu-collaboration-indicator [data-state="reconnecting"],
 .zhishu-collaboration-indicator [data-state="catching-up"] {
-  color: var(--zhishu-warning, #805500);
+  color: var(--zhishu-editor-warning);
 }
 
 .zhishu-collaboration-indicator [data-state="failed"],
 .zhishu-collaboration-indicator [data-state="denied"],
 .zhishu-collaboration-indicator [data-state="closed"],
 .zhishu-collaboration-indicator [data-state="incompatible"] {
-  color: var(--zhishu-danger, #a12d2a);
+  color: var(--zhishu-editor-danger);
 }
 
 .zhishu-collaboration-indicator [data-state="persisted"],
 .zhishu-collaboration-indicator [data-state="clean"],
-.zhishu-collaboration-indicator [data-state="current"] {
-  color: var(--zhishu-success, #236047);
+.zhishu-collaboration-indicator [data-state="current"],
+.zhishu-collaboration-indicator [data-state="connected"] {
+  color: var(--zhishu-editor-success);
+}
+
+.zhishu-collaboration-indicator > summary[data-state="pending"],
+.zhishu-collaboration-indicator > summary[data-state="unknown"] {
+  color: var(--zhishu-editor-warning);
+}
+
+.zhishu-collaboration-indicator > summary[data-state="failed"] {
+  color: var(--zhishu-editor-danger);
+}
+
+.zhishu-collaboration-indicator > summary[data-state="persisted"],
+.zhishu-collaboration-indicator > summary[data-state="clean"] {
+  color: var(--zhishu-editor-success);
 }
 
 .zhishu-sr-only {
@@ -114,43 +505,96 @@
   padding: 8px 12px;
 }
 
-.zhishu-ui-header {
+.zhishu-ui-image-alt-editor {
+  display: flex;
+  align-items: flex-end;
   flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--zhishu-editor-border);
 }
 
-.zhishu-ui-collaboration-status {
-  margin-left: auto;
+.zhishu-ui-image-alt-editor label {
+  display: grid;
+  flex: 1 1 240px;
+  gap: 4px;
+  color: var(--zhishu-editor-text);
+  font:
+    500 0.875rem/1.4 system-ui,
+    sans-serif;
 }
 
-.zhishu-ui-outline-toggle {
-  display: none;
+.zhishu-ui-image-alt-editor label.zhishu-ui-image-alt-editor__dimension {
+  flex: 0 1 128px;
+}
+
+.zhishu-ui-image-alt-editor__hint {
+  color: var(--zhishu-editor-muted);
+  font-size: 0.75rem;
+}
+
+.zhishu-ui-image-alt-editor textarea,
+.zhishu-ui-image-alt-editor input {
+  box-sizing: border-box;
+  width: 100%;
   min-height: 44px;
-  padding: 0 10px;
-  border: 1px solid var(--zhishu-ui-border, #d8dee8);
-  border-radius: 7px;
-  background: var(--zhishu-ui-surface, #fff);
+  padding: 8px 10px;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: var(--zhishu-editor-surface);
+  color: inherit;
+  font: inherit;
+}
+
+.zhishu-ui-image-alt-editor button {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: var(--zhishu-editor-surface);
   color: inherit;
   font: inherit;
   cursor: pointer;
 }
 
+.zhishu-ui-image-alt-editor button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.zhishu-ui-image-alt-editor textarea:focus-visible,
+.zhishu-ui-image-alt-editor input:focus-visible,
+.zhishu-ui-image-alt-editor button:focus-visible {
+  outline: 2px solid var(--zhishu-editor-accent);
+  outline-offset: 2px;
+}
+
+.zhishu-ui-image-alt-editor [role="status"]:empty {
+  display: none;
+}
+
 .zhishu-ui-selection-menu {
   position: fixed;
   z-index: 1000;
+  box-sizing: border-box;
+  max-width: calc(100vw - 16px);
+  overflow-x: auto;
   display: flex;
   gap: 4px;
   padding: 5px;
-  border: 1px solid var(--zhishu-ui-border, #d8dee8);
-  border-radius: 9px;
-  background: var(--zhishu-ui-surface, #fff);
-  box-shadow: 0 8px 24px rgb(24 35 57 / 20%);
+  border: 1px solid var(--zhishu-editor-selection-border);
+  border-radius: var(--zhishu-editor-radius-control);
+  background: var(--zhishu-editor-selection-surface);
+  color: var(--zhishu-editor-selection-text);
+  box-shadow: var(--zhishu-editor-floating-shadow);
+  scrollbar-width: thin;
 }
 
 .zhishu-ui-selection-menu button {
   min-height: 44px;
   padding: 0 12px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--zhishu-editor-radius-compact);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -160,12 +604,21 @@
 
 .zhishu-ui-selection-menu button[aria-pressed="true"],
 .zhishu-ui-selection-menu button[aria-pressed="mixed"] {
-  border-color: var(--zhishu-ui-accent, #586fc4);
-  background: color-mix(in srgb, var(--zhishu-ui-accent, #586fc4) 12%, white);
+  border-color: color-mix(
+    in srgb,
+    var(--zhishu-editor-accent) 65%,
+    var(--zhishu-editor-selection-border)
+  );
+  background: color-mix(
+    in srgb,
+    var(--zhishu-editor-accent) 22%,
+    var(--zhishu-editor-selection-surface)
+  );
+  color: var(--zhishu-editor-selection-text);
 }
 
 .zhishu-ui-selection-menu button:focus-visible {
-  outline: 2px solid var(--zhishu-ui-accent, #586fc4);
+  outline: 2px solid var(--zhishu-editor-selection-text);
   outline-offset: 2px;
 }
 
@@ -177,25 +630,27 @@
   max-height: min(60vh, 320px);
   overflow: auto;
   padding: 7px;
-  border: 1px solid var(--zhishu-ui-border, #d8dee8);
-  border-radius: 9px;
-  background: var(--zhishu-ui-surface, #fff);
-  box-shadow: 0 8px 24px rgb(24 35 57 / 20%);
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-control);
+  background: var(--zhishu-editor-surface);
+  box-shadow: var(--zhishu-editor-floating-shadow);
 }
 
 .zhishu-ui-slash-group-label {
   margin: 7px 8px 3px;
-  color: var(--zhishu-ui-muted, #687386);
+  color: var(--zhishu-editor-muted);
   font-size: 0.75rem;
 }
 
 .zhishu-ui-slash-menu button {
-  display: block;
+  display: flex;
   width: 100%;
   min-height: 44px;
+  align-items: center;
+  gap: 10px;
   padding: 8px 10px;
-  border: 0;
-  border-radius: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--zhishu-editor-radius-compact);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -203,20 +658,73 @@
   cursor: pointer;
 }
 
-.zhishu-ui-slash-menu button[aria-selected="true"],
-.zhishu-ui-slash-menu button:hover {
-  background: color-mix(in srgb, var(--zhishu-ui-accent, #586fc4) 12%, white);
+.zhishu-ui-slash-menu button[aria-selected="true"] {
+  border-color: color-mix(in srgb, var(--zhishu-editor-accent) 20%, var(--zhishu-editor-border));
+  background: var(--zhishu-editor-accent-soft);
+  color: var(--zhishu-editor-accent);
+}
+
+.zhishu-ui-slash-menu button:disabled {
+  color: var(--zhishu-editor-muted);
+  cursor: not-allowed;
+}
+
+.zhishu-ui-slash-menu button:disabled[aria-selected="true"] {
+  border-color: var(--zhishu-editor-border-subtle);
+  background: var(--zhishu-editor-hover);
+}
+
+.zhishu-ui-slash-menu button:hover:not([aria-selected="true"]) {
+  background: var(--zhishu-editor-hover);
+}
+
+.zhishu-ui-slash-option > svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--zhishu-editor-muted);
+}
+
+.zhishu-ui-slash-option[aria-selected="true"] > svg {
+  color: var(--zhishu-editor-accent);
+}
+
+.zhishu-ui-slash-option-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.zhishu-ui-slash-option-label {
+  font-weight: 550;
+}
+
+.zhishu-ui-slash-option-description {
+  color: var(--zhishu-editor-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
 }
 
 .zhishu-ui-slash-menu button:focus-visible {
-  outline: 2px solid var(--zhishu-ui-accent, #586fc4);
+  outline: 2px solid var(--zhishu-editor-accent);
   outline-offset: -2px;
 }
 
 .zhishu-ui-slash-empty {
   margin: 8px;
-  color: var(--zhishu-ui-muted, #687386);
+  color: var(--zhishu-editor-muted);
   font-size: 0.875rem;
+}
+
+.zhishu-ui-slash-keyboard-hint {
+  position: sticky;
+  bottom: -7px;
+  margin: 5px 0 -7px;
+  padding: 7px 4px;
+  border-top: 1px solid var(--zhishu-editor-border-subtle);
+  background: var(--zhishu-editor-surface);
+  color: var(--zhishu-editor-muted);
+  font-size: 0.7rem;
 }
 
 .zhishu-ui-block-handle {
@@ -228,20 +736,32 @@
   height: 44px;
   place-items: center;
   padding: 0;
-  border: 1px solid var(--zhishu-ui-border, #d8dee8);
-  border-radius: 6px;
-  background: var(--zhishu-ui-surface, #fff);
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: var(--zhishu-editor-surface);
   color: inherit;
   font-size: 1.25rem;
   line-height: 1;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgb(24 35 57 / 15%);
+  box-shadow: var(--zhishu-editor-shadow);
 }
 
 .zhishu-ui-block-handle:focus-visible,
 .zhishu-ui-block-menu button:focus-visible {
-  outline: 2px solid var(--zhishu-ui-accent, #586fc4);
+  outline: 2px solid var(--zhishu-editor-accent);
   outline-offset: 2px;
+}
+
+.zhishu-ui-block-handle:hover {
+  border-color: var(--zhishu-editor-border);
+  background: var(--zhishu-editor-hover);
+  color: var(--zhishu-editor-text);
+}
+
+.zhishu-ui-block-handle[aria-expanded="true"] {
+  border-color: var(--zhishu-editor-accent);
+  background: var(--zhishu-editor-accent-soft);
+  color: var(--zhishu-editor-accent);
 }
 
 .zhishu-ui-block-menu {
@@ -254,17 +774,17 @@
   gap: 2px;
   overflow: auto;
   padding: 6px;
-  border: 1px solid var(--zhishu-ui-border, #d8dee8);
-  border-radius: 9px;
-  background: var(--zhishu-ui-surface, #fff);
-  box-shadow: 0 8px 24px rgb(24 35 57 / 20%);
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-control);
+  background: var(--zhishu-editor-surface);
+  box-shadow: var(--zhishu-editor-floating-shadow);
 }
 
 .zhishu-ui-block-menu button {
   min-height: 44px;
   padding: 8px 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--zhishu-editor-radius-compact);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -273,17 +793,38 @@
 }
 
 .zhishu-ui-block-menu button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--zhishu-ui-accent, #586fc4) 12%, white);
+  background: var(--zhishu-editor-accent-soft);
 }
 
 .zhishu-ui-block-menu button:disabled {
-  color: var(--zhishu-ui-muted, #687386);
+  color: var(--zhishu-editor-muted);
   cursor: not-allowed;
+}
+
+.zhishu-ui-block-menu-group + .zhishu-ui-block-menu-group {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--zhishu-editor-border-subtle);
+}
+
+.zhishu-ui-block-menu-group-label {
+  margin: 3px 8px 2px;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.zhishu-ui-block-menu button[data-danger="true"] {
+  color: var(--zhishu-editor-danger);
+}
+
+.zhishu-ui-block-menu button[data-danger="true"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--zhishu-editor-danger) 10%, var(--zhishu-editor-surface));
 }
 
 .zhishu-ui-block-menu-note {
   margin: 4px 6px;
-  color: var(--zhishu-ui-muted, #687386);
+  color: var(--zhishu-editor-muted);
   font-size: 0.875rem;
   line-height: 1.4;
 }
@@ -300,42 +841,20 @@
 
 .zhishu-ui-header,
 .zhishu-ui-toolbar {
-  border-bottom: 1px solid var(--zhishu-ui-border, #d8dee8);
-}
-
-.zhishu-ui-title {
-  flex: 1;
-  font-weight: 650;
-}
-
-.zhishu-ui-toolbar button,
-.zhishu-ui-outline button {
-  min-height: 44px;
-  border: 1px solid var(--zhishu-ui-border, #d8dee8);
-  border-radius: 7px;
-  background: var(--zhishu-ui-surface, #fff);
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
+  border-bottom: 1px solid var(--zhishu-editor-border);
 }
 
 .zhishu-ui-toolbar button {
+  flex: 0 0 auto;
+  min-height: 44px;
   padding: 0 10px;
-}
-
-.zhishu-ui-toolbar-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.zhishu-ui-find-panel {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: var(--zhishu-editor-surface);
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .zhishu-ui-find-panel label {
@@ -347,66 +866,21 @@
   white-space: nowrap;
 }
 
-.zhishu-ui-find-panel input {
-  box-sizing: border-box;
-  width: min(14rem, 34vw);
-  min-width: 8rem;
-  min-height: 40px;
-  padding: 6px 9px;
-  border: 1px solid var(--zhishu-ui-border, #d8dee8);
-  border-radius: 6px;
-  background: var(--zhishu-ui-surface, #fff);
-  color: inherit;
-  font: inherit;
-}
-
-.zhishu-ui-find-panel button {
-  min-height: 40px;
-  padding: 0 8px;
-  border: 1px solid var(--zhishu-ui-border, #d8dee8);
-  border-radius: 6px;
-  background: var(--zhishu-ui-surface, #fff);
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-.zhishu-ui-find-panel button:disabled {
-  color: #858d9a;
-  cursor: not-allowed;
-}
-
 .zhishu-ui-find-panel button:focus-visible,
 .zhishu-ui-find-panel input:focus-visible {
-  outline: 2px solid var(--zhishu-ui-accent, #586fc4);
+  outline: 2px solid var(--zhishu-editor-accent);
   outline-offset: 2px;
-}
-
-.zhishu-ui-link-editor {
-  display: contents;
-}
-
-.zhishu-ui-link-trigger {
-  box-sizing: border-box;
-  min-height: 44px;
-  padding: 10px;
-  border: 1px solid var(--zhishu-ui-border, #d8dee8);
-  border-radius: 6px;
-  background: var(--zhishu-ui-surface, #fff);
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
 }
 
 .zhishu-ui-link-trigger:focus-visible,
 .zhishu-ui-link-actions button:focus-visible,
 .zhishu-ui-link-dialog input:focus-visible {
-  outline: 2px solid var(--zhishu-ui-accent, #586fc4);
+  outline: 2px solid var(--zhishu-editor-accent);
   outline-offset: 2px;
 }
 
 .zhishu-ui-link-trigger:disabled {
-  color: var(--zhishu-ui-muted, #687386);
+  color: var(--zhishu-editor-muted);
   cursor: not-allowed;
 }
 
@@ -421,10 +895,10 @@
   gap: 12px;
   padding: 16px;
   transform: translate(-50%, -50%);
-  border: 1px solid var(--zhishu-ui-border, #d8dee8);
-  border-radius: 10px;
-  background: var(--zhishu-ui-surface, #fff);
-  box-shadow: 0 12px 36px rgb(24 35 57 / 24%);
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-floating);
+  background: var(--zhishu-editor-surface);
+  box-shadow: var(--zhishu-editor-floating-shadow);
 }
 
 .zhishu-ui-link-dialog label {
@@ -438,9 +912,9 @@
   width: 100%;
   min-height: 44px;
   padding: 8px 10px;
-  border: 1px solid var(--zhishu-ui-border, #d8dee8);
-  border-radius: 6px;
-  background: var(--zhishu-ui-surface, #fff);
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: var(--zhishu-editor-surface);
   color: inherit;
   font: inherit;
 }
@@ -456,9 +930,9 @@
   box-sizing: border-box;
   min-height: 44px;
   padding: 8px 10px;
-  border: 1px solid var(--zhishu-ui-border, #d8dee8);
-  border-radius: 6px;
-  background: var(--zhishu-ui-surface, #fff);
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: var(--zhishu-editor-surface);
   color: inherit;
   font: inherit;
   cursor: pointer;
@@ -466,14 +940,14 @@
 
 .zhishu-ui-link-error {
   margin: 0;
-  color: var(--zhishu-ui-danger, #a52323);
+  color: var(--zhishu-editor-danger);
   font-size: 0.875rem;
 }
 
 .zhishu-ui-toolbar button[aria-pressed="true"],
 .zhishu-ui-toolbar button[aria-pressed="mixed"] {
-  border-color: var(--zhishu-ui-accent, #586fc4);
-  background: color-mix(in srgb, var(--zhishu-ui-accent, #586fc4) 12%, white);
+  border-color: var(--zhishu-editor-accent);
+  background: var(--zhishu-editor-accent-soft);
 }
 
 .zhishu-ui-toolbar button[aria-pressed="mixed"] {
@@ -481,85 +955,25 @@
 }
 
 .zhishu-ui-toolbar button:disabled {
-  color: #858d9a;
+  color: var(--zhishu-editor-muted);
   cursor: not-allowed;
 }
 
 .zhishu-ui-toolbar button:focus-visible,
 .zhishu-ui-outline button:focus-visible,
 .zhishu-ui-surface [contenteditable="true"]:focus-visible {
-  outline: 2px solid var(--zhishu-ui-accent, #586fc4);
+  outline: 2px solid var(--zhishu-editor-accent);
   outline-offset: 2px;
 }
 
 .zhishu-ui-readonly {
   margin-left: auto;
-  color: var(--zhishu-ui-muted, #687386);
+  color: var(--zhishu-editor-muted);
   font-size: 0.875rem;
-}
-
-.zhishu-ui-body {
-  display: flex;
-  min-width: 0;
-}
-
-.zhishu-ui-with-outline {
-  align-items: stretch;
-}
-
-.zhishu-ui-outline {
-  flex: 0 0 220px;
-  overflow: auto;
-  padding: 16px 12px;
-  border-right: 1px solid var(--zhishu-ui-border, #d8dee8);
 }
 
 .zhishu-ui-outline.is-collapsed {
   display: none;
-}
-
-.zhishu-ui-outline h2 {
-  margin: 0 0 10px;
-  font-size: 0.875rem;
-}
-
-.zhishu-ui-outline ol {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.zhishu-ui-outline li[data-level="2"] {
-  padding-left: 12px;
-}
-
-.zhishu-ui-outline li[data-level="3"],
-.zhishu-ui-outline li[data-level="4"],
-.zhishu-ui-outline li[data-level="5"],
-.zhishu-ui-outline li[data-level="6"] {
-  padding-left: 24px;
-}
-
-.zhishu-ui-outline button {
-  width: 100%;
-  overflow: hidden;
-  padding: 5px 8px;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.zhishu-ui-outline p {
-  color: var(--zhishu-ui-muted, #687386);
-  font-size: 0.875rem;
-}
-
-.zhishu-ui-surface {
-  min-width: 0;
-  flex: 1;
-  padding: 20px;
 }
 
 .zhishu-ui-surface [contenteditable="true"] {
@@ -567,41 +981,1757 @@
   outline: none;
 }
 
+.zhishu-ui-surface .tableWrapper {
+  position: relative;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  margin-block: 0.75rem;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-color: var(--zhishu-editor-border) transparent;
+  scrollbar-width: thin;
+}
+
+.zhishu-ui-surface table {
+  width: max(100%, 36rem);
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.zhishu-ui-surface th,
+.zhishu-ui-surface td {
+  position: relative;
+  box-sizing: border-box;
+  min-width: 25px;
+  padding: 8px 10px;
+  border: 1px solid var(--zhishu-editor-border);
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.zhishu-ui-surface .column-resize-handle {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: -4px;
+  bottom: -2px;
+  width: 8px;
+  background: color-mix(in srgb, var(--zhishu-editor-accent) 38%, transparent);
+  pointer-events: none;
+}
+
+.zhishu-ui-surface .resize-cursor {
+  cursor: col-resize;
+}
+
+.zhishu-ui-surface th {
+  background: var(--zhishu-editor-hover);
+  font-weight: 600;
+  text-align: start;
+}
+
+.zhishu-ui-surface .selectedCell {
+  background: var(--zhishu-editor-accent-soft);
+  box-shadow: inset 0 0 0 2px var(--zhishu-editor-accent);
+}
+
+.zhishu-ui-surface td > p,
+.zhishu-ui-surface th > p {
+  margin-block: 0.25rem;
+}
+
 .zhishu-ui-surface figure[data-asset-id] {
+  position: relative;
+  box-sizing: border-box;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
   margin: 1rem 0;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: var(--zhishu-editor-radius-control);
 }
 
 .zhishu-ui-surface figure[data-asset-id] img {
   display: block;
+  width: auto;
   max-width: 100%;
+  max-height: min(75vh, 800px);
   height: auto;
   object-fit: contain;
 }
 
-.zhishu-ui-outline-toggle:focus-visible {
-  outline: 2px solid var(--zhishu-ui-accent, #586fc4);
+.zhishu-ui-surface figure[data-asset-state="loading"],
+.zhishu-ui-surface figure[data-asset-state="failed"],
+.zhishu-ui-surface figure[data-asset-state="unavailable"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  min-height: 10rem;
+  border-color: var(--zhishu-editor-border);
+  background: var(--zhishu-editor-hover);
+}
+
+.zhishu-ui-surface figure[data-asset-state="loading"] img,
+.zhishu-ui-surface figure[data-asset-state="failed"] img,
+.zhishu-ui-surface figure[data-asset-state="unavailable"] img {
+  grid-area: 1 / 1;
+  opacity: 0;
+}
+
+.zhishu-ui-surface figure[data-asset-state="loading"]::before,
+.zhishu-ui-surface figure[data-asset-state="failed"]::before,
+.zhishu-ui-surface figure[data-asset-state="unavailable"]::before {
+  box-sizing: border-box;
+  grid-area: 1 / 1;
+  z-index: 1;
+  display: grid;
+  min-height: 10rem;
+  place-items: center;
+  padding: 1rem;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.875rem;
+  text-align: center;
+  content: "图片附件正在加载";
+}
+
+.zhishu-ui-surface figure[data-asset-state="failed"]::before {
+  color: var(--zhishu-editor-danger);
+  content: "图片加载失败";
+}
+
+.zhishu-ui-surface figure[data-asset-state="unavailable"]::before {
+  content: "图片预览暂不可用";
+}
+
+.zhishu-ui-surface figure.ProseMirror-selectednode,
+.zhishu-ui-surface a[data-pdf-asset-id].ProseMirror-selectednode {
+  border-color: var(--zhishu-editor-accent);
+  border-radius: var(--zhishu-editor-radius-control);
+  outline: 2px solid color-mix(in srgb, var(--zhishu-editor-accent) 35%, transparent);
   outline-offset: 2px;
 }
 
-@media (max-width: 640px) {
+.zhishu-ui-surface a[data-pdf-asset-id] {
+  box-sizing: border-box;
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0.5rem 0;
+  padding: 0.65rem 0.85rem;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-control);
+  background: var(--zhishu-editor-surface);
+  color: var(--zhishu-editor-accent);
+  text-decoration: none;
+  vertical-align: middle;
+}
+
+.zhishu-ui-surface a[data-pdf-asset-id]::before {
+  display: inline-grid;
+  min-width: 2.35rem;
+  min-height: 2rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: var(--zhishu-editor-accent-soft);
+  color: var(--zhishu-editor-accent);
+  content: "PDF";
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.zhishu-ui-surface a[data-pdf-asset-id][data-asset-state="loading"],
+.zhishu-ui-surface a[data-pdf-asset-id][data-asset-state="unavailable"] {
+  color: var(--zhishu-editor-muted);
+  cursor: default;
+}
+
+.zhishu-ui-surface a[data-pdf-asset-id][data-asset-state="failed"] {
+  border-color: color-mix(in srgb, var(--zhishu-editor-danger) 45%, var(--zhishu-editor-border));
+  color: var(--zhishu-editor-danger);
+  cursor: default;
+}
+
+.zhishu-ui-surface a[data-pdf-asset-id][data-asset-state="loading"]::after,
+.zhishu-ui-surface a[data-pdf-asset-id][data-asset-state="failed"]::after,
+.zhishu-ui-surface a[data-pdf-asset-id][data-asset-state="unavailable"]::after {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+}
+
+.zhishu-ui-surface a[data-pdf-asset-id][data-asset-state="loading"]::after {
+  content: "正在加载";
+}
+
+.zhishu-ui-surface a[data-pdf-asset-id][data-asset-state="failed"]::after {
+  content: "加载失败";
+}
+
+.zhishu-ui-surface a[data-pdf-asset-id][data-asset-state="unavailable"]::after {
+  content: "暂不可用";
+}
+
+.zhishu-ui-code-language-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 12px;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.875rem;
+}
+
+.zhishu-ui-code-language-selector label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zhishu-ui-code-language-selector select {
+  min-height: 36px;
+  max-width: min(240px, 60vw);
+  padding: 4px 8px;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: var(--zhishu-editor-surface);
+  color: var(--zhishu-editor-text);
+}
+
+.zhishu-ui-code-language-selector :focus-visible {
+  outline: 2px solid var(--zhishu-editor-accent);
+  outline-offset: 2px;
+}
+
+.zhishu-ui-outline-toggle:focus-visible {
+  outline: 2px solid var(--zhishu-editor-accent);
+  outline-offset: 2px;
+}
+
+/* Compact document editor surface */
+
+.zhishu-ui-header {
+  min-height: 54px;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 16px;
+  border-color: var(--zhishu-editor-border);
+  background: var(--zhishu-editor-surface);
+}
+
+.zhishu-ui-title {
+  flex: 1;
+  color: var(--zhishu-editor-text);
+  font-size: 0.9rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.zhishu-ui-collaboration-status {
+  margin-left: auto;
+}
+
+.zhishu-collaboration-indicator button,
+.zhishu-ui-outline-toggle {
+  display: inline-flex;
+  min-width: 32px;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: transparent;
+  color: var(--zhishu-editor-muted);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.zhishu-collaboration-indicator button:hover,
+.zhishu-ui-outline-toggle:hover {
+  border-color: var(--zhishu-editor-border);
+  background: var(--zhishu-editor-hover);
+  color: var(--zhishu-editor-text);
+}
+
+.zhishu-ui-outline-toggle {
+  display: inline-flex;
+  margin-left: auto;
+}
+
+.zhishu-ui-outline-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.zhishu-ui-toolbar-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--zhishu-editor-border);
+  background: var(--zhishu-editor-surface);
+}
+
+.zhishu-ui-table-toolbar {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.zhishu-ui-table-toolbar > summary {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: var(--zhishu-editor-surface);
+  color: var(--zhishu-editor-text);
+  cursor: pointer;
+  font:
+    600 0.76rem/1.35 system-ui,
+    sans-serif;
+  list-style: none;
+}
+
+.zhishu-ui-table-toolbar > summary::-webkit-details-marker {
+  display: none;
+}
+
+.zhishu-ui-table-toolbar > summary::after {
+  color: var(--zhishu-editor-muted);
+  content: "⌄";
+}
+
+.zhishu-ui-table-toolbar-dimensions {
+  color: var(--zhishu-editor-muted);
+  font-weight: 400;
+}
+
+.zhishu-ui-table-toolbar-panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  display: grid;
+  width: min(230px, calc(100vw - 28px));
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-floating);
+  background: var(--zhishu-editor-surface);
+  box-shadow: var(--zhishu-editor-floating-shadow);
+}
+
+.zhishu-ui-table-toolbar-panel button {
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: transparent;
+  color: var(--zhishu-editor-text);
+  cursor: pointer;
+  font:
+    500 0.78rem/1.35 system-ui,
+    sans-serif;
+  text-align: left;
+}
+
+.zhishu-ui-table-toolbar-panel button:hover:not(:disabled) {
+  border-color: var(--zhishu-editor-border);
+  background: var(--zhishu-editor-hover);
+}
+
+.zhishu-ui-table-toolbar-panel button:disabled {
+  color: var(--zhishu-editor-muted);
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.zhishu-ui-table-toolbar-feedback {
+  margin: 4px 8px 2px;
+  color: var(--zhishu-editor-success);
+  font:
+    500 0.74rem/1.4 system-ui,
+    sans-serif;
+}
+
+.zhishu-ui-table-toolbar :is(summary, button):focus-visible {
+  outline: 2px solid var(--zhishu-editor-focus);
+  outline-offset: 2px;
+}
+
+.zhishu-ui-toolbar {
+  min-height: 34px;
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 0;
+  padding: 0;
+  border: 0;
+}
+
+.zhishu-ui-toolbar-group {
+  display: inline-flex;
+  max-width: 100%;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+}
+
+.zhishu-ui-toolbar-history {
+  margin-right: 2px;
+  padding-right: 8px;
+  border-right: 1px solid var(--zhishu-editor-border);
+}
+
+.zhishu-ui-toolbar-menu {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+.zhishu-ui-toolbar-menu > summary {
+  display: inline-flex;
+  min-height: 34px;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: var(--zhishu-editor-radius-compact);
+  color: var(--zhishu-editor-muted);
+  cursor: pointer;
+  font-size: 0.78rem;
+  line-height: 1;
+  list-style: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.zhishu-ui-toolbar-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.zhishu-ui-toolbar-menu > summary:hover,
+.zhishu-ui-toolbar-menu[open] > summary {
+  border-color: var(--zhishu-editor-border);
+  background: var(--zhishu-editor-hover);
+  color: var(--zhishu-editor-text);
+}
+
+.zhishu-ui-toolbar-menu > summary[aria-pressed="true"],
+.zhishu-ui-toolbar-menu > summary[aria-pressed="mixed"] {
+  border-color: color-mix(in srgb, var(--zhishu-editor-accent) 20%, var(--zhishu-editor-border));
+  background: var(--zhishu-editor-accent-soft);
+  color: var(--zhishu-editor-accent);
+}
+
+.zhishu-ui-toolbar-menu > summary > svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.zhishu-ui-toolbar-menu > summary > .zhishu-ui-toolbar-menu-chevron {
+  width: 13px;
+  height: 13px;
+  color: var(--zhishu-editor-muted);
+}
+
+.zhishu-ui-toolbar-menu-panel {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 6px);
+  left: 0;
+  display: grid;
+  min-width: 190px;
+  max-width: min(280px, calc(100vw - 28px));
+  gap: 6px;
+  padding: 7px;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-floating);
+  background: var(--zhishu-editor-surface);
+  box-shadow: var(--zhishu-editor-floating-shadow);
+}
+
+.zhishu-ui-toolbar-menu.is-ai-menu > .zhishu-ui-toolbar-menu-panel {
+  right: 0;
+  left: auto;
+}
+
+.zhishu-ui-toolbar-menu.is-highlight-menu > .zhishu-ui-toolbar-menu-panel,
+.zhishu-ui-toolbar-menu.is-insert-menu > .zhishu-ui-toolbar-menu-panel {
+  right: 0;
+  left: auto;
+}
+
+.zhishu-ui-toolbar-menu.is-ai-menu > summary {
+  border-color: color-mix(in srgb, var(--zhishu-editor-accent) 14%, transparent);
+  background: var(--zhishu-editor-accent-soft);
+  color: var(--zhishu-editor-accent);
+}
+
+.zhishu-ui-toolbar-menu-section {
+  display: grid;
+  gap: 2px;
+}
+
+.zhishu-ui-toolbar .zhishu-ui-toolbar-menu-item {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  justify-content: flex-start;
+  gap: 9px;
+  padding-inline: 9px;
+  color: var(--zhishu-editor-text);
+  text-align: left;
+}
+
+.zhishu-ui-toolbar .zhishu-ui-toolbar-menu-item > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zhishu-ui-toolbar-menu-divider {
+  height: 1px;
+  margin: 1px 3px;
+  background: var(--zhishu-editor-border);
+}
+
+.zhishu-ui-toolbar-menu-heading {
+  margin: 2px 8px 0;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.035em;
+  line-height: 1.4;
+}
+
+.zhishu-ui-toolbar-menu-note {
+  max-width: 220px;
+  margin: 2px 4px;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.zhishu-ui-toolbar .zhishu-ui-toolbar-menu-item[data-highlight-color] {
+  position: relative;
+}
+
+.zhishu-ui-highlight-swatch {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--zhishu-editor-text) 12%, transparent);
+  border-radius: 4px;
+  background: var(--zhishu-highlight-swatch, #fde68a);
+}
+
+.zhishu-ui-toolbar-menu-item[data-highlight-color="yellow"] .zhishu-ui-highlight-swatch {
+  --zhishu-highlight-swatch: #fde68a;
+}
+
+.zhishu-ui-toolbar-menu-item[data-highlight-color="green"] .zhishu-ui-highlight-swatch {
+  --zhishu-highlight-swatch: #bbf7d0;
+}
+
+.zhishu-ui-toolbar-menu-item[data-highlight-color="blue"] .zhishu-ui-highlight-swatch {
+  --zhishu-highlight-swatch: #bfdbfe;
+}
+
+.zhishu-ui-toolbar-menu-item[data-highlight-color="pink"] .zhishu-ui-highlight-swatch {
+  --zhishu-highlight-swatch: #fbcfe8;
+}
+
+.zhishu-ui-toolbar-menu-item[data-highlight-color="purple"] .zhishu-ui-highlight-swatch {
+  --zhishu-highlight-swatch: #ddd6fe;
+}
+
+.zhishu-ui-toolbar-labeled-button {
+  gap: 6px;
+  padding-inline: 9px;
+}
+
+.zhishu-ui-toolbar-labeled-button > span {
+  font-size: 0.78rem;
+}
+
+.zhishu-ui-toolbar .zhishu-ui-toolbar-menu > summary:focus-visible,
+.zhishu-ui-toolbar .zhishu-ui-toolbar-menu-item:focus-visible {
+  outline: 2px solid var(--zhishu-editor-focus);
+  outline-offset: 1px;
+}
+
+.zhishu-ui-toolbar-select {
+  box-sizing: border-box;
+  max-width: 126px;
+  min-height: 34px;
+  padding: 0 24px 0 8px;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: var(--zhishu-editor-surface);
+  color: var(--zhishu-editor-text);
+  font: inherit;
+  font-size: 0.76rem;
+}
+
+.zhishu-ui-toolbar-select:disabled {
+  color: var(--zhishu-editor-muted);
+}
+
+.zhishu-ui-toolbar-group + .zhishu-ui-toolbar-group {
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--zhishu-editor-border);
+}
+
+.zhishu-ui-toolbar button.zhishu-ui-toolbar-button {
+  display: inline-flex;
+  min-width: 34px;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 7px;
+  border-color: transparent;
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: transparent;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.8rem;
+  line-height: 1;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.zhishu-ui-toolbar button.zhishu-ui-toolbar-button:hover:not(:disabled) {
+  border-color: var(--zhishu-editor-border);
+  background: var(--zhishu-editor-hover);
+  color: var(--zhishu-editor-text);
+}
+
+.zhishu-ui-toolbar button.zhishu-ui-toolbar-button[aria-pressed="true"],
+.zhishu-ui-toolbar button.zhishu-ui-toolbar-button[aria-pressed="mixed"] {
+  border-color: color-mix(in srgb, var(--zhishu-editor-accent) 20%, var(--zhishu-editor-border));
+  background: var(--zhishu-editor-accent-soft);
+  color: var(--zhishu-editor-accent);
+}
+
+.zhishu-ui-toolbar button.zhishu-ui-toolbar-button:disabled {
+  border-color: transparent;
+  background: transparent;
+  color: var(--zhishu-editor-muted);
+  opacity: 0.7;
+}
+
+.zhishu-ui-toolbar-button svg,
+.zhishu-ui-find-panel button svg,
+.zhishu-ui-link-trigger svg,
+.zhishu-ui-toolbar-status svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.zhishu-ui-toolbar-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.zhishu-ui-toolbar-status.is-error {
+  color: var(--zhishu-editor-danger);
+}
+
+.zhishu-ui-toolbar-status .is-spinning {
+  animation: zhishu-ui-spin 1s linear infinite;
+}
+
+.zhishu-ui-find-panel {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 3px 2px 9px;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-control);
+  background: var(--zhishu-editor-surface);
+}
+
+.zhishu-ui-find-panel > svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: var(--zhishu-editor-muted);
+}
+
+.zhishu-ui-find-panel[hidden] {
+  display: none;
+}
+
+.zhishu-ui-find-toggle {
+  box-sizing: border-box;
+  display: inline-flex;
+  width: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: var(--zhishu-editor-surface);
+  color: var(--zhishu-editor-muted);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.zhishu-ui-find-toggle:hover {
+  background: var(--zhishu-editor-hover);
+  color: var(--zhishu-editor-text);
+}
+
+.zhishu-ui-find-toggle[aria-expanded="true"] {
+  border-color: var(--zhishu-editor-accent);
+  background: var(--zhishu-editor-accent-soft);
+  color: var(--zhishu-editor-accent);
+}
+
+.zhishu-ui-find-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.zhishu-ui-find-panel input {
+  box-sizing: border-box;
+  width: clamp(112px, 17vw, 190px);
+  min-width: 84px;
+  min-height: 30px;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 0;
+  background: var(--zhishu-editor-surface);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  outline: 0;
+}
+
+.zhishu-ui-find-panel input:focus-visible {
+  outline: 0;
+}
+
+.zhishu-ui-find-panel input::placeholder {
+  color: var(--zhishu-editor-muted);
+}
+
+.zhishu-ui-find-panel button,
+.zhishu-ui-link-trigger {
+  box-sizing: border-box;
+  display: inline-flex;
+  min-width: 30px;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: transparent;
+  color: var(--zhishu-editor-muted);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.zhishu-ui-find-panel button:hover:not(:disabled),
+.zhishu-ui-link-trigger:hover:not(:disabled) {
+  background: var(--zhishu-editor-hover);
+  color: var(--zhishu-editor-text);
+}
+
+.zhishu-ui-find-panel button:disabled {
+  color: var(--zhishu-editor-muted);
+}
+
+.zhishu-ui-find-panel [role="status"] {
+  padding: 0 5px;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.zhishu-ui-link-editor {
+  display: contents;
+}
+
+.zhishu-ui-link-trigger {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+}
+
+.zhishu-ui-link-trigger[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--zhishu-editor-accent) 20%, var(--zhishu-editor-border));
+  background: var(--zhishu-editor-accent-soft);
+  color: var(--zhishu-editor-accent);
+}
+
+.zhishu-ui-body {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 360px;
+  flex: 1 1 auto;
+  background: var(--zhishu-editor-canvas);
+}
+
+.zhishu-ui-with-outline {
+  align-items: stretch;
+}
+
+.zhishu-ui-outline {
+  box-sizing: border-box;
+  flex: 0 0 var(--zhishu-editor-outline-width);
+  overflow: auto;
+  padding: 20px 12px;
+  border-right: 1px solid var(--zhishu-editor-border);
+  background: var(--zhishu-editor-surface);
+}
+
+.zhishu-ui-outline h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 12px;
+  padding: 0 7px;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.045em;
+}
+
+.zhishu-ui-outline h2 svg {
+  width: 15px;
+  height: 15px;
+  color: var(--zhishu-editor-muted);
+}
+
+.zhishu-ui-outline ol {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.zhishu-ui-outline li {
+  min-width: 0;
+}
+
+.zhishu-ui-outline li[data-level="2"] {
+  padding-left: 10px;
+}
+
+.zhishu-ui-outline li[data-level="3"],
+.zhishu-ui-outline li[data-level="4"],
+.zhishu-ui-outline li[data-level="5"],
+.zhishu-ui-outline li[data-level="6"] {
+  padding-left: 20px;
+}
+
+.zhishu-ui-outline button {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 8px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: var(--zhishu-editor-surface);
+  color: var(--zhishu-editor-muted);
+  font: inherit;
+  font-size: 0.79rem;
+  line-height: 1.4;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.zhishu-ui-outline button:hover {
+  background: var(--zhishu-editor-hover);
+  color: var(--zhishu-editor-text);
+}
+
+.zhishu-ui-outline button[aria-current="location"] {
+  background: var(--zhishu-editor-accent-soft);
+  color: var(--zhishu-editor-accent);
+  font-weight: 550;
+}
+
+.zhishu-ui-outline p {
+  margin: 0;
+  padding: 3px 7px;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.zhishu-ui-surface {
+  box-sizing: border-box;
+  min-width: 0;
+  flex: 1;
+  padding: 0;
+  background: var(--zhishu-editor-canvas);
+}
+
+.zhishu-ui-surface .ProseMirror {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--zhishu-ui-content-max-width, 896px);
+  min-height: 360px;
+  margin: 0 auto;
+  padding: 30px clamp(22px, 5vw, 68px) 56px;
+  background: var(--zhishu-editor-surface);
+  color: var(--zhishu-editor-text);
+  font-size: 16px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.zhishu-ui-surface .ProseMirror:focus {
+  outline: 0;
+}
+
+.zhishu-ui-surface .ProseMirror > *:first-child {
+  margin-top: 0;
+}
+
+.zhishu-ui-surface .ProseMirror p {
+  margin: 0.7em 0;
+}
+
+.zhishu-ui-surface .ProseMirror .is-empty::before {
+  float: left;
+  height: 0;
+  color: var(--zhishu-editor-muted);
+  content: attr(data-placeholder);
+  pointer-events: none;
+}
+
+.zhishu-ui-surface .ProseMirror h1,
+.zhishu-ui-surface .ProseMirror h2,
+.zhishu-ui-surface .ProseMirror h3,
+.zhishu-ui-surface .ProseMirror h4,
+.zhishu-ui-surface .ProseMirror h5,
+.zhishu-ui-surface .ProseMirror h6 {
+  margin: 1.45em 0 0.55em;
+  color: var(--zhishu-editor-text);
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.025em;
+}
+
+.zhishu-ui-surface .ProseMirror h1 {
+  font-size: 1.85rem;
+}
+
+.zhishu-ui-surface .ProseMirror h2 {
+  font-size: 1.5rem;
+}
+
+.zhishu-ui-surface .ProseMirror h3 {
+  font-size: 1.22rem;
+}
+
+.zhishu-ui-surface .ProseMirror h4,
+.zhishu-ui-surface .ProseMirror h5,
+.zhishu-ui-surface .ProseMirror h6 {
+  font-size: 1.05rem;
+}
+
+.zhishu-ui-surface .ProseMirror a {
+  color: var(--zhishu-editor-accent);
+  text-decoration-color: color-mix(
+    in srgb,
+    var(--zhishu-editor-success) 18%,
+    var(--zhishu-editor-surface)
+  );
+  text-underline-offset: 3px;
+}
+
+.zhishu-ui-surface .ProseMirror blockquote {
+  margin: 1rem 0;
+  padding: 0.2rem 0 0.2rem 1rem;
+  border-left: 3px solid
+    color-mix(in srgb, var(--zhishu-editor-success) 28%, var(--zhishu-editor-border));
+  color: var(--zhishu-editor-muted);
+}
+
+.zhishu-ui-surface .ProseMirror ul,
+.zhishu-ui-surface .ProseMirror ol {
+  padding-inline-start: 1.5rem;
+}
+
+.zhishu-ui-surface .ProseMirror code {
+  padding: 0.14em 0.36em;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: var(--zhishu-editor-hover);
+  color: var(--zhishu-editor-muted);
+  font-size: 0.87em;
+}
+
+.zhishu-ui-surface .ProseMirror mark[data-highlight-color="yellow"] {
+  background: color-mix(in srgb, #facc15 48%, transparent);
+}
+
+.zhishu-ui-surface .ProseMirror mark[data-highlight-color="green"] {
+  background: color-mix(in srgb, #4ade80 40%, transparent);
+}
+
+.zhishu-ui-surface .ProseMirror mark[data-highlight-color="blue"] {
+  background: color-mix(in srgb, #60a5fa 40%, transparent);
+}
+
+.zhishu-ui-surface .ProseMirror mark[data-highlight-color="pink"] {
+  background: color-mix(in srgb, #f472b6 38%, transparent);
+}
+
+.zhishu-ui-surface .ProseMirror mark[data-highlight-color="purple"] {
+  background: color-mix(in srgb, #a78bfa 40%, transparent);
+}
+
+.zhishu-ui-surface .ProseMirror pre {
+  padding: 14px 16px;
+  overflow: auto;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-control);
+  background: var(--zhishu-editor-surface);
+  line-height: 1.65;
+}
+
+.zhishu-ui-surface .ProseMirror pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.zhishu-ui-surface .ProseMirror .zhishu-ui-code-block {
+  overflow: hidden;
+  margin: 1rem 0;
+  border: 1px solid var(--zhishu-editor-code-border);
+  border-radius: var(--zhishu-editor-radius-control);
+  background: var(--zhishu-editor-code-background);
+  color: var(--zhishu-editor-code-text);
+}
+
+.zhishu-ui-surface .ProseMirror .zhishu-ui-code-block[data-selected="true"] {
+  outline: 2px solid var(--zhishu-editor-accent);
+  outline-offset: 2px;
+}
+
+.zhishu-ui-code-block-header {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 10px 4px 14px;
+  border-bottom: 1px solid var(--zhishu-editor-code-border);
+  background: var(--zhishu-editor-code-header);
+  color: #cbd5e1;
+  font: 500 0.75rem/1.4 var(--zhishu-ui-font-mono, ui-monospace, monospace);
+}
+
+.zhishu-ui-code-block-copy {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--zhishu-editor-code-border);
+  border-radius: 6px;
+  background: var(--zhishu-editor-code-header);
+  color: var(--zhishu-editor-code-text);
+  cursor: pointer;
+  font: 500 0.75rem/1 var(--zhishu-ui-font-sans, system-ui, sans-serif);
+}
+
+.zhishu-ui-code-block-copy:hover {
+  background: var(--zhishu-editor-code-border);
+}
+
+.zhishu-ui-surface .ProseMirror pre.zhishu-ui-code-block-pre {
+  max-width: 100%;
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  line-height: 1.65;
+  tab-size: 2;
+}
+
+.zhishu-ui-surface .ProseMirror .zhishu-ui-code-block-content {
+  display: block;
+  min-width: max-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: 0.86rem/1.65 var(--zhishu-ui-font-mono, ui-monospace, monospace);
+}
+
+.zhishu-ui-code-block-content .hljs-comment,
+.zhishu-ui-code-block-content .hljs-quote,
+.zhishu-ui-code-block-content .hljs-meta {
+  color: var(--zhishu-editor-code-muted);
+  font-style: italic;
+}
+
+.zhishu-ui-code-block-content .hljs-keyword,
+.zhishu-ui-code-block-content .hljs-selector-tag,
+.zhishu-ui-code-block-content .hljs-literal,
+.zhishu-ui-code-block-content .hljs-section {
+  color: var(--zhishu-editor-code-keyword);
+}
+
+.zhishu-ui-code-block-content .hljs-string,
+.zhishu-ui-code-block-content .hljs-attribute,
+.zhishu-ui-code-block-content .hljs-attr,
+.zhishu-ui-code-block-content .hljs-template-tag,
+.zhishu-ui-code-block-content .hljs-addition {
+  color: var(--zhishu-editor-code-string);
+}
+
+.zhishu-ui-code-block-content .hljs-number,
+.zhishu-ui-code-block-content .hljs-regexp,
+.zhishu-ui-code-block-content .hljs-bullet {
+  color: var(--zhishu-editor-code-number);
+}
+
+.zhishu-ui-code-block-content .hljs-title,
+.zhishu-ui-code-block-content .hljs-name,
+.zhishu-ui-code-block-content .hljs-type,
+.zhishu-ui-code-block-content .hljs-built_in {
+  color: var(--zhishu-editor-code-title);
+}
+
+.zhishu-ui-code-block-content .hljs-variable,
+.zhishu-ui-code-block-content .hljs-symbol,
+.zhishu-ui-code-block-content .hljs-link {
+  color: var(--zhishu-editor-code-variable);
+}
+
+.zhishu-ui-code-block-content .hljs-deletion {
+  color: var(--zhishu-editor-code-deletion);
+}
+
+.zhishu-ui-code-block-copy:focus-visible {
+  outline: 2px solid #a5b4fc;
+  outline-offset: 2px;
+}
+
+.zhishu-ui-surface .ProseMirror hr {
+  margin: 1.7rem 0;
+  border: 0;
+  border-top: 1px solid var(--zhishu-editor-border-subtle);
+}
+
+.zhishu-ui-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-height: 52px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--zhishu-editor-border);
+  background: var(--zhishu-editor-surface);
+}
+
+.zhishu-ui-stats-footer {
+  display: flex;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 32px;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.76rem;
+}
+
+.zhishu-ui-statistics {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.zhishu-ui-statistics strong {
+  display: inline-block;
+  min-width: 6ch;
+  color: var(--zhishu-editor-text);
+  font-weight: 600;
+  text-align: right;
+}
+
+.zhishu-ui-statistics > span:last-child strong {
+  min-width: 3ch;
+}
+
+.zhishu-ui-keyboard-help {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.zhishu-ui-keyboard-help summary {
+  min-height: 32px;
+  padding: 6px 8px;
+  border-radius: var(--zhishu-editor-radius-control);
+  cursor: pointer;
+  list-style: none;
+}
+
+.zhishu-ui-keyboard-help summary::-webkit-details-marker {
+  display: none;
+}
+
+.zhishu-ui-keyboard-help summary::after {
+  padding-left: 5px;
+  content: "⌄";
+}
+
+.zhishu-ui-keyboard-help[open] summary::after {
+  content: "⌃";
+}
+
+.zhishu-ui-keyboard-help summary:hover,
+.zhishu-ui-keyboard-help summary:focus-visible {
+  background: var(--zhishu-editor-hover);
+  outline: 2px solid var(--zhishu-editor-focus);
+  outline-offset: 1px;
+}
+
+.zhishu-ui-keyboard-help-popover {
+  position: absolute;
+  z-index: 30;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: min(280px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border: 1px solid var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-floating);
+  background: var(--zhishu-editor-surface);
+  box-shadow: var(--zhishu-editor-shadow);
+  color: var(--zhishu-editor-text);
+}
+
+.zhishu-ui-keyboard-help-popover p {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 0;
+  padding: 4px 0;
+}
+
+.zhishu-ui-keyboard-help-popover kbd {
+  font-family: var(--zhishu-editor-font-mono);
+  font-size: 0.72rem;
+}
+
+.zhishu-ui-history-label {
+  padding: 4px 8px;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.78rem;
+}
+
+.zhishu-ui-footer > .zhishu-ui-savebar {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--zhishu-editor-border-subtle);
+}
+
+.zhishu-ui-savebar {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.zhishu-ui-save-state {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.78rem;
+}
+
+.zhishu-ui-save-state svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.zhishu-ui-save-state[data-state="saved"] svg {
+  color: var(--zhishu-editor-success);
+}
+
+.zhishu-ui-save-state[data-state="dirty"] svg,
+.zhishu-ui-save-state[data-state="saving"] svg {
+  color: var(--zhishu-editor-warning);
+}
+
+.zhishu-ui-save-state[data-state="readonly"] svg {
+  color: var(--zhishu-editor-muted);
+}
+
+.zhishu-ui-save-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.zhishu-ui-save-actions button {
+  height: 32px;
+}
+
+.zhishu-ui-save-error {
+  width: 100%;
+  margin: 0;
+  color: var(--zhishu-editor-danger);
+  font-size: 0.78rem;
+}
+
+.zhishu-ui-block-handle {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--zhishu-editor-radius-control);
+  color: var(--zhishu-editor-muted);
+  box-shadow: var(--zhishu-editor-shadow);
+}
+
+.zhishu-ui-block-handle svg {
+  width: 17px;
+  height: 17px;
+}
+
+.zhishu-ui-block-menu,
+.zhishu-ui-slash-menu,
+.zhishu-ui-selection-menu,
+.zhishu-ui-link-dialog {
+  border-color: var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-floating);
+  box-shadow: var(--zhishu-editor-floating-shadow);
+}
+
+.zhishu-ui-block-menu button,
+.zhishu-ui-slash-menu button {
+  min-height: 38px;
+  border-radius: var(--zhishu-editor-radius-compact);
+  font-size: 0.86rem;
+}
+
+.zhishu-ui-image-alt-editor {
+  gap: 7px;
+  padding: 9px 14px;
+  border-color: var(--zhishu-editor-border);
+  background: var(--zhishu-editor-surface);
+}
+
+.zhishu-ui-image-alt-editor textarea,
+.zhishu-ui-image-alt-editor input,
+.zhishu-ui-image-alt-editor button,
+.zhishu-ui-code-language-selector select {
+  min-height: 36px;
+  border-color: var(--zhishu-editor-border);
+  border-radius: var(--zhishu-editor-radius-compact);
+  font-size: 0.82rem;
+}
+
+.zhishu-ui-code-language-selector {
+  padding: 0 20px 12px;
+  font-size: 0.78rem;
+}
+
+.zhishu-ui-shell :is(button, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--zhishu-editor-focus);
+  outline-offset: 2px;
+}
+
+.zhishu-ui-toolbar button.zhishu-ui-toolbar-button:focus-visible,
+.zhishu-ui-find-panel button:focus-visible,
+.zhishu-ui-outline-toggle:focus-visible,
+.zhishu-ui-link-trigger:focus-visible {
+  outline-offset: 1px;
+}
+
+@keyframes zhishu-ui-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  .zhishu-ui-header {
+    gap: 6px 9px;
+    padding: 8px 11px;
+  }
+
+  .zhishu-ui-toolbar-row {
+    gap: 6px;
+    padding: 8px 9px;
+  }
+
+  .zhishu-ui-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .zhishu-ui-find-panel {
+    flex: 1 1 210px;
+    max-width: 100%;
+  }
+
+  .zhishu-ui-find-panel input {
+    width: auto;
+    flex: 1 1 auto;
+  }
+
+  .zhishu-ui-outline {
+    max-height: 34vh;
+    flex-basis: auto;
+    padding: 12px 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--zhishu-editor-border);
+  }
+
+  .zhishu-ui-outline.is-end {
+    order: -1;
+    border-left: 0;
+  }
+
   .zhishu-ui-outline-toggle {
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
+  }
+
+  .zhishu-ui-code-language-selector {
+    padding-inline: 16px;
+  }
+
+  .zhishu-ui-code-block-copy {
+    min-height: 44px;
+    padding-inline: 10px;
   }
 
   .zhishu-ui-body.zhishu-ui-with-outline {
     flex-direction: column;
   }
 
-  .zhishu-ui-outline {
-    max-height: 35vh;
-    flex: none;
-    border-right: 0;
-    border-bottom: 1px solid var(--zhishu-ui-border, #d8dee8);
+  .zhishu-ui-surface .ProseMirror {
+    min-height: 300px;
+    padding: 23px 20px 40px;
   }
 
-  .zhishu-ui-surface {
-    padding: 16px;
+  .zhishu-ui-footer {
+    padding: 8px 10px;
+  }
+
+  .zhishu-ui-stats-footer {
+    align-items: flex-start;
+  }
+
+  .zhishu-ui-statistics {
+    gap: 4px 12px;
+  }
+}
+
+@media (max-width: 420px) {
+  .zhishu-ui-shell {
+    min-height: 0;
+    border-radius: var(--zhishu-editor-radius-floating);
+  }
+
+  .zhishu-ui-header {
+    align-items: flex-start;
+  }
+
+  .zhishu-collaboration-indicator {
+    flex-basis: 100%;
+    order: 3;
+    gap: 2px 10px;
+  }
+
+  .zhishu-ui-collaboration-status {
+    margin-left: 0;
+  }
+
+  .zhishu-ui-outline-toggle {
+    margin-left: auto;
+  }
+
+  .zhishu-ui-toolbar-group + .zhishu-ui-toolbar-group {
+    margin-left: 4px;
+    padding-left: 4px;
+  }
+
+  .zhishu-ui-toolbar button.zhishu-ui-toolbar-button {
+    min-width: 32px;
+    padding-inline: 5px;
+  }
+
+  .zhishu-ui-toolbar button[data-action="image"] {
+    width: auto;
+    min-width: 44px;
+    overflow: visible;
+    padding: 0 7px;
+    white-space: nowrap;
+  }
+
+  .zhishu-ui-toolbar-status {
+    max-width: 100%;
+    margin-left: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .zhishu-ui-savebar {
+    align-items: flex-start;
+  }
+
+  .zhishu-ui-save-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (pointer: coarse) {
+  .zhishu-collaboration-participants > summary {
+    min-height: 44px;
+  }
+
+  .zhishu-collaboration-indicator > summary {
+    min-height: 44px;
+  }
+
+  .zhishu-ui-toolbar button.zhishu-ui-toolbar-button,
+  .zhishu-ui-find-panel button,
+  .zhishu-ui-outline button,
+  .zhishu-ui-table-toolbar > summary,
+  .zhishu-ui-table-toolbar-panel button,
+  .zhishu-ui-link-trigger,
+  .zhishu-ui-outline-toggle {
+    min-height: 40px;
+  }
+
+  .zhishu-ui-shell :is(button, input, textarea, select),
+  .zhishu-ui-shell .zhishu-ui-toolbar button.zhishu-ui-toolbar-button,
+  .zhishu-ui-shell .zhishu-ui-outline button {
+    min-height: max(var(--zhishu-editor-control-height), 44px);
+  }
+
+  .zhishu-ui-shell .zhishu-ui-toolbar button.zhishu-ui-toolbar-button {
+    min-width: 44px;
+  }
+  .zhishu-ui-shell button {
+    min-width: 44px;
+  }
+}
+
+.zhishu-ui-shell.is-compact {
+  min-height: 0;
+  border-radius: calc(var(--zhishu-editor-radius) * 0.8);
+}
+
+.zhishu-ui-shell.is-compact .zhishu-ui-surface .ProseMirror {
+  min-height: 280px;
+  padding-block: 20px 36px;
+}
+
+.zhishu-ui-outline.is-end {
+  border-right: 0;
+  border-left: 1px solid var(--zhishu-editor-border);
+}
+
+.zhishu-ui-outline.is-floating {
+  position: absolute;
+  z-index: 15;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(var(--zhishu-editor-outline-width), calc(100vw - 24px));
+  max-height: 100%;
+  flex: none;
+  border-right: 1px solid var(--zhishu-editor-border);
+  background: var(--zhishu-editor-surface);
+  box-shadow: var(--zhishu-editor-floating-shadow);
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    visibility 140ms ease;
+}
+
+.zhishu-ui-outline.is-floating.is-collapsed {
+  display: block;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-8px);
+}
+
+.zhishu-ui-outline.is-floating.is-end {
+  right: 0;
+  left: auto;
+  border-right: 0;
+  border-left: 1px solid var(--zhishu-editor-border);
+  transform: translateX(0);
+}
+
+.zhishu-ui-outline.is-floating.is-end.is-collapsed {
+  transform: translateX(8px);
+}
+
+.zhishu-ui-toolbar .zhishu-ui-outline-toggle {
+  display: inline-flex;
+  min-width: 34px;
+  min-height: 34px;
+  margin: 0;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: var(--zhishu-editor-radius-compact);
+  background: transparent;
+  color: var(--zhishu-editor-muted);
+  cursor: pointer;
+}
+
+.zhishu-ui-toolbar .zhishu-ui-outline-toggle:hover {
+  border-color: var(--zhishu-editor-border);
+  background: var(--zhishu-editor-hover);
+  color: var(--zhishu-editor-text);
+}
+
+@media (max-width: 720px) {
+  .zhishu-ui-outline.is-floating {
+    width: min(320px, calc(100vw - 28px));
+  }
+
+  .zhishu-ui-toolbar-menu-panel {
+    max-height: 38vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+.zhishu-ui-toolbar-row.is-sticky {
+  position: sticky;
+  top: var(--zhishu-ui-toolbar-offset, 0px);
+  z-index: 20;
+}
+
+.zhishu-ui-shell.is-toolbar-sticky {
+  overflow: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zhishu-ui-shell,
+  .zhishu-ui-shell *,
+  .zhishu-ui-shell *::before,
+  .zhishu-ui-shell *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+.zhishu-task-celebration {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+  z-index: 30;
+}
+.zhishu-task-celebration i {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--zhishu-editor-accent);
+  animation: zhishu-task-burst 600ms ease-out forwards;
+}
+.zhishu-task-celebration i:nth-child(even) {
+  background: var(--zhishu-editor-success);
+}
+@keyframes zhishu-task-burst {
+  from {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--zhishu-task-dx), var(--zhishu-task-dy)) scale(0.3) rotate(100deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zhishu-task-celebration {
+    display: none;
   }
 }

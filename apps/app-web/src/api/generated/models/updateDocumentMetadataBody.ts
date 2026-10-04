@@ -4,13 +4,18 @@
  * Application API
  * OpenAPI spec version: 0.1.0
  */
+import type { UpdateDocumentMetadataBodyTagsItem } from './updateDocumentMetadataBodyTagsItem';
 
 export type UpdateDocumentMetadataBody = {
   /**
      * @minLength 1
      * @maxLength 200
      */
-  title: string;
+  title?: string;
+  /** @maxLength 32 */
+  icon?: string | null;
+  /** @maxItems 12 */
+  tags?: UpdateDocumentMetadataBodyTagsItem[];
   /**
      * @minimum 0
      * @exclusiveMinimum

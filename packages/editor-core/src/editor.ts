@@ -1,10 +1,16 @@
 import { Editor, getSchema } from "@tiptap/core";
 import type { Extensions, JSONContent } from "@tiptap/core";
 import { TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
+import { TableMap } from "@tiptap/pm/tables";
+import { closeHistory } from "@tiptap/pm/history";
 import {
   applyOperationBatch,
   createBlockId,
+  HIGHLIGHT_COLORS,
+  CALLOUT_THEMES,
+  DOCUMENT_STATUSES,
   normalizeDocumentContent,
+  TEXT_ALIGNMENTS,
   validateDocumentContent,
 } from "@zhishu/document-contracts";
 import type {
@@ -15,6 +21,7 @@ import type {
   DocumentOperation,
   OperationBatch,
 } from "@zhishu/document-contracts";
+import { createCodeBlockHighlightingExtension } from "./code-block-highlighting.js";
 import { createBaseEditorExtensions } from "./extensions.js";
 import type { BaseEditorExtensionsOptions } from "./extensions.js";
 import { findIndexedBlock, getIndexedHeadings } from "./index-plugin.js";
@@ -28,6 +35,21 @@ import {
 export const editorOriginMeta = "zhishu-origin";
 export const editorOperationMeta = "zhishu-operation-id";
 
+export type HighlightColor = (typeof HIGHLIGHT_COLORS)[number];
+export type TextAlignment = (typeof TEXT_ALIGNMENTS)[number];
+export type CalloutTheme = (typeof CALLOUT_THEMES)[number];
+export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number];
+export type EditorTableCommand =
+  | "addRowBefore"
+  | "addRowAfter"
+  | "deleteRow"
+  | "addColumnBefore"
+  | "addColumnAfter"
+  | "deleteColumn"
+  | "toggleHeaderRow"
+  | "mergeCells"
+  | "splitCell";
+
 type EditorAttributeSource =
   Record<string, string> | ((state: EditorState) => Record<string, string>) | undefined;
 
@@ -39,9 +61,18 @@ export interface EditorTransactionEvent {
 }
 
 export type EditorStructureAction =
-  | { type: "insert-image"; assetId: string; mediaType: string; alt: string }
+  | { type: "insert-image"; assetId: string; mediaType: string; alt: string; afterBlockId?: string }
+  | { type: "insert-pdf-attachment"; assetId: string; fileName: string; afterBlockId?: string }
+  | { type: "insert-table"; targetBlockId: string; expectedText: string }
+  | { type: "make-task-item"; targetBlockId: string }
+  | { type: "insert-nested-task-list"; parentBlockId: string }
   | { type: "duplicate-block"; targetBlockId: string }
   | { type: "delete-block"; targetBlockId: string }
+  | { type: "wrap-callout"; targetBlockIds: string[]; theme: CalloutTheme }
+  | { type: "set-callout-theme"; targetBlockId: string; theme: CalloutTheme }
+  | { type: "unwrap-callout"; targetBlockId: string }
+  | { type: "set-divider-label"; targetBlockId: string; label: string }
+  | { type: "make-divider"; targetBlockId: string; expectedText: string; label: string }
   | {
       type: "change-block-type";
       targetBlockId: string;
@@ -76,11 +107,17 @@ function resolveTransactionOrigin(transaction: Transaction): string | undefined 
 }
 
 export type EditorTransactionListener = (event: EditorTransactionEvent) => void;
-export type EditorCommand = "write" | "undo" | "redo" | "copy" | "block-structure";
+export type EditorCommand =
+  "write" | "undo" | "redo" | "copy" | "block-structure" | "table-structure";
 
 export interface EditorCapability {
   allowed: boolean;
-  reason?: "read-only" | "empty-history" | "destroyed" | "collaboration-structure-disabled";
+  reason?:
+    | "read-only"
+    | "empty-history"
+    | "destroyed"
+    | "collaboration-structure-disabled"
+    | "not-in-table";
 }
 
 export interface CreateEditorOptions {
@@ -90,6 +127,12 @@ export interface CreateEditorOptions {
   generationId?: string;
   editable?: boolean;
   readOnlyReason?: string;
+  placeholder?: BaseEditorExtensionsOptions["placeholder"];
+  codeBlockHighlighting?: boolean;
+  codeBlockNodeView?: BaseEditorExtensionsOptions["codeBlockNodeView"];
+  calloutNodeView?: BaseEditorExtensionsOptions["calloutNodeView"];
+  dividerNodeView?: BaseEditorExtensionsOptions["dividerNodeView"];
+  statusTagNodeView?: BaseEditorExtensionsOptions["statusTagNodeView"];
   extensions?: Extensions;
   onLinkClick?: (href: string) => void;
   onLimitExceeded?: (reason: EditorLimitExceededReason) => void;
@@ -288,11 +331,21 @@ export class EditorController {
         ? { mode: "disabled" as const, isRemoteTransaction: () => false }
         : undefined);
     const extensions = createBaseEditorExtensions({
-      additionalExtensions: options.extensions,
+      additionalExtensions: [
+        ...(options.extensions ?? []),
+        ...(options.codeBlockHighlighting === false
+          ? []
+          : [createCodeBlockHighlightingExtension()]),
+      ],
       onLinkClick: options.onLinkClick,
       onLimitExceeded: options.onLimitExceeded,
       collaborative: options.collaborative,
       collaborationStructure,
+      placeholder: options.placeholder,
+      codeBlockNodeView: options.codeBlockNodeView,
+      calloutNodeView: options.calloutNodeView,
+      dividerNodeView: options.dividerNodeView,
+      statusTagNodeView: options.statusTagNodeView,
     });
     const schema = getSchema(extensions);
     const initialContent = options.collaborative
@@ -400,7 +453,9 @@ export class EditorController {
     });
     if (!result.success) return result;
 
-    const nextNode = this.editor.schema.nodeFromJSON(result.content as JSONContent);
+    const persistedContent =
+      result.content.content.length > 0 ? result.content : createEmptyDocumentContent();
+    const nextNode = this.editor.schema.nodeFromJSON(persistedContent as JSONContent);
     nextNode.check();
     const transaction = this.editor.state.tr.replaceWith(
       0,
@@ -409,8 +464,18 @@ export class EditorController {
     );
     transaction.setMeta(editorOriginMeta, batch.origin);
     transaction.setMeta(editorOperationMeta, batch.operationId);
-    this.editor.view.dispatch(transaction);
-    return result;
+    this.editor.view.dispatch(closeHistory(transaction));
+    this.editor.view.dispatch(closeHistory(this.editor.state.tr));
+    return persistedContent === result.content
+      ? result
+      : {
+          ...result,
+          content: persistedContent,
+          createdBlockIds: [
+            ...result.createdBlockIds,
+            ...persistedContent.content.map((block) => block.attrs.blockId),
+          ],
+        };
   }
 
   /** Builds and validates the exact OperationBatch used for an async server-side structure action. */
@@ -424,7 +489,7 @@ export class EditorController {
 
     if (action.type === "insert-image") {
       const blocks = content.content as unknown as Array<{ attrs?: { blockId?: string } }>;
-      const lastBlockId = blocks.at(-1)?.attrs?.blockId;
+      const lastBlockId = action.afterBlockId ?? blocks.at(-1)?.attrs?.blockId;
       operations = [
         {
           type: "insert-block",
@@ -439,6 +504,271 @@ export class EditorController {
               alt: action.alt,
             },
           } as DocumentBlock,
+        },
+      ];
+    } else if (action.type === "insert-pdf-attachment") {
+      const blocks = content.content as unknown as Array<{ attrs?: { blockId?: string } }>;
+      const lastBlockId = action.afterBlockId ?? blocks.at(-1)?.attrs?.blockId;
+      operations = [
+        {
+          type: "insert-block",
+          parentBlockId: null,
+          ...(lastBlockId ? { afterBlockId: lastBlockId } : {}),
+          block: {
+            type: "pdfAttachment",
+            attrs: {
+              blockId: createBlockId(),
+              assetId: action.assetId,
+              mediaType: "application/pdf",
+              fileName: action.fileName.slice(0, 255),
+            },
+          } as DocumentBlock,
+        },
+      ];
+    } else if (action.type === "insert-table") {
+      const location = locateBlock(content, action.targetBlockId);
+      const paragraph = location?.block as unknown as Record<string, unknown> | undefined;
+      const paragraphContent = Array.isArray(paragraph?.content)
+        ? (paragraph.content as Array<Record<string, unknown>>)
+        : [];
+      const paragraphText =
+        paragraphContent.length > 0
+          ? paragraphContent
+              .map((node) => {
+                if (node.type === "text" && typeof node.text === "string") return node.text;
+                return "\uFFFC";
+              })
+              .join("")
+          : "";
+      if (
+        !location ||
+        location.block.type !== "paragraph" ||
+        paragraphText !== action.expectedText
+      ) {
+        return {
+          success: false,
+          result: operationFailure(
+            operationId,
+            location ? "invalid-operation" : "target-missing",
+            location
+              ? "A table can replace a paragraph containing only its slash command."
+              : "Target Block does not exist.",
+          ),
+        };
+      }
+      const rows = Array.from({ length: 3 }, (_, rowIndex) => ({
+        type: "tableRow",
+        content: Array.from({ length: 3 }, () => ({
+          type: rowIndex === 0 ? "tableHeader" : "tableCell",
+          content: [{ type: "paragraph", attrs: { blockId: createBlockId() } }],
+        })),
+      }));
+      operations = [
+        {
+          type: "replace-block",
+          targetBlockId: action.targetBlockId,
+          block: {
+            type: "table",
+            attrs: { blockId: action.targetBlockId },
+            content: rows,
+          } as unknown as DocumentBlock,
+        },
+      ];
+    } else if (action.type === "make-task-item") {
+      const location = locateBlock(content, action.targetBlockId);
+      if (!location || location.block.type !== "paragraph") {
+        return {
+          success: false,
+          result: operationFailure(
+            operationId,
+            location ? "invalid-operation" : "target-missing",
+            location ? "Only a paragraph can become a task item." : "Target Block does not exist.",
+          ),
+        };
+      }
+      const paragraph = location.block as unknown as Record<string, unknown>;
+      operations = [
+        {
+          type: "replace-block",
+          targetBlockId: action.targetBlockId,
+          block: {
+            type: "taskItem",
+            attrs: { blockId: action.targetBlockId, checked: false },
+            ...(Array.isArray(paragraph.content)
+              ? { content: structuredClone(paragraph.content) }
+              : {}),
+          } as DocumentBlock,
+        },
+      ];
+    } else if (action.type === "insert-nested-task-list") {
+      const location = locateBlock(content, action.parentBlockId);
+      if (!location || location.block.type !== "taskItem") {
+        return {
+          success: false,
+          result: operationFailure(
+            operationId,
+            location ? "invalid-operation" : "target-missing",
+            location
+              ? "A nested task list must be inserted into a task item."
+              : "Target task item does not exist.",
+          ),
+        };
+      }
+      const nestedItem: DocumentBlock = {
+        type: "taskItem",
+        attrs: { blockId: createBlockId(), checked: false },
+      };
+      const nestedList: DocumentBlock = {
+        type: "taskList",
+        attrs: { blockId: createBlockId() },
+        content: [nestedItem],
+      };
+      const nextSibling = location.siblings[location.index + 1] as
+        { type?: unknown; attrs?: { blockId?: unknown } } | undefined;
+      const parent = location.parentBlockId
+        ? locateBlock(content, location.parentBlockId)
+        : undefined;
+      if (parent?.block.type === "taskList" && nextSibling?.type === "taskList") {
+        const childListId = nextSibling.attrs?.blockId;
+        if (typeof childListId !== "string") {
+          return {
+            success: false,
+            result: operationFailure(
+              operationId,
+              "invalid-operation",
+              "Nested task lists must have a Block ID.",
+            ),
+          };
+        }
+        operations = [{ type: "insert-block", parentBlockId: childListId, block: nestedItem }];
+      } else if (parent?.block.type === "taskList") {
+        operations = [
+          {
+            type: "insert-block",
+            parentBlockId: location.parentBlockId,
+            afterBlockId: action.parentBlockId,
+            block: nestedList,
+          },
+        ];
+      } else {
+        operations = [
+          {
+            type: "wrap-block",
+            targetBlockId: action.parentBlockId,
+            wrapper: {
+              type: "taskList",
+              attrs: { blockId: createBlockId() },
+              content: [nestedList],
+            } as DocumentBlock,
+          },
+        ];
+      }
+    } else if (action.type === "wrap-callout") {
+      const locations = action.targetBlockIds.map((id) => locateBlock(content, id));
+      const first = locations[0];
+      if (
+        !first ||
+        !CALLOUT_THEMES.includes(action.theme) ||
+        locations.some(
+          (location, index) =>
+            !location ||
+            location.siblings !== first.siblings ||
+            location.index !== first.index + index ||
+            ["taskItem", "listItem"].includes(location.block.type),
+        )
+      ) {
+        return {
+          success: false,
+          result: operationFailure(
+            operationId,
+            "invalid-operation",
+            "Select adjacent blocks that can be wrapped in a callout.",
+          ),
+        };
+      }
+      const calloutId = createBlockId();
+      operations = [
+        {
+          type: "wrap-block",
+          targetBlockId: action.targetBlockIds[0]!,
+          wrapper: {
+            type: "callout",
+            attrs: { blockId: calloutId, theme: action.theme },
+            content: [],
+          },
+        },
+      ];
+      for (let index = 1; index < action.targetBlockIds.length; index++) {
+        operations.push({
+          type: "move-block",
+          targetBlockId: action.targetBlockIds[index]!,
+          parentBlockId: calloutId,
+          afterBlockId: action.targetBlockIds[index - 1]!,
+        });
+      }
+    } else if (action.type === "unwrap-callout") {
+      const location = locateBlock(content, action.targetBlockId);
+      if (!location || location.block.type !== "callout") {
+        return {
+          success: false,
+          result: operationFailure(operationId, "target-missing", "The callout no longer exists."),
+        };
+      }
+      operations = location.block.content.map((block) => ({
+        type: "move-block" as const,
+        targetBlockId: block.attrs.blockId,
+        parentBlockId: location.parentBlockId,
+        beforeBlockId: action.targetBlockId,
+      }));
+      operations.push({ type: "delete-block", targetBlockId: action.targetBlockId });
+    } else if (action.type === "set-callout-theme" || action.type === "set-divider-label") {
+      const location = locateBlock(content, action.targetBlockId);
+      const expectedType = action.type === "set-callout-theme" ? "callout" : "horizontalRule";
+      if (!location || location.block.type !== expectedType) {
+        return {
+          success: false,
+          result: operationFailure(
+            operationId,
+            "target-missing",
+            "The content block no longer exists.",
+          ),
+        };
+      }
+      const block = structuredClone(location.block);
+      block.attrs = {
+        ...block.attrs,
+        ...(action.type === "set-callout-theme"
+          ? { theme: action.theme }
+          : { label: action.label }),
+      };
+      operations = [{ type: "replace-block", targetBlockId: action.targetBlockId, block }];
+    } else if (action.type === "make-divider") {
+      const location = locateBlock(content, action.targetBlockId);
+      const nodes = location?.block.type === "paragraph" ? (location.block.content ?? []) : [];
+      const text = nodes.map((node) => (node.type === "text" ? node.text : "\uFFFC")).join("");
+      if (
+        !location ||
+        location.block.type !== "paragraph" ||
+        text !== action.expectedText ||
+        (text !== "" && !/^\/\S*$/u.test(text))
+      ) {
+        return {
+          success: false,
+          result: operationFailure(
+            operationId,
+            "invalid-operation",
+            "A divider can replace only an empty paragraph or its slash command.",
+          ),
+        };
+      }
+      operations = [
+        {
+          type: "replace-block",
+          targetBlockId: action.targetBlockId,
+          block: {
+            type: "horizontalRule",
+            attrs: { blockId: action.targetBlockId, label: action.label },
+          },
         },
       ];
     } else if (action.type === "duplicate-block") {
@@ -573,12 +903,25 @@ export class EditorController {
     }
 
     const batch = this.createOperationBatch(operationId, operations);
-    const result = applyOperationBatch(content, batch, {
+    let result = applyOperationBatch(content, batch, {
       documentId: this.documentId ?? batch.documentId,
       generationId: this.generationId,
       readOnly: !this.editor.isEditable,
       hashBlock: this.hashBlock,
     });
+    if (result.success && result.content.content.length === 0) {
+      batch.operations.push({
+        type: "insert-block",
+        parentBlockId: null,
+        block: { type: "paragraph", attrs: { blockId: createBlockId() } },
+      });
+      result = applyOperationBatch(content, batch, {
+        documentId: this.documentId ?? batch.documentId,
+        generationId: this.generationId,
+        readOnly: !this.editor.isEditable,
+        hashBlock: this.hashBlock,
+      });
+    }
     return result.success ? { success: true, batch, result } : { success: false, result };
   }
 
@@ -769,7 +1112,7 @@ export class EditorController {
 
   changeBlockType(
     targetBlockId: string,
-    type: "paragraph" | "heading" | "codeBlock",
+    type: "paragraph" | "heading" | "codeBlock" | "taskItem",
     options: { level?: number; language?: string } = {},
     operationId = makeOperationId(),
   ): ApplyOperationResult {
@@ -777,7 +1120,7 @@ export class EditorController {
     if (!location) {
       return operationFailure(operationId, "target-missing", "Target Block does not exist.");
     }
-    if (!["paragraph", "heading", "codeBlock"].includes(location.block.type)) {
+    if (!["paragraph", "heading", "codeBlock", "taskItem"].includes(location.block.type)) {
       return operationFailure(
         operationId,
         "invalid-operation",
@@ -804,6 +1147,25 @@ export class EditorController {
     if (type === "codeBlock") {
       const language = options.language ?? oldAttrs.language;
       if (typeof language === "string") attrs.language = language;
+    }
+    if (type === "taskItem") attrs.checked = false;
+    if (
+      location.block.type === "taskItem" &&
+      type !== "taskItem" &&
+      Array.isArray(oldNode.content) &&
+      oldNode.content.some(
+        (child) =>
+          typeof child === "object" &&
+          child !== null &&
+          "type" in child &&
+          child.type === "taskList",
+      )
+    ) {
+      return operationFailure(
+        operationId,
+        "invalid-operation",
+        "A task item with nested tasks cannot be converted to a text block.",
+      );
     }
     const converted: Record<string, unknown> = {
       type,
@@ -860,12 +1222,17 @@ export class EditorController {
   canExecute(command: EditorCommand): EditorCapability {
     if (this.destroyed) return { allowed: false, reason: "destroyed" };
     if (command === "copy") return { allowed: true };
+    if (!this.editor.isEditable) return { allowed: false, reason: "read-only" };
     if (command === "block-structure") {
       return this.collaborationStructureDisabled
         ? { allowed: false, reason: "collaboration-structure-disabled" }
         : { allowed: true };
     }
-    if (!this.editor.isEditable) return { allowed: false, reason: "read-only" };
+    if (command === "table-structure") {
+      return this.getTableDimensions()
+        ? { allowed: true }
+        : { allowed: false, reason: "not-in-table" };
+    }
     if (command === "undo")
       return this.editor.can().undo()
         ? { allowed: true }
@@ -875,6 +1242,39 @@ export class EditorController {
         ? { allowed: true }
         : { allowed: false, reason: "empty-history" };
     return { allowed: true };
+  }
+
+  getTableDimensions(): { rows: number; columns: number } | null {
+    const { $from } = this.editor.state.selection;
+    for (let depth = $from.depth; depth > 0; depth -= 1) {
+      const node = $from.node(depth);
+      if (node.type.name !== "table") continue;
+      const map = TableMap.get(node);
+      return { rows: map.height, columns: map.width };
+    }
+    return null;
+  }
+
+  canRunTableCommand(command: EditorTableCommand): boolean {
+    if (!this.canExecute("table-structure").allowed) return false;
+    const dimensions = this.getTableDimensions();
+    if (!dimensions) return false;
+    if ((command === "addRowBefore" || command === "addRowAfter") && dimensions.rows >= 100) {
+      return false;
+    }
+    if (
+      (command === "addColumnBefore" || command === "addColumnAfter") &&
+      dimensions.columns >= 20
+    ) {
+      return false;
+    }
+    return this.editor.can()[command]();
+  }
+
+  runTableCommand(command: EditorTableCommand): boolean {
+    if (!this.canRunTableCommand(command)) return false;
+    const chain = this.editor.chain().focus().setMeta(editorOriginMeta, "host-command");
+    return chain[command]().run();
   }
 
   toggleBold(): boolean {
@@ -896,6 +1296,122 @@ export class EditorController {
       this.canExecute("write").allowed &&
       this.editor.chain().focus().setMeta(editorOriginMeta, "host-command").toggleStrike().run()
     );
+  }
+
+  toggleUnderline(): boolean {
+    return (
+      this.canExecute("write").allowed &&
+      this.editor
+        .chain()
+        .focus()
+        .setMeta(editorOriginMeta, "host-command")
+        .toggleMark("underline")
+        .run()
+    );
+  }
+
+  setHighlightColor(color: HighlightColor): boolean {
+    return (
+      this.canExecute("write").allowed &&
+      HIGHLIGHT_COLORS.includes(color) &&
+      this.editor
+        .chain()
+        .focus()
+        .setMeta(editorOriginMeta, "host-command")
+        .setMark("highlight", { color })
+        .run()
+    );
+  }
+
+  unsetHighlight(): boolean {
+    return (
+      this.canExecute("write").allowed &&
+      this.editor
+        .chain()
+        .focus()
+        .setMeta(editorOriginMeta, "host-command")
+        .unsetMark("highlight")
+        .run()
+    );
+  }
+
+  setTextAlignment(alignment: TextAlignment): boolean {
+    return (
+      this.canExecute("write").allowed &&
+      TEXT_ALIGNMENTS.includes(alignment) &&
+      this.editor
+        .chain()
+        .focus()
+        .setMeta(editorOriginMeta, "host-command")
+        .updateAttributes("paragraph", { align: alignment })
+        .updateAttributes("heading", { align: alignment })
+        .run()
+    );
+  }
+
+  clearFormatting(): boolean {
+    if (!this.canExecute("write").allowed) return false;
+    return this.editor
+      .chain()
+      .focus()
+      .setMeta(editorOriginMeta, "host-command")
+      .unsetAllMarks()
+      .updateAttributes("paragraph", { align: null })
+      .updateAttributes("heading", { align: null })
+      .run();
+  }
+
+  setParagraph(): boolean {
+    return this.changeCurrentBlockType("paragraph");
+  }
+
+  setHeading(level: number): boolean {
+    if (!Number.isInteger(level) || level < 1 || level > 6) return false;
+    return this.changeCurrentBlockType("heading", { level });
+  }
+
+  toggleBulletList(): boolean {
+    return this.runBlockCommand((chain) => chain.toggleBulletList().run());
+  }
+
+  toggleOrderedList(): boolean {
+    return this.runBlockCommand((chain) => chain.toggleOrderedList().run());
+  }
+
+  toggleBlockquote(): boolean {
+    return this.runBlockCommand((chain) => chain.toggleBlockquote().run());
+  }
+
+  setCodeBlock(language?: string): boolean {
+    if (language !== undefined && !/^[A-Za-z0-9_+-]{1,32}$/.test(language)) return false;
+    return this.runBlockCommand((chain) =>
+      chain.setCodeBlock(language ? { language } : undefined).run(),
+    );
+  }
+
+  setHorizontalRule(): boolean {
+    return this.runBlockCommand((chain) => chain.setHorizontalRule().run());
+  }
+
+  makeTaskItem(targetBlockId?: string): boolean {
+    const blockId = targetBlockId ?? this.editor.state.selection.$from.parent.attrs.blockId;
+    if (typeof blockId !== "string" || !this.canExecute("block-structure").allowed) return false;
+    return this.applyStructureAction({ type: "make-task-item", targetBlockId: blockId });
+  }
+
+  insertNestedTaskList(parentBlockId?: string): boolean {
+    let blockId = parentBlockId;
+    if (!blockId) {
+      const { $from } = this.editor.state.selection;
+      for (let depth = $from.depth; depth > 0; depth -= 1) {
+        if ($from.node(depth).type.name !== "taskItem") continue;
+        const candidate = $from.node(depth).attrs.blockId;
+        if (typeof candidate === "string") blockId = candidate;
+        break;
+      }
+    }
+    if (!blockId || !this.canExecute("block-structure").allowed) return false;
+    return this.applyStructureAction({ type: "insert-nested-task-list", parentBlockId: blockId });
   }
 
   toggleCode(): boolean {
@@ -924,14 +1440,17 @@ export class EditorController {
     return findIndexedBlock(this.editor, id);
   }
 
-  focusBlock(id: string): boolean {
+  focusBlock(id: string, options: { scrollIntoView?: boolean } = {}): boolean {
     this.assertActive();
     const block = findIndexedBlock(this.editor, id);
     if (!block) return false;
     const position = Math.min(block.position + 1, this.editor.state.doc.content.size);
     const selection = TextSelection.near(this.editor.state.doc.resolve(position), 1);
-    this.editor.view.dispatch(this.editor.state.tr.setSelection(selection).scrollIntoView());
-    this.editor.commands.focus();
+    const scrollIntoView = options.scrollIntoView ?? true;
+    const transaction = this.editor.state.tr.setSelection(selection);
+    if (scrollIntoView) transaction.scrollIntoView();
+    this.editor.view.dispatch(transaction);
+    this.editor.commands.focus(undefined, { scrollIntoView });
     return true;
   }
 
@@ -942,25 +1461,31 @@ export class EditorController {
     const foldedQuery = caseSensitive ? query : query.toLowerCase();
     if (foldedQuery.length === 0) return [];
     const matches: EditorTextMatch[] = [];
+    let text = "";
+    const sourceStarts: number[] = [];
+    const sourceEnds: number[] = [];
+    const sourceBlockIds: string[] = [];
+    let previousTextBlockEnd: number | undefined;
+    let previousTextBlockId: string | undefined;
     this.editor.state.doc.descendants((node, position) => {
       if (!node.isTextblock) return true;
       const blockId = node.attrs.blockId;
       if (typeof blockId !== "string") return false;
 
-      let text = "";
-      const sourceStarts: number[] = [];
-      const sourceEnds: number[] = [];
+      let blockText = "";
+      const blockStarts: number[] = [];
+      const blockEnds: number[] = [];
       node.forEach((child, childOffset) => {
         const childPosition = position + 1 + childOffset;
         if (child.isText) {
           const value = child.text ?? "";
-          text += value;
+          blockText += value;
           let localOffset = 0;
           for (const character of value) {
             const nextOffset = localOffset + character.length;
             for (let index = localOffset; index < nextOffset; index += 1) {
-              sourceStarts.push(childPosition + localOffset);
-              sourceEnds.push(childPosition + nextOffset);
+              blockStarts.push(childPosition + localOffset);
+              blockEnds.push(childPosition + nextOffset);
             }
             localOffset = nextOffset;
           }
@@ -969,32 +1494,52 @@ export class EditorController {
 
         const value = child.type.name === "hardBreak" ? "\n" : child.isInline ? "\uFFFC" : "";
         if (value.length > 0) {
-          text += value;
-          sourceStarts.push(childPosition);
-          sourceEnds.push(childPosition + child.nodeSize);
+          blockText += value;
+          for (let index = 0; index < value.length; index += 1) {
+            blockStarts.push(childPosition);
+            blockEnds.push(childPosition + child.nodeSize);
+          }
         }
       });
-      if (text.length === 0 || foldedQuery.includes("\uFFFC")) return false;
+      if (previousTextBlockEnd !== undefined) {
+        text += "\n";
+        sourceStarts.push(previousTextBlockEnd);
+        sourceEnds.push(position + 1);
+        sourceBlockIds.push(previousTextBlockId ?? blockId);
+      }
+      text += blockText;
+      for (let index = 0; index < blockStarts.length; index += 1) {
+        sourceStarts.push(blockStarts[index]!);
+        sourceEnds.push(blockEnds[index]!);
+        sourceBlockIds.push(blockId);
+      }
+      previousTextBlockEnd = position + node.nodeSize - 1;
+      previousTextBlockId = blockId;
+      return false;
+    });
+    if (text.length === 0 || foldedQuery.includes("\uFFFC")) return matches;
 
-      const folded = caseSensitive ? { folded: text, starts: [], ends: [] } : foldWithOffsets(text);
-      let cursor = 0;
-      while (cursor <= folded.folded.length - foldedQuery.length) {
-        const index = folded.folded.indexOf(foldedQuery, cursor);
-        if (index < 0) break;
-        const localFrom = caseSensitive ? index : folded.starts[index];
-        const last = index + foldedQuery.length - 1;
-        const localToExclusive = caseSensitive ? index + foldedQuery.length : folded.ends[last];
-        const absoluteFrom = localFrom === undefined ? undefined : sourceStarts[localFrom];
-        const absoluteTo =
-          localToExclusive === undefined ? undefined : sourceEnds[localToExclusive - 1];
-        if (
-          localFrom !== undefined &&
-          localToExclusive !== undefined &&
-          absoluteFrom !== undefined &&
-          absoluteTo !== undefined
-        ) {
-          const excerptFrom = Math.max(0, localFrom - 24);
-          const excerptTo = Math.min(text.length, localToExclusive + 24);
+    const folded = caseSensitive ? { folded: text, starts: [], ends: [] } : foldWithOffsets(text);
+    let cursor = 0;
+    while (cursor <= folded.folded.length - foldedQuery.length) {
+      const index = folded.folded.indexOf(foldedQuery, cursor);
+      if (index < 0) break;
+      const localFrom = caseSensitive ? index : folded.starts[index];
+      const last = index + foldedQuery.length - 1;
+      const localToExclusive = caseSensitive ? index + foldedQuery.length : folded.ends[last];
+      const absoluteFrom = localFrom === undefined ? undefined : sourceStarts[localFrom];
+      const absoluteTo =
+        localToExclusive === undefined ? undefined : sourceEnds[localToExclusive - 1];
+      if (
+        localFrom !== undefined &&
+        localToExclusive !== undefined &&
+        absoluteFrom !== undefined &&
+        absoluteTo !== undefined
+      ) {
+        const excerptFrom = Math.max(0, localFrom - 24);
+        const excerptTo = Math.min(text.length, localToExclusive + 24);
+        const blockId = sourceBlockIds[localFrom];
+        if (blockId) {
           matches.push({
             blockId,
             from: absoluteFrom,
@@ -1002,10 +1547,9 @@ export class EditorController {
             excerpt: text.slice(excerptFrom, excerptTo).replaceAll("\uFFFC", "…"),
           });
         }
-        cursor = index + 1;
       }
-      return false;
-    });
+      cursor = index + 1;
+    }
     return matches;
   }
 
@@ -1104,6 +1648,94 @@ export class EditorController {
     const command =
       direction === "indent" ? chain.sinkListItem("listItem") : chain.liftListItem("listItem");
     return command.setMeta(editorOriginMeta, "host-command").run();
+  }
+
+  private changeCurrentBlockType(
+    blockType: "paragraph" | "heading" | "codeBlock",
+    options?: { level?: number },
+  ): boolean {
+    if (!this.canExecute("write").allowed || !this.canExecute("block-structure").allowed) {
+      return false;
+    }
+    const blockId = this.editor.state.selection.$from.parent.attrs.blockId;
+    if (typeof blockId !== "string") return false;
+    return this.applyStructureAction({
+      type: "change-block-type",
+      targetBlockId: blockId,
+      blockType,
+      ...(options ? { options } : {}),
+    });
+  }
+
+  private applyStructureAction(action: EditorStructureAction): boolean {
+    if (!this.canExecute("write").allowed || !this.canExecute("block-structure").allowed) {
+      return false;
+    }
+    const prepared = this.prepareStructureAction(action);
+    return prepared.success && this.applyOperations(prepared.batch).success;
+  }
+
+  getSelectedBlockIds(): string[] {
+    this.assertActive();
+    const { selection, doc } = this.editor.state;
+    if (selection.$from.parent === selection.$to.parent && selection.$from.parent.isTextblock) {
+      const id = selection.$from.parent.attrs.blockId;
+      return typeof id === "string" ? [id] : [];
+    }
+    const ids: string[] = [];
+    doc.nodesBetween(selection.from, selection.to, (node) => {
+      if (!node.isBlock || typeof node.attrs.blockId !== "string") return;
+      ids.push(node.attrs.blockId);
+      return false;
+    });
+    return ids;
+  }
+
+  wrapSelectionInCallout(theme: CalloutTheme = "info"): boolean {
+    return this.applyStructureAction({
+      type: "wrap-callout",
+      targetBlockIds: this.getSelectedBlockIds(),
+      theme,
+    });
+  }
+
+  insertStatusTag(status: DocumentStatus = "todo"): boolean {
+    if (
+      !this.canExecute("write").allowed ||
+      !DOCUMENT_STATUSES.includes(status) ||
+      !this.editor.state.selection.$from.parent.inlineContent ||
+      this.editor.state.selection.$from.parent.type.name === "codeBlock"
+    )
+      return false;
+    return this.editor
+      .chain()
+      .focus()
+      .insertContent({ type: "statusTag", attrs: { status } })
+      .setMeta(editorOriginMeta, "host-command")
+      .run();
+  }
+
+  updateStatusTag(
+    position: number,
+    expectedStatus: DocumentStatus,
+    status: DocumentStatus,
+  ): boolean {
+    if (!this.canExecute("write").allowed || !DOCUMENT_STATUSES.includes(status)) return false;
+    const node = this.editor.state.doc.nodeAt(position);
+    if (node?.type.name !== "statusTag" || node.attrs.status !== expectedStatus) return false;
+    this.editor.view.dispatch(
+      this.editor.state.tr
+        .setNodeMarkup(position, undefined, { status })
+        .setMeta(editorOriginMeta, "host-command"),
+    );
+    return this.editor.state.doc.nodeAt(position)?.attrs.status === status;
+  }
+
+  private runBlockCommand(run: (chain: ReturnType<Editor["chain"]>) => boolean): boolean {
+    if (!this.canExecute("write").allowed || !this.canExecute("block-structure").allowed) {
+      return false;
+    }
+    return run(this.editor.chain().focus().setMeta(editorOriginMeta, "host-command"));
   }
 
   private attachInputTracking(): void {

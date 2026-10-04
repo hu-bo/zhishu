@@ -13,6 +13,19 @@ function escapeLabel(value: string): string {
 export class OperationsMetrics {
   private readonly requests = new Map<string, RequestMetric>();
   private collaborationSessionTicketsIssued = 0;
+  private websocketConnections = 0;
+  private activeCollaborationSessions = 0;
+  private activeCollaborationRooms = 0;
+
+  setCollaborationState(input: {
+    websocketConnections: number;
+    activeSessions: number;
+    activeRooms: number;
+  }): void {
+    this.websocketConnections = input.websocketConnections;
+    this.activeCollaborationSessions = input.activeSessions;
+    this.activeCollaborationRooms = input.activeRooms;
+  }
 
   recordRequest(input: {
     method: string;
@@ -48,6 +61,12 @@ export class OperationsMetrics {
       "# TYPE zhishu_http_request_duration_seconds histogram",
       "# HELP zhishu_collaboration_session_tickets_issued_total Successful collaboration session tickets issued.",
       "# TYPE zhishu_collaboration_session_tickets_issued_total counter",
+      "# HELP zhishu_websocket_connections Active WebSocket TCP connections.",
+      "# TYPE zhishu_websocket_connections gauge",
+      "# HELP zhishu_collaboration_sessions Active authenticated collaboration sessions.",
+      "# TYPE zhishu_collaboration_sessions gauge",
+      "# HELP zhishu_collaboration_active_rooms Active collaboration rooms.",
+      "# TYPE zhishu_collaboration_active_rooms gauge",
     ];
     for (const [key, metric] of this.requests) {
       const [method, route, statusCode] = JSON.parse(key) as [string, string, number];
@@ -66,6 +85,9 @@ export class OperationsMetrics {
     }
     output.push(
       `zhishu_collaboration_session_tickets_issued_total ${this.collaborationSessionTicketsIssued}`,
+      `zhishu_websocket_connections ${this.websocketConnections}`,
+      `zhishu_collaboration_sessions ${this.activeCollaborationSessions}`,
+      `zhishu_collaboration_active_rooms ${this.activeCollaborationRooms}`,
     );
     return `${output.join("\n")}\n`;
   }

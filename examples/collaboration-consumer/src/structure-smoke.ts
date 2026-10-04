@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { setTimeout as delay } from "node:timers/promises";
 import { prosemirrorJSONToYXmlFragment, yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { createEditorSchema } from "@zhishu/editor-core";
+import { CURRENT_DOCUMENT_SCHEMA_VERSION, type DocumentBlock } from "@zhishu/document-contracts";
 import * as Y from "yjs";
 import type { CollaborationSessionInfo, OperationBatch } from "@zhishu/editor-collaboration";
 import { HocuspocusCollaborationSession } from "@zhishu/editor-collaboration/hocuspocus";
@@ -169,7 +170,7 @@ async function createSession(): Promise<CollaborationSessionInfo> {
     {
       method: "POST",
       headers: authorization,
-      body: JSON.stringify({ schemaVersion: 1, extensions: [] }),
+      body: JSON.stringify({ schemaVersion: CURRENT_DOCUMENT_SCHEMA_VERSION, extensions: [] }),
     },
   );
 }
@@ -353,10 +354,169 @@ try {
   assert.equal(retiredIdResult.status, "rejected");
   assert.equal(retiredIdResult.code, "retired-block-id-reused");
 
-  const expectedState = storedState(docs[0] as Y.Doc);
-  assert.equal(expectedState.revision, 6);
+  const calloutBatch: OperationBatch = {
+    operationId: "op_structure_callout",
+    documentId: document.id,
+    generationId: document.generationId,
+    origin: "user",
+    operations: [
+      {
+        type: "wrap-block",
+        targetBlockId: "block_alpha",
+        wrapper: {
+          type: "callout",
+          attrs: { blockId: "block_callout", theme: "info" },
+          content: [],
+        },
+      },
+    ],
+  };
+  assert.equal((await first.submitStructureOperation(calloutBatch, 6)).status, "accepted");
+  await waitUntil(
+    () => second.getStructureRevision() === 7,
+    "peer receives nested callout structure",
+  );
+  const calloutBlock = storedState(docs[0] as Y.Doc).content.content.find(
+    (block) => block.type === "callout",
+  );
+  assert.ok(calloutBlock);
+  const themedCallout = structuredClone(calloutBlock);
+  Object.assign(themedCallout.attrs, { theme: "success" });
+  assert.equal(
+    (
+      await second.submitStructureOperation(
+        {
+          operationId: "op_structure_callout_theme",
+          documentId: document.id,
+          generationId: document.generationId,
+          origin: "user",
+          operations: [
+            {
+              type: "replace-block",
+              targetBlockId: "block_callout",
+              block: themedCallout as DocumentBlock,
+            },
+          ],
+        },
+        7,
+      )
+    ).status,
+    "accepted",
+  );
+  await waitUntil(
+    () => first.getStructureRevision() === 8,
+    "callout theme durable acknowledgement",
+  );
+  const statusBody = yDocToProsemirrorJSON(docs[0] as Y.Doc, "content");
+  const statusCallout = (
+    statusBody.content as Array<{ type: string; content?: Array<{ content?: unknown[] }> }>
+  ).find((block) => block.type === "callout");
+  assert.ok(statusCallout?.content?.[0]);
+  statusCallout.content[0].content = [
+    ...(statusCallout.content[0].content ?? []),
+    { type: "statusTag", attrs: { status: "in-review" } },
+  ];
+  prosemirrorJSONToYXmlFragment(
+    createEditorSchema({ collaborative: true }),
+    statusBody,
+    (docs[0] as Y.Doc).getXmlFragment("content"),
+  );
+  await waitUntil(
+    () => first.getStructureRevision() === 9 && second.getStructureRevision() === 9,
+    "inline status persisted inside callout",
+  );
+  assert.equal(
+    (
+      await first.submitStructureOperation(
+        {
+          operationId: "op_structure_labeled_divider",
+          documentId: document.id,
+          generationId: document.generationId,
+          origin: "user",
+          operations: [
+            {
+              type: "insert-block",
+              parentBlockId: null,
+              block: {
+                type: "horizontalRule",
+                attrs: { blockId: "block_labeled_divider", label: "交付后的维护" },
+              },
+            },
+          ],
+        },
+        9,
+      )
+    ).status,
+    "accepted",
+  );
+  await waitUntil(() => second.getStructureRevision() === 10, "divider label persisted");
   assertBodyMatchesStructure(docs[0] as Y.Doc);
   assertBodyMatchesStructure(docs[1] as Y.Doc);
+  const versionDocument = await requestJson<{ generationId: string; durableSeq: number }>(
+    `/api/documents/${document.id}`,
+    { headers: authorization },
+  );
+  const extensionVersion = await requestJson<{ id: string }>(
+    `/api/documents/${document.id}/versions`,
+    {
+      method: "POST",
+      headers: authorization,
+      body: JSON.stringify({
+        mode: "collaborative",
+        name: "提示块与状态历史",
+        expectedGenerationId: versionDocument.generationId,
+        expectedDurableSeq: versionDocument.durableSeq,
+      }),
+    },
+  );
+  const historicalExtensions = await requestJson<{
+    schemaVersion: number;
+    content: { content: Array<{ type: string }> };
+  }>(`/api/documents/${document.id}/versions/${extensionVersion.id}/content`, {
+    headers: authorization,
+  });
+  assert.equal(historicalExtensions.schemaVersion, CURRENT_DOCUMENT_SCHEMA_VERSION);
+  assert.ok(historicalExtensions.content.content.some((block) => block.type === "callout"));
+  assert.equal(
+    (
+      await second.submitStructureOperation(
+        {
+          operationId: "op_structure_unwrap_callout",
+          documentId: document.id,
+          generationId: document.generationId,
+          origin: "user",
+          operations: [
+            {
+              type: "move-block",
+              targetBlockId: "block_alpha",
+              parentBlockId: null,
+              beforeBlockId: "block_callout",
+            },
+            { type: "delete-block", targetBlockId: "block_callout" },
+          ],
+        },
+        10,
+      )
+    ).status,
+    "accepted",
+  );
+  await waitUntil(
+    () => first.getStructureRevision() === 11,
+    "unwrap preserves child identity and inline status",
+  );
+
+  const expectedState = storedState(docs[0] as Y.Doc);
+  assert.equal(expectedState.revision, 11);
+  assertBodyMatchesStructure(docs[0] as Y.Doc);
+  assertBodyMatchesStructure(docs[1] as Y.Doc);
+  first.disconnect();
+  first.retry();
+  await waitForCurrent(first);
+  assert.deepEqual(
+    storedState(docs[0] as Y.Doc),
+    expectedState,
+    "reconnecting the same Y.Doc accepts known structure items and delete sets",
+  );
   assert.ok(expectedState.tombstones.includes("block_gamma"));
   assert.ok(expectedState.tombstones.includes("block_split_right"));
   assert.deepEqual(
@@ -373,7 +533,7 @@ try {
   await delay(150);
   const reopened = openSession(await createSession());
   await waitForCurrent(reopened);
-  assert.equal(reopened.getStructureRevision(), 6);
+  assert.equal(reopened.getStructureRevision(), 11);
   assert.deepEqual(storedState(docs[0] as Y.Doc), expectedState);
   assertBodyMatchesStructure(docs[0] as Y.Doc);
 
@@ -396,7 +556,11 @@ try {
       largeBlockMovedUnderFrameLimit: true,
       bodyAndStructureProjectionRoundtrip: true,
       structureRestoredAfterReconnect: true,
+      sameDocumentReconnectWithKnownStructureDeletes: true,
       directStructureWriteRejected: true,
+      calloutStatusDividerPersisted: true,
+      extensionHistoryReadable: true,
+      calloutUnwrapPreservesBlockIds: true,
     }),
   );
 } finally {

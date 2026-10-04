@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { prosemirrorJSONToYDoc, yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import * as Y from "yjs";
 import {
@@ -11,24 +11,34 @@ import {
   checkDocumentCompatibility,
   cloneContentWithFreshBlockIds,
   repairDuplicateBlockIds,
+  validateDocumentContent,
   type DocumentContent,
   type ContentMigrationExecutor,
+  type ContentMigrationReport,
+  type ContentMigrationStepSnapshot,
+  type ContentIssue,
   type ContentValidationResult,
 } from "@zhishu/document-contracts";
 import type { Principal } from "../identity/identity.types.js";
 import { createSessionTicket } from "../collaboration/session-ticket.js";
 import type {
   ActiveDocument,
+  DocumentIdempotency,
+  DocumentListItem,
   DocumentListView,
   DocumentRepository,
   DocumentVersion,
 } from "./document.repository.js";
 import type { DocumentPermissionAction } from "./document.permissions.js";
 import type {
+  CopyDocumentInput,
+  DocumentTag,
   CollaborationSessionInput,
   CreateDocumentInput,
   CreateDocumentVersionInput,
   RestoreDocumentVersionInput,
+  ImportDocumentInput,
+  PutDocumentContentInput,
 } from "./document.schema.js";
 import {
   emptyStructureState,
@@ -48,8 +58,42 @@ export type CollaborationSessionRevoker = {
   revokeDocumentSessions(documentId: string, generationId: string): void;
 };
 
+const collaborationPresenceColors = [
+  "#2563EB",
+  "#7C3AED",
+  "#BE123C",
+  "#0F766E",
+  "#B45309",
+  "#4D7C0F",
+] as const;
+
+function stableJsonStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJsonStringify(item)).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) =>
+      left < right ? -1 : left > right ? 1 : 0,
+    );
+    return `{${entries
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableJsonStringify(item)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+function migrationPersistence(stepSnapshots: readonly ContentMigrationStepSnapshot[]) {
+  return stepSnapshots.length > 0 ? { migrationId: randomUUID(), stepSnapshots } : undefined;
+}
+
+function collaborationPresenceColor(identityId: string): string {
+  const digest = createHash("sha256").update(identityId).digest();
+  return collaborationPresenceColors[digest[0]! % collaborationPresenceColors.length]!;
+}
+
 export type DocumentMigrationOptions = {
   targetSchemaVersion: number;
+  supportedSchemaVersions: readonly number[];
   execute: ContentMigrationExecutor;
   validateSource(content: unknown, schemaVersion: number): ContentValidationResult;
 };
@@ -65,11 +109,18 @@ export type DuplicateBlockIdRepairResult =
     }
   | { status: "conflict" };
 
-function presentDocument(document: ActiveDocument) {
+function presentDocument(document: ActiveDocument, identityId: string) {
   return {
     id: document.id,
     tenantId: document.tenantId,
     title: document.title,
+    workspaceId: document.workspaceId ?? "ws_default",
+    catalogId: document.catalogId ?? "",
+    position: document.position ?? 0,
+    icon: document.icon ?? null,
+    tags: document.tags ?? [],
+    createdBy: document.createdBy,
+    mode: document.mode ?? "collaborative",
     generationId: document.generationId,
     schemaVersion: document.schemaVersion,
     extensions: document.extensions,
@@ -77,18 +128,19 @@ function presentDocument(document: ActiveDocument) {
     createdAt: document.createdAt.toISOString(),
     updatedAt: document.updatedAt.toISOString(),
     metadataRevision: document.metadataRevision,
+    canManage: document.createdBy === identityId,
   };
 }
 
-function presentListItem(
-  document: ActiveDocument & { isFavorite: boolean; deletedAt: Date | null },
-  identityId: string,
-) {
+function presentListItem(document: DocumentListItem, identityId: string) {
   return {
-    ...presentDocument(document),
+    ...presentDocument(document, identityId),
     isFavorite: document.isFavorite,
     canManage: document.createdBy === identityId,
     deletedAt: document.deletedAt?.toISOString() ?? null,
+    snapshotRevision: document.snapshotRevision,
+    workspaceName: document.workspaceName,
+    excerpt: document.excerpt,
   };
 }
 
@@ -97,11 +149,131 @@ function presentVersion(version: DocumentVersion) {
     id: version.id,
     documentId: version.documentId,
     generationId: version.generationId,
+    sourceMode: version.sourceMode,
+    snapshotRevision: version.snapshotRevision,
     name: version.name,
     kind: version.kind,
     durableSeq: version.durableSeq,
     createdBy: version.createdBy,
     createdAt: version.createdAt.toISOString(),
+  };
+}
+
+type ImportReportIssue = {
+  code: string;
+  path: string;
+  message: string;
+  recoverable: boolean;
+};
+
+function summarizePortableContent(content: unknown): {
+  blockCount: number;
+  assetCount: number;
+  assetPaths: string[];
+} {
+  let blockCount = 0;
+  let assetCount = 0;
+  const assetPaths: string[] = [];
+  const pending: Array<{ value: unknown; path: string }> = [{ value: content, path: "$" }];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || typeof current.value !== "object" || current.value === null) continue;
+    if (Array.isArray(current.value)) {
+      for (let index = current.value.length - 1; index >= 0; index -= 1) {
+        pending.push({ value: current.value[index], path: `${current.path}/${index}` });
+      }
+      continue;
+    }
+    const node = current.value as { type?: unknown; attrs?: unknown; content?: unknown };
+    if (
+      typeof node.attrs === "object" &&
+      node.attrs !== null &&
+      !Array.isArray(node.attrs) &&
+      typeof (node.attrs as { blockId?: unknown }).blockId === "string"
+    ) {
+      blockCount += 1;
+    }
+    if (node.type === "image" || node.type === "pdfAttachment") {
+      assetCount += 1;
+      assetPaths.push(`${current.path}/attrs`);
+    }
+    if (Array.isArray(node.content)) {
+      for (let index = node.content.length - 1; index >= 0; index -= 1) {
+        pending.push({ value: node.content[index], path: `${current.path}/content/${index}` });
+      }
+    }
+  }
+  return { blockCount, assetCount, assetPaths };
+}
+
+function collectAssetReferences(
+  content: DocumentContent,
+): Array<{ assetId: string; blockId: string; mediaType: string }> {
+  const references: Array<{ assetId: string; blockId: string; mediaType: string }> = [];
+  const pending: unknown[] = [...content.content];
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (typeof value !== "object" || value === null || Array.isArray(value)) continue;
+    const node = value as {
+      type?: unknown;
+      attrs?: { assetId?: unknown; blockId?: unknown; mediaType?: unknown };
+      content?: unknown;
+    };
+    if (
+      (node.type === "image" || node.type === "pdfAttachment") &&
+      typeof node.attrs?.assetId === "string" &&
+      typeof node.attrs.blockId === "string" &&
+      typeof node.attrs.mediaType === "string"
+    ) {
+      references.push({
+        assetId: node.attrs.assetId,
+        blockId: node.attrs.blockId,
+        mediaType: node.attrs.mediaType,
+      });
+    }
+    if (Array.isArray(node.content)) pending.push(...node.content);
+  }
+  return references;
+}
+
+function createCollaborationStateFromContent(content: DocumentContent): Uint8Array {
+  const doc = prosemirrorJSONToYDoc(createEditorSchema(), content, "content");
+  const projectedStructure = projectContentUpdateToStructure(
+    emptyStructureState(),
+    { type: "doc", content: [] },
+    content,
+  );
+  if (!projectedStructure.success) {
+    doc.destroy();
+    throw new DomainError("CONFLICT", "The version structure cannot be restored safely");
+  }
+  try {
+    writeStoredStructureState(doc, projectedStructure.state, "version-snapshot-restore");
+    return Y.encodeStateAsUpdate(doc);
+  } finally {
+    doc.destroy();
+  }
+}
+
+function pushImportIssue(issues: ImportReportIssue[], issue: ImportReportIssue): void {
+  if (issues.length < 100) {
+    issues.push(issue);
+  } else if (issues.length === 100) {
+    issues.push({
+      code: "report-truncated",
+      path: "$",
+      message: "Additional import issues were omitted from this report.",
+      recoverable: false,
+    });
+  }
+}
+
+function asImportIssue(issue: ContentIssue): ImportReportIssue {
+  return {
+    code: issue.code,
+    path: issue.path,
+    message: issue.message,
+    recoverable: issue.recoverable,
   };
 }
 
@@ -114,25 +286,88 @@ export class DocumentService {
     private readonly maxDocumentsPerTenant: number,
   ) {}
 
-  async create(principal: Principal, input: CreateDocumentInput, requestId?: string) {
+  private async replayDocumentYDoc(
+    documentId: string,
+    generationId: string,
+    durableSeq: number,
+    origin: string,
+    failureMessage: string,
+    versionId?: string,
+  ): Promise<Y.Doc> {
+    const yDoc = new Y.Doc();
+    try {
+      await this.repository.replayYjsState(
+        {
+          documentId,
+          generationId,
+          targetSeq: durableSeq,
+          ...(versionId ? { versionId } : {}),
+        },
+        (updateBytes) => Y.applyUpdate(yDoc, updateBytes, origin),
+      );
+      return yDoc;
+    } catch {
+      yDoc.destroy();
+      throw new DomainError("CONFLICT", failureMessage);
+    }
+  }
+
+  async create(
+    principal: Principal,
+    input: CreateDocumentInput,
+    requestId?: string,
+    idempotencyKey?: string,
+  ) {
+    const idempotency: DocumentIdempotency | undefined = idempotencyKey
+      ? {
+          operationId: "documents.create",
+          key: idempotencyKey,
+          requestHash: createHash("sha256").update(stableJsonStringify(input)).digest("hex"),
+        }
+      : undefined;
     const document = await this.repository.create(
       principal.tenantId,
       principal.identityId,
       input.title,
-      undefined,
+      { schemaVersion: this.migration.targetSchemaVersion, extensions: [] },
       requestId,
       this.maxDocumentsPerTenant,
+      undefined,
+      input.mode,
+      idempotency,
+      undefined,
+      undefined,
+      { workspaceId: input.workspaceId, catalogId: input.catalogId },
     );
     await this.repository.markRecent(document, principal.identityId);
-    return presentDocument(document);
+    return presentDocument(document, principal.identityId);
   }
 
   async copyTemplate(
     principal: Principal,
     templateId: string,
-    input: CreateDocumentInput,
+    input: CopyDocumentInput,
     requestId?: string,
+    idempotencyKey?: string,
   ) {
+    const idempotency: DocumentIdempotency | undefined = idempotencyKey
+      ? {
+          operationId: "documents.copy",
+          key: idempotencyKey,
+          requestHash: createHash("sha256")
+            .update(stableJsonStringify({ templateId, title: input.title }))
+            .digest("hex"),
+        }
+      : undefined;
+    if (idempotency) {
+      const replay = await this.repository.findDocumentIdempotencyReplay({
+        tenantId: principal.tenantId,
+        subjectId: principal.identityId,
+        idempotency,
+      });
+      if (replay) return presentDocument(replay, principal.identityId);
+    }
+
     const template = await this.repository.findActiveForAction(
       templateId,
       principal.tenantId,
@@ -141,35 +376,33 @@ export class DocumentService {
     );
     if (!template) throw new DomainError("NOT_FOUND", "An accessible template was not found");
 
-    const updates = await this.repository.loadUpdates(
-      template.id,
-      template.generationId,
-      template.durableSeq,
-    );
-    if (updates.length !== template.durableSeq) {
-      throw new DomainError("CONFLICT", "The template update history is incomplete");
+    const isStandardTemplate = (template.mode ?? "collaborative") === "standard";
+    const standardSnapshot = isStandardTemplate
+      ? await this.repository.findStandardContentSnapshot(principal.tenantId, templateId)
+      : null;
+    if (isStandardTemplate && !standardSnapshot) {
+      throw new DomainError("CONFLICT", "The template content snapshot is unavailable");
     }
-
-    const sourceDoc = new Y.Doc();
-    let expectedSeq = 1;
+    const sourceDoc = isStandardTemplate
+      ? null
+      : await this.replayDocumentYDoc(
+          template.id,
+          template.generationId,
+          template.durableSeq,
+          "template-copy-source",
+          "The template update history is incomplete",
+        );
     try {
-      for (const update of updates) {
-        if (update.durableSeq !== expectedSeq) {
-          throw new DomainError("CONFLICT", "The template update history is incomplete");
-        }
-        Y.applyUpdate(sourceDoc, update.updateBytes, "template-copy-source");
-        expectedSeq += 1;
-      }
-      if (expectedSeq - 1 !== template.durableSeq) {
-        throw new DomainError("CONFLICT", "The template update history is incomplete");
-      }
-
-      const projected = yDocToProsemirrorJSON(sourceDoc, "content");
-      const sourceContent = normalizeTiptapDocumentJSON(
-        Array.isArray(projected.content) || projected.content !== undefined
-          ? projected
-          : { ...projected, content: [] },
-      );
+      const sourceContent =
+        standardSnapshot?.content ??
+        (() => {
+          const projected = yDocToProsemirrorJSON(sourceDoc!, "content");
+          return normalizeTiptapDocumentJSON(
+            Array.isArray(projected.content) || projected.content !== undefined
+              ? projected
+              : { ...projected, content: [] },
+          );
+        })();
       const validatedSource = this.migration.validateSource(sourceContent, template.schemaVersion);
       if (!validatedSource.success) {
         throw new DomainError("CONFLICT", "The template content cannot be copied safely");
@@ -179,10 +412,10 @@ export class DocumentService {
         const block = pendingBlocks.pop();
         if (typeof block !== "object" || block === null || Array.isArray(block)) continue;
         const node = block as { type?: unknown; content?: unknown };
-        if (node.type === "image") {
+        if (node.type === "image" || node.type === "pdfAttachment") {
           throw new DomainError(
             "CONFLICT",
-            "Templates containing images cannot be copied until document asset cloning is available",
+            "Templates containing attachments cannot be copied until document asset cloning is available",
           );
         }
         if (Array.isArray(node.content)) pendingBlocks.push(...node.content);
@@ -196,9 +429,15 @@ export class DocumentService {
       if (!migrated.success || migrated.report.status === "failed") {
         throw new DomainError("CONFLICT", "The template schema cannot be copied safely");
       }
-      const sourceStructure = readStoredStructureState(sourceDoc);
-      if (!sourceStructure || !sameDocumentContent(sourceStructure.content, validatedSource.data)) {
-        throw new DomainError("CONFLICT", "The template content projection is inconsistent");
+      const migrationArchive = migrationPersistence(migrated.stepSnapshots);
+      if (sourceDoc) {
+        const sourceStructure = readStoredStructureState(sourceDoc);
+        if (
+          !sourceStructure ||
+          !sameDocumentContent(sourceStructure.content, validatedSource.data)
+        ) {
+          throw new DomainError("CONFLICT", "The template content projection is inconsistent");
+        }
       }
 
       const content = cloneContentWithFreshBlockIds(migrated.content);
@@ -235,6 +474,9 @@ export class DocumentService {
         tenantId: principal.tenantId,
         identityId: principal.identityId,
         templateId,
+        ...(standardSnapshot
+          ? { expectedSourceSnapshotRevision: standardSnapshot.snapshotRevision }
+          : {}),
         expectedGenerationId: template.generationId,
         expectedDurableSeq: template.durableSeq,
         title: input.title,
@@ -242,7 +484,9 @@ export class DocumentService {
         extensions: template.extensions,
         requestId,
         maxDocumentsPerTenant: this.maxDocumentsPerTenant,
+        ...(idempotency ? { idempotency } : {}),
         ...(initialUpdate ? { initialUpdate } : {}),
+        ...(migrationArchive ? { migrationPersistence: migrationArchive } : {}),
       });
       if (result.status === "not-found") {
         throw new DomainError("NOT_FOUND", "An accessible template was not found");
@@ -255,10 +499,13 @@ export class DocumentService {
           limit: this.maxDocumentsPerTenant,
         });
       }
+      if (result.status === "replayed") {
+        return presentDocument(result.document, principal.identityId);
+      }
       await this.repository.markRecent(result.document, principal.identityId);
-      return presentDocument(result.document);
+      return presentDocument(result.document, principal.identityId);
     } finally {
-      sourceDoc.destroy();
+      sourceDoc?.destroy();
     }
   }
 
@@ -267,6 +514,7 @@ export class DocumentService {
     input: {
       view: DocumentListView;
       q?: string;
+      workspaceId?: string;
       sort: "recent" | "updated" | "created" | "title";
       direction: "asc" | "desc";
       limit: number;
@@ -277,6 +525,7 @@ export class DocumentService {
       tenantId: principal.tenantId,
       identityId: principal.identityId,
       ...input,
+      query: input.q,
     });
     return {
       ...result,
@@ -287,28 +536,34 @@ export class DocumentService {
   async updateTitle(
     principal: Principal,
     documentId: string,
-    input: { title: string; metadataRevision: number },
+    input: { title?: string; icon?: string | null; tags?: DocumentTag[]; metadataRevision: number },
     requestId?: string,
+    idempotencyKey?: string,
   ) {
+    const idempotency: DocumentIdempotency | undefined = idempotencyKey
+      ? {
+          operationId: "documents.metadata.update",
+          key: idempotencyKey,
+          requestHash: createHash("sha256")
+            .update(stableJsonStringify({ documentId, input }))
+            .digest("hex"),
+        }
+      : undefined;
     const result = await this.repository.updateTitle({
       tenantId: principal.tenantId,
       documentId,
       identityId: principal.identityId,
       title: input.title,
+      icon: input.icon,
+      tags: input.tags,
       expectedRevision: input.metadataRevision,
       requestId,
+      ...(idempotency ? { idempotency } : {}),
     });
     if (result.status === "not-found") throw new DomainError("NOT_FOUND", "Document not found");
     if (result.status === "conflict")
       throw new DomainError("CONFLICT", "Document metadata changed");
-    const updated = await this.repository.findActiveForAction(
-      documentId,
-      principal.tenantId,
-      principal.identityId,
-      "read",
-    );
-    if (!updated) throw new DomainError("NOT_FOUND", "Document not found");
-    return presentDocument(updated);
+    return presentDocument(result.document, principal.identityId);
   }
 
   async setFavorite(principal: Principal, documentId: string, favorite: boolean): Promise<void> {
@@ -326,13 +581,24 @@ export class DocumentService {
     documentId: string,
     operation: "archive" | "trash" | "restore" | "purge",
     requestId?: string,
+    idempotencyKey?: string,
   ): Promise<void> {
+    const idempotency: DocumentIdempotency | undefined = idempotencyKey
+      ? {
+          operationId: "documents.lifecycle",
+          key: idempotencyKey,
+          requestHash: createHash("sha256")
+            .update(stableJsonStringify({ documentId, operation }))
+            .digest("hex"),
+        }
+      : undefined;
     const result = await this.repository.setLifecycle({
       tenantId: principal.tenantId,
       documentId,
       ownerId: principal.identityId,
       operation,
       requestId,
+      ...(idempotency ? { idempotency } : {}),
     });
     if (result.status === "not-found" || result.status === "not-owner")
       throw new DomainError("NOT_FOUND", "Document not found");
@@ -353,7 +619,401 @@ export class DocumentService {
     );
     if (!document) throw new DomainError("NOT_FOUND", "Document not found");
     await this.repository.markRecent(document, principal.identityId);
-    return presentDocument(document);
+    return presentDocument(document, principal.identityId);
+  }
+
+  async getContent(principal: Principal, documentId: string) {
+    const document = await this.repository.findActiveForAction(
+      documentId,
+      principal.tenantId,
+      principal.identityId,
+      "read",
+    );
+    if (!document) throw new DomainError("NOT_FOUND", "Document not found");
+    const readOnly =
+      (await this.repository.findActiveForAction(
+        documentId,
+        principal.tenantId,
+        principal.identityId,
+        "write",
+      )) === null;
+    const mode = document.mode ?? "collaborative";
+    if (mode === "standard") {
+      const snapshot = await this.repository.findStandardContentSnapshot(
+        principal.tenantId,
+        documentId,
+      );
+      if (!snapshot)
+        throw new DomainError("CONFLICT", "The document content snapshot is unavailable");
+      return {
+        documentId,
+        mode,
+        readOnly,
+        schemaVersion: document.schemaVersion,
+        extensions: document.extensions,
+        generationId: null,
+        durableSeq: null,
+        snapshotRevision: snapshot.snapshotRevision,
+        content: snapshot.content,
+      };
+    }
+
+    const snapshot = await this.repository.findProjectionContentSnapshot(
+      principal.tenantId,
+      documentId,
+      document.generationId,
+    );
+    if (!snapshot)
+      throw new DomainError("CONFLICT", "The document content snapshot is unavailable");
+    return {
+      documentId,
+      mode,
+      readOnly,
+      schemaVersion: document.schemaVersion,
+      extensions: document.extensions,
+      generationId: document.generationId,
+      durableSeq: snapshot.durableSeq,
+      snapshotRevision: snapshot.snapshotRevision,
+      content: snapshot.content,
+    };
+  }
+
+  async putContent(
+    principal: Principal,
+    documentId: string,
+    input: PutDocumentContentInput,
+    requestId?: string,
+  ) {
+    const document = await this.repository.findActiveForAction(
+      documentId,
+      principal.tenantId,
+      principal.identityId,
+      "write",
+    );
+    if (!document) throw new DomainError("NOT_FOUND", "Document not found");
+    if ((document.mode ?? "collaborative") !== "standard") {
+      throw new DomainError(
+        "CONFLICT",
+        "Collaborative document content must be saved through its session",
+      );
+    }
+    if (document.schemaVersion > this.migration.targetSchemaVersion) {
+      throw new DomainError("CONFLICT", "The document schema requires a newer editor");
+    }
+
+    let standardMigration:
+      | {
+          report: ContentMigrationReport;
+          persistence: ReturnType<typeof migrationPersistence>;
+        }
+      | undefined;
+    if (document.schemaVersion < this.migration.targetSchemaVersion) {
+      const snapshot = await this.repository.findStandardContentSnapshot(
+        principal.tenantId,
+        documentId,
+      );
+      if (!snapshot || snapshot.snapshotRevision !== input.expectedSnapshotRevision) {
+        throw new DomainError("CONFLICT", "The document changed before its schema could migrate");
+      }
+      const validatedSource = this.migration.validateSource(
+        snapshot.content,
+        document.schemaVersion,
+      );
+      if (!validatedSource.success) {
+        throw new DomainError("CONFLICT", "The document content cannot be migrated safely");
+      }
+      const migrated = this.migration.execute(
+        validatedSource.data,
+        document.schemaVersion,
+        this.migration.targetSchemaVersion,
+      );
+      if (!migrated.success || migrated.report.status !== "migrated") {
+        throw new DomainError("CONFLICT", "No safe document migration is available");
+      }
+      standardMigration = {
+        report: migrated.report,
+        persistence: migrationPersistence(migrated.stepSnapshots),
+      };
+    }
+
+    let normalized: unknown;
+    try {
+      normalized = normalizeTiptapDocumentJSON(input.content);
+    } catch {
+      throw new DomainError("VALIDATION_ERROR", "Document content is malformed");
+    }
+    const validation = validateDocumentContent(normalized);
+    if (!validation.success) {
+      throw new DomainError(
+        "VALIDATION_ERROR",
+        "Document content does not match the document schema",
+        {
+          issues: validation.issues,
+        },
+      );
+    }
+    const editorValidation = validateContentForEditor(validation.data, createEditorSchema());
+    if (!editorValidation.success) {
+      throw new DomainError("VALIDATION_ERROR", "Document content uses unsupported editor nodes");
+    }
+
+    const result = await this.repository.saveStandardContentSnapshot({
+      tenantId: principal.tenantId,
+      documentId,
+      identityId: principal.identityId,
+      expectedSnapshotRevision: input.expectedSnapshotRevision,
+      expectedGenerationId: document.generationId,
+      targetSchemaVersion: this.migration.targetSchemaVersion,
+      ...(standardMigration
+        ? {
+            migrationReport: standardMigration.report,
+            ...(standardMigration.persistence
+              ? { migrationPersistence: standardMigration.persistence }
+              : {}),
+          }
+        : {}),
+      content: editorValidation.content,
+      assetReferences: collectAssetReferences(editorValidation.content),
+      requestId,
+    });
+    if (result.status === "not-found") throw new DomainError("NOT_FOUND", "Document not found");
+    if (result.status !== "updated") {
+      throw new DomainError("CONFLICT", "The document changed or is no longer in standard mode");
+    }
+    return {
+      documentId,
+      mode: "standard" as const,
+      readOnly: false,
+      schemaVersion: result.schemaVersion,
+      extensions: document.extensions,
+      generationId: null,
+      durableSeq: null,
+      snapshotRevision: result.snapshotRevision,
+      content: editorValidation.content,
+    };
+  }
+
+  async exportJson(principal: Principal, documentId: string, requestId?: string) {
+    const document = await this.repository.findActiveForAction(
+      documentId,
+      principal.tenantId,
+      principal.identityId,
+      "export",
+    );
+    if (!document) throw new DomainError("NOT_FOUND", "Document not found");
+
+    const mode = document.mode ?? "collaborative";
+    const standardSnapshot =
+      mode === "standard"
+        ? await this.repository.findStandardContentSnapshot(principal.tenantId, documentId)
+        : null;
+    if (mode === "standard" && !standardSnapshot) {
+      throw new DomainError("CONFLICT", "The document content snapshot is unavailable");
+    }
+    const yDoc =
+      mode === "collaborative"
+        ? await this.replayDocumentYDoc(
+            document.id,
+            document.generationId,
+            document.durableSeq,
+            "document-export-replay",
+            "The document update history is incomplete",
+          )
+        : null;
+    try {
+      const source =
+        standardSnapshot?.content ??
+        (() => {
+          const projected = yDocToProsemirrorJSON(yDoc!, "content");
+          return normalizeTiptapDocumentJSON(
+            Array.isArray(projected.content) || projected.content !== undefined
+              ? projected
+              : { ...projected, content: [] },
+          );
+        })();
+      const validated = this.migration.validateSource(source, document.schemaVersion);
+      if (
+        !validated.success ||
+        !validateContentForEditor(validated.data, createEditorSchema()).success
+      ) {
+        throw new DomainError("CONFLICT", "The document content cannot be exported safely");
+      }
+      const summary = summarizePortableContent(validated.data);
+      const recorded = await this.repository.recordExport({
+        tenantId: principal.tenantId,
+        documentId: document.id,
+        identityId: principal.identityId,
+        generationId: document.generationId,
+        durableSeq: document.durableSeq,
+        schemaVersion: document.schemaVersion,
+        blockCount: summary.blockCount,
+        ...(standardSnapshot ? { snapshotRevision: standardSnapshot.snapshotRevision } : {}),
+        requestId,
+      });
+      if (recorded === "not-found" || recorded === "not-authorized") {
+        throw new DomainError("NOT_FOUND", "Document not found");
+      }
+      if (recorded === "conflict") {
+        throw new DomainError("CONFLICT", "The document changed while it was being exported");
+      }
+      return {
+        format: "zhishu.document" as const,
+        formatVersion: 1 as const,
+        title: document.title,
+        schemaVersion: document.schemaVersion,
+        extensions: document.extensions,
+        content: validated.data,
+      };
+    } catch (error) {
+      if (error instanceof DomainError) throw error;
+      throw new DomainError("CONFLICT", "The document content cannot be exported safely");
+    } finally {
+      yDoc?.destroy();
+    }
+  }
+
+  async importJson(
+    principal: Principal,
+    input: ImportDocumentInput,
+    requestId?: string,
+    idempotencyKey?: string,
+  ) {
+    const normalized = normalizeTiptapDocumentJSON(input.content);
+    const summary = summarizePortableContent(normalized);
+    const issues: ImportReportIssue[] = [];
+    const compatibility = checkDocumentCompatibility(
+      { schemaVersion: input.schemaVersion, extensions: input.extensions },
+      { schemaVersions: this.migration.supportedSchemaVersions, extensions: {} },
+    );
+    for (const compatibilityIssue of compatibility.issues) {
+      pushImportIssue(issues, {
+        code: compatibilityIssue.code,
+        path: compatibilityIssue.code === "unsupported-schema" ? "$/schemaVersion" : "$/extensions",
+        message:
+          compatibilityIssue.code === "unsupported-schema"
+            ? `Schema version ${compatibilityIssue.name} is not supported for import.`
+            : `Extension ${compatibilityIssue.name} is not supported by this server.`,
+        recoverable: !compatibilityIssue.required,
+      });
+    }
+    if (
+      new Set(input.extensions.map((extension) => extension.name)).size !== input.extensions.length
+    ) {
+      pushImportIssue(issues, {
+        code: "duplicate-extension",
+        path: "$/extensions",
+        message: "Each extension may only be declared once.",
+        recoverable: false,
+      });
+    }
+
+    const validation = this.migration.validateSource(normalized, input.schemaVersion);
+    let contentToImport: DocumentContent | null = null;
+    let migrationReport: ContentMigrationReport | undefined;
+    let migrationArchive: ReturnType<typeof migrationPersistence>;
+    if (!validation.success) {
+      for (const issue of validation.issues) pushImportIssue(issues, asImportIssue(issue));
+    } else {
+      const migrated = this.migration.execute(
+        validation.data,
+        input.schemaVersion,
+        this.migration.targetSchemaVersion,
+      );
+      if (!migrated.success) {
+        pushImportIssue(issues, {
+          code: "invalid-content",
+          path: "$/schemaVersion",
+          message: "The document content could not be migrated safely.",
+          recoverable: false,
+        });
+      } else {
+        migrationReport = migrated.report;
+        migrationArchive = migrationPersistence(migrated.stepSnapshots);
+        const editorValidation = validateContentForEditor(migrated.content, createEditorSchema());
+        if (!editorValidation.success) {
+          for (const issue of editorValidation.issues) {
+            pushImportIssue(issues, { ...asImportIssue(issue), recoverable: false });
+          }
+        } else {
+          contentToImport = editorValidation.content;
+        }
+      }
+    }
+    for (const path of summary.assetPaths) {
+      pushImportIssue(issues, {
+        code: "unsupported-asset",
+        path,
+        message: "Asset references cannot be transferred by this JSON import format.",
+        recoverable: false,
+      });
+    }
+
+    const report = {
+      formatVersion: 1 as const,
+      issues,
+      blockCount: summary.blockCount,
+      assetCount: summary.assetCount,
+    };
+    if (
+      !validation.success ||
+      contentToImport === null ||
+      !compatibility.readable ||
+      issues.some((issue) => !issue.recoverable)
+    ) {
+      return { status: "rejected" as const, report };
+    }
+
+    const targetDoc = prosemirrorJSONToYDoc(createEditorSchema(), contentToImport, "content");
+    try {
+      const projectedStructure = projectContentUpdateToStructure(
+        emptyStructureState(),
+        { type: "doc", content: [] },
+        contentToImport,
+      );
+      if (!projectedStructure.success) {
+        throw new DomainError("CONFLICT", "The imported document structure is invalid");
+      }
+      writeStoredStructureState(targetDoc, projectedStructure.state);
+      const updateBytes = Y.encodeStateAsUpdate(targetDoc);
+      const updateHash = createHash("sha256").update(updateBytes).digest("hex");
+      const idempotency: DocumentIdempotency | undefined = idempotencyKey
+        ? {
+            operationId: "documents.import",
+            key: idempotencyKey,
+            requestHash: createHash("sha256")
+              .update(
+                stableJsonStringify({
+                  title: input.title,
+                  schemaVersion: input.schemaVersion,
+                  extensions: input.extensions,
+                  content: normalized,
+                }),
+              )
+              .digest("hex"),
+          }
+        : undefined;
+      const document = await this.repository.create(
+        principal.tenantId,
+        principal.identityId,
+        input.title,
+        { schemaVersion: this.migration.targetSchemaVersion, extensions: input.extensions },
+        requestId,
+        this.maxDocumentsPerTenant,
+        { updateHash, updateBytes, content: contentToImport },
+        "collaborative",
+        idempotency,
+        migrationReport,
+        migrationArchive,
+      );
+      await this.repository.markRecent(document, principal.identityId);
+      return {
+        status: "completed" as const,
+        document: presentDocument(document, principal.identityId),
+        report,
+      };
+    } finally {
+      targetDoc.destroy();
+    }
   }
 
   async listVersions(principal: Principal, documentId: string) {
@@ -398,28 +1058,42 @@ export class DocumentService {
       throw new DomainError("CONFLICT", "The document version content is unavailable");
     }
 
-    const updates = await this.repository.loadUpdates(
+    if (version.sourceMode === "standard") {
+      const snapshot = await this.repository.findJsonVersionSnapshot(
+        principal.tenantId,
+        documentId,
+        versionId,
+      );
+      if (!snapshot)
+        throw new DomainError("CONFLICT", "The document version content is unavailable");
+      const validated = this.migration.validateSource(snapshot.content, schemaVersion);
+      if (!validated.success) {
+        throw new DomainError("CONFLICT", "The document version content cannot be read safely");
+      }
+      const editorValidation = validateContentForEditor(validated.data, createEditorSchema());
+      if (!editorValidation.success) {
+        throw new DomainError("CONFLICT", "The document version content cannot be read safely");
+      }
+      return {
+        documentId,
+        generationId: version.generationId,
+        sourceMode: "standard" as const,
+        schemaVersion,
+        durableSeq: version.durableSeq,
+        snapshotRevision: snapshot.snapshotRevision,
+        content: editorValidation.content,
+      };
+    }
+
+    const versionDoc = await this.replayDocumentYDoc(
       documentId,
       version.generationId,
       version.durableSeq,
+      "version-preview-replay",
+      "The document version update history is incomplete",
+      version.id,
     );
-    if (updates.length !== version.durableSeq) {
-      throw new DomainError("CONFLICT", "The document version update history is incomplete");
-    }
-
-    const versionDoc = new Y.Doc();
-    let expectedSeq = 1;
     try {
-      for (const update of updates) {
-        if (update.durableSeq !== expectedSeq) {
-          throw new DomainError("CONFLICT", "The document version update history is incomplete");
-        }
-        Y.applyUpdate(versionDoc, update.updateBytes, "version-preview-replay");
-        expectedSeq += 1;
-      }
-      if (expectedSeq - 1 !== version.durableSeq) {
-        throw new DomainError("CONFLICT", "The document version update history is incomplete");
-      }
       const projected = yDocToProsemirrorJSON(versionDoc, "content");
       const source = normalizeTiptapDocumentJSON(
         Array.isArray(projected.content) || projected.content !== undefined
@@ -433,8 +1107,10 @@ export class DocumentService {
       return {
         documentId,
         generationId: version.generationId,
+        sourceMode: "collaborative" as const,
         schemaVersion,
         durableSeq: version.durableSeq,
+        snapshotRevision: null,
         content: validated.data,
       };
     } catch (error) {
@@ -450,16 +1126,40 @@ export class DocumentService {
     documentId: string,
     input: CreateDocumentVersionInput,
     requestId?: string,
+    idempotencyKey?: string,
   ) {
-    const result = await this.repository.createVersion({
-      tenantId: principal.tenantId,
-      documentId,
-      identityId: principal.identityId,
-      ...input,
-      requestId,
-    });
+    const idempotency: DocumentIdempotency | undefined = idempotencyKey
+      ? {
+          operationId: "documents.version.create",
+          key: idempotencyKey,
+          requestHash: createHash("sha256")
+            .update(stableJsonStringify({ documentId, input }))
+            .digest("hex"),
+        }
+      : undefined;
+    const result =
+      input.mode === "standard"
+        ? await this.repository.createStandardSnapshotVersion({
+            tenantId: principal.tenantId,
+            documentId,
+            identityId: principal.identityId,
+            name: input.name,
+            expectedSnapshotRevision: input.expectedSnapshotRevision,
+            requestId,
+            ...(idempotency ? { idempotency } : {}),
+          })
+        : await this.repository.createVersion({
+            tenantId: principal.tenantId,
+            documentId,
+            identityId: principal.identityId,
+            name: input.name,
+            expectedGenerationId: input.expectedGenerationId,
+            expectedDurableSeq: input.expectedDurableSeq,
+            requestId,
+            ...(idempotency ? { idempotency } : {}),
+          });
     if (result.status === "not-found") throw new DomainError("NOT_FOUND", "Document not found");
-    if (result.status !== "created")
+    if (result.status !== "created" && result.status !== "replayed")
       throw new DomainError(
         "CONFLICT",
         "Document changed or a version with that name already exists",
@@ -473,22 +1173,92 @@ export class DocumentService {
     versionId: string,
     input: RestoreDocumentVersionInput,
     requestId?: string,
+    idempotencyKey?: string,
   ) {
+    const idempotency: DocumentIdempotency | undefined = idempotencyKey
+      ? {
+          operationId: "documents.version.restore",
+          key: idempotencyKey,
+          requestHash: createHash("sha256")
+            .update(stableJsonStringify({ documentId, versionId, input }))
+            .digest("hex"),
+        }
+      : undefined;
+    const restoredContent = await this.getVersionContent(principal, documentId, versionId);
+    if (input.mode === "standard") {
+      const result = await this.repository.restoreStandardSnapshotVersion({
+        tenantId: principal.tenantId,
+        documentId,
+        versionId,
+        identityId: principal.identityId,
+        expectedSnapshotRevision: input.expectedSnapshotRevision,
+        requestId,
+        content: restoredContent.content as DocumentContent,
+        assetReferences: collectAssetReferences(restoredContent.content as DocumentContent),
+        ...(idempotency ? { idempotency } : {}),
+      });
+      if (result.status === "not-found")
+        throw new DomainError("NOT_FOUND", "Document or version not found");
+      if (result.status !== "restored" && result.status !== "restore-replayed")
+        throw new DomainError("CONFLICT", "Document changed or version content is unavailable");
+      if (result.status === "restored")
+        this.sessionRevoker.revokeDocumentSessions(documentId, result.previousGenerationId);
+      return presentDocument(result.document, principal.identityId);
+    }
+    const version = await this.repository.findVersion(principal.tenantId, documentId, versionId);
+    if (!version) throw new DomainError("NOT_FOUND", "Document or version not found");
+    const stateBytes =
+      version.sourceMode === "standard"
+        ? createCollaborationStateFromContent(restoredContent.content as DocumentContent)
+        : await this.createVersionStateBytes(documentId, version);
     const result = await this.repository.restoreVersion({
       tenantId: principal.tenantId,
       documentId,
       versionId,
       identityId: principal.identityId,
-      ...input,
+      expectedGenerationId: input.expectedGenerationId,
+      expectedDurableSeq: input.expectedDurableSeq,
       requestId,
-      content: (await this.getVersionContent(principal, documentId, versionId)).content,
+      content: restoredContent.content,
+      stateBytes,
+      ...(idempotency ? { idempotency } : {}),
     });
     if (result.status === "not-found")
       throw new DomainError("NOT_FOUND", "Document or version not found");
-    if (result.status !== "restored")
+    if (result.status !== "restored" && result.status !== "restore-replayed")
       throw new DomainError("CONFLICT", "Document changed or version content is unavailable");
-    this.sessionRevoker.revokeDocumentSessions(documentId, result.previousGenerationId);
-    return presentDocument(result.document);
+    if (result.status === "restored")
+      this.sessionRevoker.revokeDocumentSessions(documentId, result.previousGenerationId);
+    return presentDocument(result.document, principal.identityId);
+  }
+
+  private async createVersionStateBytes(
+    documentId: string,
+    version: DocumentVersion,
+  ): Promise<Uint8Array> {
+    const versionDoc = await this.replayDocumentYDoc(
+      documentId,
+      version.generationId,
+      version.durableSeq,
+      "version-restore-checkpoint",
+      "The document version content is unavailable",
+      version.id,
+    );
+    try {
+      return Y.encodeStateAsUpdate(versionDoc);
+    } finally {
+      versionDoc.destroy();
+    }
+  }
+
+  async listAcl(principal: Principal, documentId: string) {
+    const entries = await this.repository.listAcl(
+      principal.tenantId,
+      documentId,
+      principal.identityId,
+    );
+    if (!entries) throw new DomainError("NOT_FOUND", "Document not found");
+    return entries;
   }
 
   async setAcl(
@@ -497,7 +1267,17 @@ export class DocumentService {
     identityId: string,
     actions: readonly DocumentPermissionAction[],
     requestId?: string,
+    idempotencyKey?: string,
   ) {
+    const idempotency: DocumentIdempotency | undefined = idempotencyKey
+      ? {
+          operationId: "documents.acl.set",
+          key: idempotencyKey,
+          requestHash: createHash("sha256")
+            .update(stableJsonStringify({ documentId, identityId, actions }))
+            .digest("hex"),
+        }
+      : undefined;
     const result = await this.repository.setAcl(
       principal.tenantId,
       documentId,
@@ -505,9 +1285,12 @@ export class DocumentService {
       identityId,
       actions,
       requestId,
+      idempotency,
     );
-    if (result.status !== "updated") throw new DomainError("NOT_FOUND", "Document not found");
-    this.sessionRevoker.revokeDocumentSessions(documentId, result.generationId);
+    if (result.status === "not-found" || result.status === "not-owner")
+      throw new DomainError("NOT_FOUND", "Document not found");
+    if (result.status === "updated")
+      this.sessionRevoker.revokeDocumentSessions(documentId, result.generationId);
     return { documentId, identityId, actions: result.actions };
   }
 
@@ -516,16 +1299,29 @@ export class DocumentService {
     documentId: string,
     identityId: string,
     requestId?: string,
+    idempotencyKey?: string,
   ): Promise<void> {
+    const idempotency: DocumentIdempotency | undefined = idempotencyKey
+      ? {
+          operationId: "documents.acl.remove",
+          key: idempotencyKey,
+          requestHash: createHash("sha256")
+            .update(stableJsonStringify({ documentId, identityId }))
+            .digest("hex"),
+        }
+      : undefined;
     const result = await this.repository.removeAcl(
       principal.tenantId,
       documentId,
       principal.identityId,
       identityId,
       requestId,
+      idempotency,
     );
-    if (result.status !== "updated") throw new DomainError("NOT_FOUND", "Document not found");
-    this.sessionRevoker.revokeDocumentSessions(documentId, result.generationId);
+    if (result.status === "not-found" || result.status === "not-owner")
+      throw new DomainError("NOT_FOUND", "Document not found");
+    if (result.status === "updated")
+      this.sessionRevoker.revokeDocumentSessions(documentId, result.generationId);
   }
 
   async repairDuplicateBlockIds(
@@ -541,23 +1337,15 @@ export class DocumentService {
     );
     if (!source) return { status: "conflict" };
 
-    const updates = await this.repository.loadUpdates(
+    const sourceDoc = await this.replayDocumentYDoc(
       source.id,
       source.generationId,
       source.durableSeq,
-    );
-    if (updates.length !== source.durableSeq) return { status: "conflict" };
-
-    const sourceDoc = new Y.Doc();
-    let expectedSeq = 1;
+      "block-id-repair-source",
+      "The document update history is incomplete",
+    ).catch(() => null);
+    if (!sourceDoc) return { status: "conflict" };
     try {
-      for (const update of updates) {
-        if (update.durableSeq !== expectedSeq) return { status: "conflict" };
-        Y.applyUpdate(sourceDoc, update.updateBytes, "block-id-repair-source");
-        expectedSeq += 1;
-      }
-      if (expectedSeq - 1 !== source.durableSeq) return { status: "conflict" };
-
       const projected = yDocToProsemirrorJSON(sourceDoc, "content");
       const content = normalizeTiptapDocumentJSON(
         Array.isArray(projected.content) || projected.content !== undefined
@@ -589,6 +1377,7 @@ export class DocumentService {
       if (!migrated.success || migrated.report.status === "failed") {
         return { status: "conflict" };
       }
+      const migrationArchive = migrationPersistence(migrated.stepSnapshots);
       const editorValidation = validateContentForEditor(migrated.content, createEditorSchema());
       if (!editorValidation.success) return { status: "conflict" };
       if (!apply) return { status: "repairable", duplicateCount };
@@ -616,6 +1405,8 @@ export class DocumentService {
           updateHash,
           updateBytes,
           content: migrated.content,
+          migrationReport: migrated.report,
+          ...(migrationArchive ? { migrationPersistence: migrationArchive } : {}),
         });
         if (result.status === "conflict" || result.status === "not-found") {
           return { status: "conflict" };
@@ -642,6 +1433,7 @@ export class DocumentService {
     principal: Principal,
     documentId: string,
     client: CollaborationSessionInput,
+    requestId?: string,
   ) {
     if (
       new Set(client.extensions.map((extension) => extension.name)).size !==
@@ -661,10 +1453,99 @@ export class DocumentService {
       principal.identityId,
       "write",
     );
+    if ((document.mode ?? "collaborative") === "standard") {
+      if (!writableDocument) {
+        throw new DomainError(
+          "CONFLICT",
+          "A writer must enable collaboration before read-only sessions can join",
+        );
+      }
+      const snapshot = await this.repository.findStandardContentSnapshot(
+        principal.tenantId,
+        documentId,
+      );
+      if (!snapshot)
+        throw new DomainError("CONFLICT", "The standard document snapshot is unavailable");
+      const validated = this.migration.validateSource(snapshot.content, document.schemaVersion);
+      if (!validated.success) {
+        throw new DomainError(
+          "CONFLICT",
+          "The document content cannot be converted to collaboration safely",
+        );
+      }
+      const editorValidation = validateContentForEditor(validated.data, createEditorSchema());
+      if (!editorValidation.success) {
+        throw new DomainError(
+          "CONFLICT",
+          "The document content cannot be converted to collaboration safely",
+        );
+      }
+      const targetDoc = prosemirrorJSONToYDoc(
+        createEditorSchema(),
+        editorValidation.content,
+        "content",
+      );
+      const projectedStructure = projectContentUpdateToStructure(
+        emptyStructureState(),
+        { type: "doc", content: [] },
+        editorValidation.content,
+      );
+      if (!projectedStructure.success) {
+        targetDoc.destroy();
+        throw new DomainError("CONFLICT", "The document structure cannot be initialized safely");
+      }
+      writeStoredStructureState(
+        targetDoc,
+        projectedStructure.state,
+        "standard-content-collaboration-init",
+      );
+      let updateBytes: Uint8Array;
+      try {
+        updateBytes = Y.encodeStateAsUpdate(targetDoc);
+      } finally {
+        targetDoc.destroy();
+      }
+      const result = await this.repository.enableCollaborationFromStandardSnapshot({
+        tenantId: principal.tenantId,
+        documentId,
+        identityId: principal.identityId,
+        expectedSnapshotRevision: snapshot.snapshotRevision,
+        updateHash: createHash("sha256").update(updateBytes).digest("hex"),
+        updateBytes,
+        content: editorValidation.content,
+        assetReferences: collectAssetReferences(editorValidation.content),
+        requestId,
+      });
+      if (result.status === "not-found") throw new DomainError("NOT_FOUND", "Document not found");
+      if (result.status === "enabled") {
+        this.sessionRevoker.revokeDocumentSessions(documentId, result.previousGenerationId);
+        document = result.document;
+      } else {
+        const current = await this.repository.findActiveForAction(
+          documentId,
+          principal.tenantId,
+          principal.identityId,
+          "read",
+        );
+        if (!current || (current.mode ?? "collaborative") !== "collaborative") {
+          throw new DomainError(
+            "CONFLICT",
+            "The document changed while collaboration was being enabled",
+          );
+        }
+        document = current;
+      }
+    }
     if (writableDocument && document.schemaVersion < this.migration.targetSchemaVersion) {
       document = await this.migrateActiveGeneration(principal, document);
     }
-    const canWriteCurrentGeneration = writableDocument !== null;
+    const canWriteCurrentGeneration =
+      (await this.repository.findActiveForAction(
+        documentId,
+        principal.tenantId,
+        principal.identityId,
+        "write",
+      )) !== null;
     const compatibility = checkDocumentCompatibility(
       { schemaVersion: document.schemaVersion, extensions: document.extensions },
       {
@@ -686,6 +1567,8 @@ export class DocumentService {
         schemaVersion: document.schemaVersion,
         extensions: document.extensions,
         subject: principal.identityId,
+        displayName: principal.displayName.trim().slice(0, 80) || principal.identityId.slice(0, 80),
+        presenceColor: collaborationPresenceColor(principal.identityId),
         readOnly: !writable,
       },
       this.collaboration.tokenSecret,
@@ -711,24 +1594,14 @@ export class DocumentService {
     principal: Principal,
     source: ActiveDocument,
   ): Promise<ActiveDocument> {
-    const updates = await this.repository.loadUpdates(
+    const sourceDoc = await this.replayDocumentYDoc(
       source.id,
       source.generationId,
       source.durableSeq,
+      "schema-migration-source",
+      "The document update history is incomplete",
     );
-    const sourceDoc = new Y.Doc();
-    let expectedSeq = 1;
     try {
-      for (const update of updates) {
-        if (update.durableSeq !== expectedSeq) {
-          throw new DomainError("CONFLICT", "The document update history is incomplete");
-        }
-        Y.applyUpdate(sourceDoc, update.updateBytes, "schema-migration-source");
-        expectedSeq += 1;
-      }
-      if (expectedSeq - 1 !== source.durableSeq) {
-        throw new DomainError("CONFLICT", "The document update history is incomplete");
-      }
       const projected = yDocToProsemirrorJSON(sourceDoc, "content");
       const sourceContent =
         Array.isArray(projected.content) || projected.content !== undefined
@@ -747,6 +1620,7 @@ export class DocumentService {
       if (!migrated.success || migrated.report.status !== "migrated") {
         throw new DomainError("CONFLICT", "No safe document migration is available");
       }
+      const migrationArchive = migrationPersistence(migrated.stepSnapshots);
 
       let updateBytes: Uint8Array;
       const targetDoc = prosemirrorJSONToYDoc(createEditorSchema(), migrated.content, "content");
@@ -768,6 +1642,8 @@ export class DocumentService {
         updateHash,
         updateBytes,
         content: migrated.content,
+        migrationReport: migrated.report,
+        ...(migrationArchive ? { migrationPersistence: migrationArchive } : {}),
       });
       if (result.status === "not-found") throw new DomainError("NOT_FOUND", "Document not found");
       if (result.status !== "migrated") {

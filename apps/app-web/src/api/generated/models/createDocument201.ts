@@ -5,12 +5,25 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CreateDocument201ExtensionsItem } from './createDocument201ExtensionsItem';
+import type { CreateDocument201Mode } from './createDocument201Mode';
+import type { CreateDocument201TagsItem } from './createDocument201TagsItem';
 
 export type CreateDocument201 = {
   /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
   id: string;
   tenantId: string;
   title: string;
+  workspaceId: string;
+  /** @pattern ^cat_[A-Za-z0-9_-]{1,64}$ */
+  catalogId: string;
+  /** @minimum 0 */
+  position: number;
+  /** @maxLength 32 */
+  icon: string | null;
+  /** @maxItems 12 */
+  tags: CreateDocument201TagsItem[];
+  createdBy: string;
+  mode: CreateDocument201Mode;
   /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
   generationId: string;
   /**
@@ -28,4 +41,5 @@ export type CreateDocument201 = {
      * @exclusiveMinimum
      */
   metadataRevision: number;
+  canManage: boolean;
 };

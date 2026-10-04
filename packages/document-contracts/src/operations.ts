@@ -1,5 +1,14 @@
 import { Value } from "@sinclair/typebox/value";
-import { DocumentBlockSchema, DocumentContentSchema, OperationBatchSchema } from "./schema.js";
+import {
+  DocumentBlockSchema,
+  DocumentContentSchema,
+  OperationBatchSchema,
+  TableCellSchema,
+  TableHeaderSchema,
+  TableRowSchema,
+  TableSchema,
+  TaskListSchema,
+} from "./schema.js";
 import type { DocumentBlock, DocumentContent, OperationBatch } from "./schema.js";
 import { validateDocumentContent } from "./validation.js";
 
@@ -133,7 +142,11 @@ function targetArray(
   if (!parent) fail("target-missing", path, "Target parent does not exist.");
   if (!Array.isArray(parent.block.content))
     fail("invalid-operation", path, "Target parent cannot contain blocks.");
-  if (!["blockquote", "bulletList", "orderedList", "listItem"].includes(parent.block.type))
+  if (
+    !["blockquote", "callout", "bulletList", "orderedList", "listItem", "taskList"].includes(
+      parent.block.type,
+    )
+  )
     fail("invalid-operation", path, "Target parent cannot contain blocks.");
   return parent.block.content;
 }
@@ -162,7 +175,15 @@ function insertionIndex(
 }
 
 function operationSchemaIssues(batch: unknown): OperationError[] {
-  const references = [DocumentBlockSchema, DocumentContentSchema];
+  const references = [
+    DocumentBlockSchema,
+    DocumentContentSchema,
+    TaskListSchema,
+    TableSchema,
+    TableRowSchema,
+    TableCellSchema,
+    TableHeaderSchema,
+  ];
   if (Value.Check(OperationBatchSchema, references, batch)) return [];
   return [...Value.Errors(OperationBatchSchema, references, batch)].map((error) => ({
     code: "invalid-content",
@@ -298,6 +319,28 @@ export function applyOperationBatch(
             [...replacementChildIds].filter((id) => !existingChildIds.has(id)),
           );
           target.parent.splice(target.index, 1, replacement);
+          break;
+        }
+        case "wrap-block": {
+          const target = locateBlock(working, operation.targetBlockId);
+          if (!target)
+            fail("target-missing", `${path}/targetBlockId`, "Target Block does not exist.");
+          const wrapper = structuredClone(operation.wrapper) as MutableNode;
+          if (!wrapper.attrs)
+            fail("invalid-content", `${path}/wrapper/attrs`, "Wrapper Block has no attributes.");
+          if (!Array.isArray(wrapper.content))
+            fail(
+              "invalid-content",
+              `${path}/wrapper/content`,
+              "Wrapper Block must contain Blocks.",
+            );
+          const targetIds = new Set(collectBlockIds(target.block));
+          wrapper.content.unshift(target.block);
+          appendUnique(
+            createdBlockIds,
+            collectBlockIds(wrapper).filter((id) => !targetIds.has(id)),
+          );
+          target.parent.splice(target.index, 1, wrapper);
           break;
         }
         case "move-block": {

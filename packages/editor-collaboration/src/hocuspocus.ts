@@ -1,7 +1,11 @@
 import { HocuspocusProvider } from "@hocuspocus/provider";
+import type { Extensions } from "@tiptap/core";
 import * as Y from "yjs";
-import { validateCollaborationPresence } from "@zhishu/document-contracts";
-import type { CollaborationPresence, OperationBatch } from "@zhishu/document-contracts";
+import {
+  SUPPORTED_DOCUMENT_SCHEMA_VERSIONS,
+  validateCollaborationPresence,
+} from "@zhishu/document-contracts";
+import type { Anchor, CollaborationPresence, OperationBatch } from "@zhishu/document-contracts";
 import type {
   CollaborationPresenceInput,
   CollaborationPresenceListener,
@@ -12,6 +16,8 @@ import type {
   DurableReceipt,
   StructureOperationResult,
 } from "./index.js";
+import type { TiptapAnchorResolution } from "./tiptap.js";
+import type { Editor } from "@tiptap/core";
 
 type PendingUpdate = { updateId: string; updateBytes: Uint8Array };
 type PersistedMessage = {
@@ -40,6 +46,8 @@ type SessionTicketMetadata = {
   generationId: string;
   schemaVersion: number;
   extensions: readonly { name: string; version: string; required: boolean }[];
+  displayName: string;
+  presenceColor: string;
   readOnly: boolean;
   expiresAt: number;
 };
@@ -90,6 +98,11 @@ function readSessionTicketMetadata(token: string): SessionTicketMetadata | null 
       typeof value.generationId !== "string" ||
       typeof value.schemaVersion !== "number" ||
       !Array.isArray(value.extensions) ||
+      typeof value.displayName !== "string" ||
+      value.displayName.length === 0 ||
+      value.displayName.length > 80 ||
+      typeof value.presenceColor !== "string" ||
+      !/^#[0-9A-Fa-f]{6}$/u.test(value.presenceColor) ||
       typeof value.readOnly !== "boolean" ||
       typeof value.expiresAt !== "number"
     ) {
@@ -206,9 +219,35 @@ export class HocuspocusCollaborationSession {
   private readonly listeners = new Set<CollaborationStatusListener>();
   private readonly presenceListeners = new Set<CollaborationPresenceListener>();
   private readonly options: HocuspocusSessionOptions;
+  private tiptapAdapter?: typeof import("./tiptap.js");
   private state: CollaborationStatus;
   private destroyed = false;
+  private browserOffline = false;
+  private readonly onBrowserOffline = () => {
+    if (this.destroyed || this.state.connection === "closed" || this.state.connection === "denied")
+      return;
+    this.browserOffline = true;
+    if (this.sessionRefreshTimer) {
+      clearTimeout(this.sessionRefreshTimer);
+      this.sessionRefreshTimer = undefined;
+    }
+    this.provider.disconnect();
+    this.publish({
+      connection: "reconnecting",
+      sync: "catching-up",
+      errorCode: "network-offline",
+      ...(this.pending.size + this.hashingCount > 0 ? { persistence: "unknown" as const } : {}),
+    });
+  };
+  private readonly onBrowserOnline = () => {
+    if (!this.browserOffline) return;
+    this.browserOffline = false;
+    if (this.destroyed || this.state.connection === "closed" || this.state.connection === "denied")
+      return;
+    this.retry();
+  };
   private hashingCount = 0;
+  private readonly unhashedUpdates = new Set<Uint8Array>();
   private currentSession: CollaborationSessionInfo;
   private readonly principalBinding: { tenantId: string; subject: string };
   private sessionRefreshTimer?: ReturnType<typeof setTimeout>;
@@ -232,10 +271,13 @@ export class HocuspocusCollaborationSession {
       return;
     }
     this.hashingCount += 1;
+    const rawUpdate = Uint8Array.from(update);
+    this.unhashedUpdates.add(rawUpdate);
     this.publish({ persistence: "pending" });
     let hashingReleased = false;
     void hashUpdate(update)
       .then((updateHash) => {
+        this.unhashedUpdates.delete(rawUpdate);
         if (this.destroyed) {
           this.hashingCount -= 1;
           hashingReleased = true;
@@ -303,6 +345,11 @@ export class HocuspocusCollaborationSession {
       throw new TypeError("The collaboration session ticket does not match its session metadata.");
     }
     this.principalBinding = { tenantId: ticket.tenantId, subject: ticket.subject };
+    this.localPresence = {
+      protocolVersion: 1,
+      displayName: ticket.displayName,
+      color: ticket.presenceColor,
+    };
     if (
       options.session.compatibility?.readable !== true ||
       options.session.compatibility.writable === options.session.readOnly
@@ -312,7 +359,11 @@ export class HocuspocusCollaborationSession {
     if (options.session.capabilities.durableAck !== true) {
       throw new TypeError("The selected Provider does not support durable acknowledgements.");
     }
-    if (!(options.supportedSchemaVersions ?? [1]).includes(options.session.schemaVersion)) {
+    if (
+      !(options.supportedSchemaVersions ?? SUPPORTED_DOCUMENT_SCHEMA_VERSIONS).includes(
+        options.session.schemaVersion,
+      )
+    ) {
       throw new TypeError("The session document uses an unsupported content schema.");
     }
     const supportedExtensions = new Set(
@@ -364,6 +415,12 @@ export class HocuspocusCollaborationSession {
           throw new Error("collaboration-generation-changed");
         }
         this.currentSession = refreshed;
+        this.localPresence = {
+          protocolVersion: 1,
+          displayName: refreshedTicket.displayName,
+          color: refreshedTicket.presenceColor,
+        };
+        this.schedulePresenceUpdate();
         this.scheduleSessionRefresh();
         this.publish({});
         return refreshed.token;
@@ -376,6 +433,7 @@ export class HocuspocusCollaborationSession {
           this.state.connection === "closed"
         )
           return;
+        if (this.browserOffline) return;
         const connection =
           status === "connected"
             ? "connected"
@@ -384,7 +442,11 @@ export class HocuspocusCollaborationSession {
               : "reconnecting";
         this.publish({ connection });
         if (connection === "connected") this.republishPresence();
-        if (connection !== "connected" && this.pending.size + this.hashingCount > 0)
+        if (
+          connection !== "connected" &&
+          this.pending.size + this.hashingCount > 0 &&
+          this.state.persistence !== "failed"
+        )
           this.publish({ persistence: "unknown" });
       },
       onSynced: ({ state }) => {
@@ -395,33 +457,106 @@ export class HocuspocusCollaborationSession {
       onStateless: ({ payload }) => this.handleStateless(payload),
       onAuthenticationFailed: ({ reason }) => {
         if (this.destroyed) return;
+        this.localPresence = null;
+        this.withdrawPresence();
         this.publish({ connection: "denied", sync: "incompatible", errorCode: reason });
         this.reportError(reason);
       },
       onClose: ({ event }) => {
         if (this.destroyed) return;
-        if (this.pending.size + this.hashingCount > 0) this.publish({ persistence: "unknown" });
+        if (event.reason === "durable-persistence-failed") {
+          for (const update of this.pending.values()) this.failedUpdateIds.add(update.updateId);
+          this.publish({ persistence: "failed", errorCode: event.reason });
+          this.reportError(event.reason);
+        } else if (
+          this.pending.size + this.hashingCount > 0 &&
+          this.state.persistence !== "failed"
+        ) {
+          this.publish({ persistence: "unknown" });
+        }
         if (
           event.code === 1008 ||
           event.code === 4401 ||
           event.code === 4403 ||
           (event.reason !== "" && event.reason !== "Server closed the connection")
         ) {
+          this.localPresence = null;
+          this.withdrawPresence();
           this.publish({ connection: "denied", errorCode: event.reason || "access-denied" });
+          this.provider.configuration.websocketProvider.disconnect();
         }
       },
     });
     this.provider.awareness?.on("change", this.onAwarenessChange);
     this.scheduleSessionRefresh();
-    this.provider.connect();
+    if (typeof window !== "undefined") {
+      window.addEventListener("offline", this.onBrowserOffline);
+      window.addEventListener("online", this.onBrowserOnline);
+    }
+    if (typeof window !== "undefined" && !window.navigator.onLine) this.onBrowserOffline();
+    else
+      void this.provider.connect().catch(() => {
+        if (!this.destroyed) this.publish({ connection: "reconnecting" });
+      });
   }
 
   getStatus(): CollaborationStatus {
     return { ...this.state };
   }
 
+  captureAnchor(editor: Editor, range: { from: number; to: number }): Anchor {
+    if (this.destroyed || this.state.connection !== "connected" || this.state.sync !== "current") {
+      throw new Error("collaboration-session-not-current");
+    }
+    if (!this.tiptapAdapter) throw new Error("collaboration-editor-not-initialized");
+    return this.tiptapAdapter.createTiptapAnchorFromRange(
+      editor,
+      this.options.document,
+      {
+        documentId: this.currentSession.documentId,
+        generationId: this.currentSession.generationId,
+      },
+      range.from,
+      range.to,
+    );
+  }
+
+  resolveAnchor(
+    editor: Editor,
+    anchor: Anchor,
+  ): TiptapAnchorResolution | { status: "not-current" } {
+    if (this.destroyed || this.state.connection !== "connected" || this.state.sync !== "current") {
+      return { status: "not-current" };
+    }
+    if (!this.tiptapAdapter) return { status: "not-current" };
+    return this.tiptapAdapter.resolveTiptapAnchor(editor, this.options.document, anchor, {
+      documentId: this.currentSession.documentId,
+      generationId: this.currentSession.generationId,
+    });
+  }
+
   getPendingUpdateIds(): string[] {
     return [...this.pending.values()].map((update) => update.updateId);
+  }
+
+  /** Bytes remain separate until the server acknowledges each update; never persist session tokens. */
+  getPendingUpdateBytes(): Uint8Array[] {
+    return [...this.pending.values()]
+      .map((update) => Uint8Array.from(update.updateBytes))
+      .concat([...this.unhashedUpdates].map((update) => Uint8Array.from(update)));
+  }
+
+  /** The host must verify identity, generation and base structure revision before recovery. */
+  restorePendingUpdates(updates: readonly Uint8Array[]): void {
+    if (
+      this.destroyed ||
+      this.readOnly ||
+      this.state.connection !== "connected" ||
+      this.state.sync !== "current"
+    )
+      throw new Error("collaboration-session-not-writable");
+    for (const update of updates)
+      Y.applyUpdate(this.options.document, update, "zhishu-local-recovery");
   }
 
   get readOnly(): boolean {
@@ -475,7 +610,7 @@ export class HocuspocusCollaborationSession {
     throw new Error("invalid-structure-state");
   }
 
-  submitStructureOperation(
+  async submitStructureOperation(
     batch: OperationBatch,
     baseStructureRevision?: number,
     timeoutMs = 15_000,
@@ -492,6 +627,25 @@ export class HocuspocusCollaborationSession {
     ) {
       return Promise.reject(new Error("stale-collaboration-generation"));
     }
+
+    // A local body edit can still be waiting for the server's durable receipt and
+    // projected structure update. Read the revision only after that update has
+    // been applied locally, otherwise the server can reject the operation as stale.
+    const persistence = await this.waitForPersisted(undefined, timeoutMs);
+    if (persistence.status !== "persisted") {
+      return Promise.reject(
+        new Error(
+          persistence.status === "failed"
+            ? (this.state.errorCode ?? "collaboration-content-persistence-failed")
+            : "collaboration-content-persistence-timeout",
+        ),
+      );
+    }
+    if (this.destroyed) return Promise.reject(new Error("collaboration-session-closed"));
+    if (this.state.connection !== "connected" || this.state.sync !== "current") {
+      return Promise.reject(new Error("collaboration-session-not-current"));
+    }
+
     let revision: number;
     try {
       revision = baseStructureRevision ?? this.getStructureRevision();
@@ -505,7 +659,7 @@ export class HocuspocusCollaborationSession {
       return Promise.reject(new Error("structure-operation-already-pending"));
     }
 
-    return new Promise((resolve, reject) => {
+    const result = await new Promise<StructureOperationResult>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingStructureOperations.delete(batch.operationId);
         reject(new Error("structure-operation-timeout"));
@@ -525,6 +679,44 @@ export class HocuspocusCollaborationSession {
         this.pendingStructureOperations.delete(batch.operationId);
         reject(error instanceof Error ? error : new Error("structure-operation-send-failed"));
       }
+    });
+    if (result.status === "accepted" || result.status === "duplicate") {
+      await this.waitForStructureRevision(result.revision, timeoutMs);
+    }
+    return result;
+  }
+
+  private async waitForStructureRevision(revision: number, timeoutMs: number): Promise<void> {
+    if (this.getStructureRevision() >= revision) return;
+    if (this.destroyed) throw new Error("collaboration-session-closed");
+    const structure = this.options.document.getMap<unknown>("zhishu.structure.v1");
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const check = () => {
+        if (this.destroyed) {
+          finish(new Error("collaboration-session-closed"));
+          return;
+        }
+        try {
+          if (this.getStructureRevision() >= revision) finish();
+        } catch (error) {
+          finish(error instanceof Error ? error : new Error("invalid-structure-state"));
+        }
+      };
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        structure.unobserve(check);
+        if (error) reject(error);
+        else resolve();
+      };
+      const timeout = setTimeout(
+        () => finish(new Error("structure-revision-sync-timeout")),
+        timeoutMs,
+      );
+      structure.observe(check);
+      check();
     });
   }
 
@@ -550,6 +742,15 @@ export class HocuspocusCollaborationSession {
     this.presenceListeners.add(listener);
     this.invokeConsumer(() => listener(this.getPresences()));
     return () => this.presenceListeners.delete(listener);
+  }
+
+  async createEditorExtensions(): Promise<Extensions> {
+    const tiptapAdapter = await import("./tiptap.js");
+    this.tiptapAdapter = tiptapAdapter;
+    return [
+      tiptapAdapter.createTiptapCollaborationExtension(this.options.document),
+      tiptapAdapter.createTiptapPresenceExtension(this.options.document, this),
+    ];
   }
 
   setPresence(presence: CollaborationPresenceInput | null): void {
@@ -614,6 +815,7 @@ export class HocuspocusCollaborationSession {
 
   retry(): void {
     if (this.destroyed) return;
+    if (this.browserOffline) return;
     this.publish({ connection: "connecting", sync: "loading", errorCode: undefined });
     const websocket = this.provider.configuration.websocketProvider;
     const connect = () =>
@@ -637,6 +839,10 @@ export class HocuspocusCollaborationSession {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    if (typeof window !== "undefined") {
+      window.removeEventListener("offline", this.onBrowserOffline);
+      window.removeEventListener("online", this.onBrowserOnline);
+    }
     if (this.sessionRefreshTimer) {
       clearTimeout(this.sessionRefreshTimer);
       this.sessionRefreshTimer = undefined;
@@ -706,6 +912,8 @@ export class HocuspocusCollaborationSession {
 
   private expireSession(errorCode: string): void {
     if (this.destroyed) return;
+    this.localPresence = null;
+    this.withdrawPresence();
     this.publish({
       connection: "denied",
       sync: "incompatible",

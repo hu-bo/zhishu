@@ -5,12 +5,25 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { GetDocument200ExtensionsItem } from './getDocument200ExtensionsItem';
+import type { GetDocument200Mode } from './getDocument200Mode';
+import type { GetDocument200TagsItem } from './getDocument200TagsItem';
 
 export type GetDocument200 = {
   /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
   id: string;
   tenantId: string;
   title: string;
+  workspaceId: string;
+  /** @pattern ^cat_[A-Za-z0-9_-]{1,64}$ */
+  catalogId: string;
+  /** @minimum 0 */
+  position: number;
+  /** @maxLength 32 */
+  icon: string | null;
+  /** @maxItems 12 */
+  tags: GetDocument200TagsItem[];
+  createdBy: string;
+  mode: GetDocument200Mode;
   /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
   generationId: string;
   /**
@@ -28,4 +41,5 @@ export type GetDocument200 = {
      * @exclusiveMinimum
      */
   metadataRevision: number;
+  canManage: boolean;
 };

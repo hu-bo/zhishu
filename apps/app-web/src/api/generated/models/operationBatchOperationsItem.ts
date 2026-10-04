@@ -36,6 +36,26 @@ export type OperationBatchOperationsItem = {
   targetBlockId: string;
   block: DocumentBlock;
 } | {
+  type: 'wrap-block';
+  /**
+     * Stable identity for an addressable block.
+     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
+     */
+  targetBlockId: string;
+  wrapper: DocumentBlock | {
+  type: 'callout';
+  attrs: {
+  /**
+     * Stable identity for an addressable block.
+     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
+     */
+  blockId: string;
+  theme: 'info' | 'tip' | 'warning' | 'success' | 'danger';
+};
+  /** @maxItems 10000 */
+  content: DocumentBlock[];
+};
+} | {
   type: 'move-block';
   /**
      * Stable identity for an addressable block.

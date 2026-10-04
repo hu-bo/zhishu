@@ -4,6 +4,7 @@ import { serializerCompiler, validatorCompiler } from "fastify-type-provider-zod
 import type { AppConfig } from "./config.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
 import { OperationsMetrics } from "./modules/health/operations-metrics.js";
+import type { OperationsMetrics as OperationsMetricsType } from "./modules/health/operations-metrics.js";
 import { identityRoutes } from "./modules/identity/identity.routes.js";
 import { registerIdentityGuard } from "./modules/identity/index.js";
 import { MockIdentityService } from "./modules/identity/identity.service.js";
@@ -24,6 +25,7 @@ export async function buildApp(
     exportMode?: boolean;
     sessionRevoker?: CollaborationSessionRevoker;
     identityAuthenticator?: PrincipalAuthenticator;
+    operationsMetrics?: OperationsMetricsType;
   } = {},
 ) {
   const mockIdentityService =
@@ -34,7 +36,7 @@ export async function buildApp(
   if (!identityAuthenticator) {
     throw new Error("AUTH_MODE=external requires a trusted PrincipalAuthenticator.");
   }
-  const operationsMetrics = new OperationsMetrics();
+  const operationsMetrics = options.operationsMetrics ?? new OperationsMetrics();
   const requestStartTimes = new WeakMap<object, bigint>();
   const app = Fastify({
     genReqId: () => randomUUID(),
@@ -85,7 +87,12 @@ export async function buildApp(
         await api.register(projectsModule);
         await api.register((scope) => assetsModule(scope, config, options.exportMode));
         await api.register(async (scope) =>
-          documentsModule(scope, config, options.sessionRevoker ?? { revokeDocumentSessions() {} }),
+          documentsModule(
+            scope,
+            config,
+            options.sessionRevoker ?? { revokeDocumentSessions() {} },
+            options.exportMode,
+          ),
         );
       },
       { prefix: "/api" },

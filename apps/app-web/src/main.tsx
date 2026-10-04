@@ -6,9 +6,11 @@ import { createQueryClient } from '@/app/query-client';
 import { createAppRouter } from '@/app/router';
 import '@/styles/globals.css';
 import '@zhishu/editor-ui/styles.css';
+import { installOfflineWorker } from '@/features/offline/install-worker';
 
 const queryClient = createQueryClient();
 const router = createAppRouter(queryClient);
+installOfflineWorker();
 const root = document.getElementById('root');
 if (!root) throw new Error('Application root is missing');
 createRoot(root).render(

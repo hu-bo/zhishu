@@ -1,14 +1,22 @@
 import type { DocumentContent } from "./schema.js";
 
 export interface ContentMigration {
+  readonly id: string;
+  readonly summary: string;
   readonly fromSchemaVersion: number;
   readonly toSchemaVersion: number;
   migrate(content: unknown): unknown;
 }
 
 export interface ContentMigrationStepReport {
+  id: string;
+  summary: string;
   fromSchemaVersion: number;
   toSchemaVersion: number;
+}
+
+export interface ContentMigrationStepSnapshot extends ContentMigrationStepReport {
+  content: unknown;
 }
 
 export interface ContentMigrationReport {
@@ -30,8 +38,18 @@ export interface ContentMigrationReport {
 }
 
 export type ContentMigrationResult<TContent = DocumentContent> =
-  | { success: true; content: TContent; report: ContentMigrationReport }
-  | { success: false; original: unknown; report: ContentMigrationReport };
+  | {
+      success: true;
+      content: TContent;
+      report: ContentMigrationReport;
+      stepSnapshots: ContentMigrationStepSnapshot[];
+    }
+  | {
+      success: false;
+      original: unknown;
+      report: ContentMigrationReport;
+      stepSnapshots: ContentMigrationStepSnapshot[];
+    };
 
 /**
  * Migrations are explicit, deterministic steps. Implementations must not mutate their input;
@@ -61,24 +79,31 @@ export function createContentMigrationExecutor<TContent = DocumentContent>(
   target: ContentMigrationTarget<TContent>,
 ): ContentMigrationExecutor<TContent> {
   const stepsBySource = new Map<number, ContentMigration>();
+  const migrationIds = new Set<string>();
   if (!Number.isSafeInteger(target.schemaVersion) || target.schemaVersion < 1)
     throw new TypeError("The target schema version must be a positive safe integer.");
 
   for (const migration of migrations) {
     if (
+      !/^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/u.test(migration.id) ||
+      migration.summary.trim().length === 0 ||
+      migration.summary.length > 240 ||
       !Number.isSafeInteger(migration.fromSchemaVersion) ||
       !Number.isSafeInteger(migration.toSchemaVersion) ||
       migration.fromSchemaVersion < 1 ||
       migration.toSchemaVersion <= migration.fromSchemaVersion ||
+      migrationIds.has(migration.id) ||
       stepsBySource.has(migration.fromSchemaVersion)
     ) {
       throw new TypeError("Migration registry contains an invalid or ambiguous step.");
     }
+    migrationIds.add(migration.id);
     stepsBySource.set(migration.fromSchemaVersion, migration);
   }
 
   return (original, sourceSchemaVersion, targetSchemaVersion) => {
     const steps: ContentMigrationStepReport[] = [];
+    const stepSnapshots: ContentMigrationStepSnapshot[] = [];
     const baseReport = {
       sourceSchemaVersion,
       targetSchemaVersion,
@@ -96,6 +121,7 @@ export function createContentMigrationExecutor<TContent = DocumentContent>(
         status: "failed",
         error: { code, fromSchemaVersion, ...(issues ? { issues } : {}) },
       },
+      stepSnapshots,
     });
 
     if (
@@ -121,15 +147,24 @@ export function createContentMigrationExecutor<TContent = DocumentContent>(
       if (!migration || migration.toSchemaVersion > targetSchemaVersion)
         return fail("missing-step", currentVersion);
 
+      let snapshotContent: unknown;
       try {
         working = migration.migrate(working);
+        const serialized = JSON.stringify(working);
+        if (serialized === undefined)
+          throw new TypeError("A migration step must return JSON data.");
+        snapshotContent = JSON.parse(serialized) as unknown;
       } catch {
         return fail("migration-failed", currentVersion);
       }
-      steps.push({
+      const step = {
+        id: migration.id,
+        summary: migration.summary,
         fromSchemaVersion: migration.fromSchemaVersion,
         toSchemaVersion: migration.toSchemaVersion,
-      });
+      };
+      steps.push(step);
+      stepSnapshots.push({ ...step, content: snapshotContent });
       currentVersion = migration.toSchemaVersion;
     }
 
@@ -156,6 +191,7 @@ export function createContentMigrationExecutor<TContent = DocumentContent>(
         ...baseReport,
         status: currentVersion === sourceSchemaVersion ? "unchanged" : "migrated",
       },
+      stepSnapshots,
     };
   };
 }

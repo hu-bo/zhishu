@@ -4,7 +4,8 @@ export type DomainErrorCode =
   | "VALIDATION_ERROR"
   | "UNAUTHENTICATED"
   | "SERVICE_UNAVAILABLE"
-  | "RESOURCE_LIMIT";
+  | "RESOURCE_LIMIT"
+  | "IDEMPOTENCY_KEY_REUSED";
 
 export class DomainError extends Error {
   constructor(

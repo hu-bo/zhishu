@@ -22,6 +22,8 @@
     "smoke:asset-references": "tsx src/scripts/asset-reference-smoke.ts",
     "smoke:projection": "tsx src/scripts/projection-outbox-smoke.ts",
     "smoke:backup-restore": "tsx src/scripts/backup-restore-smoke.ts",
+    "smoke:knowledge": "tsx src/scripts/knowledge-smoke.ts",
+    "maintenance:compact-updates": "tsx src/scripts/compact-document-updates.ts",
     "projection:backfill": "tsx src/scripts/projection-backfill.ts",
     "maintenance:repair-block-ids": "tsx src/scripts/repair-duplicate-block-ids.ts"
   },

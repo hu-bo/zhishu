@@ -2,6 +2,9 @@ import "../environment.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
+import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
+import * as Y from "yjs";
+import { createEditorSchema } from "@zhishu/editor-core/schema";
 import {
   assets,
   assetReferences,
@@ -58,6 +61,9 @@ try {
       },
     ],
   };
+  const versionDoc = prosemirrorJSONToYDoc(createEditorSchema(), imageContent, "content");
+  const versionStateBytes = Y.encodeStateAsUpdate(versionDoc);
+  versionDoc.destroy();
   await app.db.insert(assets).values({
     id: assetId,
     tenantId: principal.tenantId,
@@ -84,7 +90,7 @@ try {
     updateBytes: new Uint8Array([1]),
     contentChanged: true,
     content: imageContent,
-    assetReferences: [{ assetId, blockId: "block_asset_smoke" }],
+    assetReferences: [{ assetId, blockId: "block_asset_smoke", mediaType: "image/png" }],
   });
   assert.equal(first.durableSeq, 1);
 
@@ -108,7 +114,7 @@ try {
     updateBytes: new Uint8Array([2]),
     contentChanged: true,
     content: imageContent,
-    assetReferences: [{ assetId, blockId: "block_asset_smoke" }],
+    assetReferences: [{ assetId, blockId: "block_asset_smoke", mediaType: "image/png" }],
   });
   assert.equal(second.durableSeq, 2);
   const historicalReference = await app.db
@@ -131,6 +137,7 @@ try {
     expectedGenerationId: document.generationId,
     expectedDurableSeq: second.durableSeq,
     content: imageContent,
+    stateBytes: versionStateBytes,
   });
   assert.equal(restored.status, "restored");
   if (restored.status !== "restored") throw new Error("Failed to restore the fixture version");
@@ -174,7 +181,13 @@ try {
           },
         ],
       },
-      assetReferences: [{ assetId: `asset_missing_${token}`, blockId: "block_missing_asset" }],
+      assetReferences: [
+        {
+          assetId: `asset_missing_${token}`,
+          blockId: "block_missing_asset",
+          mediaType: "image/png",
+        },
+      ],
     }),
     /unavailable or foreign asset/,
   );

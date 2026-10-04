@@ -68,6 +68,7 @@ export class AssetService {
     private readonly storage: AssetObjectStorage | null,
     private readonly options: {
       maxBytes: number;
+      maxTenantBytes: number;
       uploadTtlSeconds: number;
       accessUrlTtlSeconds: number;
       orphanRetentionSeconds: number;
@@ -81,19 +82,36 @@ export class AssetService {
     return this.storage;
   }
 
-  async createUpload(principal: Principal, documentId: string, input: CreateAssetUploadInput) {
+  async createUpload(
+    principal: Principal,
+    documentId: string,
+    input: CreateAssetUploadInput,
+    idempotencyKey?: string,
+  ) {
     this.requireStorage();
     if (input.size > this.options.maxBytes) {
       throw new DomainError("VALIDATION_ERROR", "Asset exceeds the configured upload limit");
     }
     const expiresAt = new Date(Date.now() + this.options.uploadTtlSeconds * 1_000);
+    const file = { ...input, fileName: sanitizeFileName(input.fileName) };
     const asset = await this.repository.createUpload({
       principal,
       documentId,
-      file: { ...input, fileName: sanitizeFileName(input.fileName) },
+      file,
       objectKey: `tenants/${principal.tenantId}/documents/${documentId}/${randomUUID()}`,
       maxBytes: this.options.maxBytes,
+      maxTenantBytes: this.options.maxTenantBytes,
       expiresAt,
+      ...(idempotencyKey
+        ? {
+            idempotency: {
+              key: idempotencyKey,
+              requestHash: createHash("sha256")
+                .update(JSON.stringify({ documentId, file }))
+                .digest("hex"),
+            },
+          }
+        : {}),
     });
     if (!asset) throw new DomainError("NOT_FOUND", "Document not found or write access denied");
     return {
@@ -112,8 +130,6 @@ export class AssetService {
     const storage = this.requireStorage();
     const current = await this.repository.getForAction(principal, assetId, "write");
     if (!current) throw new DomainError("NOT_FOUND", "Asset upload not found");
-    if (current.status !== "uploading")
-      throw new DomainError("CONFLICT", "Asset upload is not open");
     const bytes = decodeBase64(dataBase64);
     if (bytes.byteLength !== current.declaredSize || bytes.byteLength > this.options.maxBytes) {
       throw new DomainError(
@@ -128,10 +144,20 @@ export class AssetService {
         "Uploaded file content does not match its media type",
       );
     }
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    if (current.status === "uploaded" || current.status === "ready") {
+      if (current.actualSize === bytes.byteLength && current.sha256 === sha256) return;
+      throw new DomainError("CONFLICT", "Asset upload already contains different content");
+    }
+    if (current.status !== "uploading" && current.status !== "failed") {
+      throw new DomainError("CONFLICT", "Asset upload is not open");
+    }
+    if (current.uploadExpiresAt.getTime() <= Date.now()) {
+      throw new DomainError("CONFLICT", "Asset upload session has expired");
+    }
     const receiving = await this.repository.beginUpload(principal, assetId);
     if (!receiving)
       throw new DomainError("CONFLICT", "Asset upload is already in progress or closed");
-    const sha256 = createHash("sha256").update(bytes).digest("hex");
     try {
       await storage.put({
         objectKey: receiving.objectKey,
@@ -139,19 +165,21 @@ export class AssetService {
         mediaType,
         sha256,
       });
-      if (
-        !(await this.repository.markUploaded({
-          tenantId: principal.tenantId,
-          assetId,
-          actualSize: bytes.byteLength,
-          sha256,
-        }))
-      ) {
-        throw new Error("Upload session changed before its object was recorded");
-      }
     } catch (error) {
       await this.repository.markFailed(principal.tenantId, assetId);
-      throw error;
+      throw new DomainError("SERVICE_UNAVAILABLE", "Asset storage is unavailable", undefined, {
+        cause: error,
+      });
+    }
+    if (
+      !(await this.repository.markUploaded({
+        tenantId: principal.tenantId,
+        assetId,
+        actualSize: bytes.byteLength,
+        sha256,
+      }))
+    ) {
+      throw new DomainError("CONFLICT", "Asset upload changed before its object was recorded");
     }
   }
 
@@ -163,7 +191,14 @@ export class AssetService {
     if (current.status !== "uploaded" || current.actualSize === null || current.sha256 === null) {
       throw new DomainError("CONFLICT", "Asset content has not been uploaded");
     }
-    const object = await storage.head(current.objectKey);
+    let object: Awaited<ReturnType<AssetObjectStorage["head"]>>;
+    try {
+      object = await storage.head(current.objectKey);
+    } catch (error) {
+      throw new DomainError("SERVICE_UNAVAILABLE", "Asset storage is unavailable", undefined, {
+        cause: error,
+      });
+    }
     if (
       object.ContentLength !== current.actualSize ||
       object.ContentType !== current.mediaType ||

@@ -1,6 +1,24 @@
 export {
   DocumentBlockSchema,
   DocumentContentSchema,
+  TaskListSchema,
+  TableSchema,
+  TableRowSchema,
+  TableCellSchema,
+  TableHeaderSchema,
+  LEGACY_DOCUMENT_SCHEMA_VERSION,
+  TASK_LIST_DOCUMENT_SCHEMA_VERSION,
+  TABLE_DOCUMENT_SCHEMA_VERSION,
+  TEXT_FORMATS_DOCUMENT_SCHEMA_VERSION,
+  CALLOUT_DOCUMENT_SCHEMA_VERSION,
+  CURRENT_DOCUMENT_SCHEMA_VERSION,
+  SUPPORTED_DOCUMENT_SCHEMA_VERSIONS,
+  HIGHLIGHT_COLORS,
+  TEXT_ALIGNMENTS,
+  CALLOUT_THEMES,
+  CALLOUT_THEME_LABELS,
+  DOCUMENT_STATUSES,
+  DOCUMENT_STATUS_LABELS,
   DocumentSnapshotSchema,
   CollaborationPresenceSchema,
   AssetReferenceSchema,
@@ -16,6 +34,10 @@ export type {
   DocumentOperation,
   DocumentSnapshot,
   AssetReference,
+  Table,
+  TableRow,
+  TableCell,
+  TableHeader,
   Anchor,
   ExtensionRequirement,
   CollaborationPresence,
@@ -41,8 +63,8 @@ export {
   repairDuplicateBlockIds,
 } from "./identity.js";
 export { applyOperationBatch } from "./operations.js";
-export { checkAnchorTarget } from "./anchors.js";
-export type { AnchorTargetContext, AnchorTargetStatus } from "./anchors.js";
+export { checkAnchorContext, checkAnchorTarget } from "./anchors.js";
+export type { AnchorContextStatus, AnchorTargetContext, AnchorTargetStatus } from "./anchors.js";
 export { validateCollaborationPresence } from "./presence.js";
 export type { CollaborationPresenceValidationResult } from "./presence.js";
 export type {
@@ -56,6 +78,7 @@ export type {
   ContentMigrationExecutor,
   ContentMigrationReport,
   ContentMigrationResult,
+  ContentMigrationStepSnapshot,
   ContentMigrationStepReport,
   ContentMigrationTarget,
 } from "./migration.js";
@@ -64,6 +87,7 @@ export {
   assertDocumentContent,
   normalizeDocumentContent,
   validateDocumentContent,
+  validateDocumentContentForSchemaVersion,
 } from "./validation.js";
 export type {
   ContentIssue,

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { editorOriginMeta } from "@zhishu/editor-core";
 import { useEditorInstance, useEditorSelector } from "@zhishu/editor-react";
+import { EditorIcon } from "./editor-icon.js";
 
 export interface EditorLinkEditorMessages {
   label: string;
@@ -48,9 +49,10 @@ interface LinkCommandChain {
 export interface EditorLinkEditorProps {
   messages?: Partial<EditorLinkEditorMessages>;
   className?: string;
+  openRequest?: number;
 }
 
-export function EditorLinkEditor({ messages, className }: EditorLinkEditorProps) {
+export function EditorLinkEditor({ messages, className, openRequest }: EditorLinkEditorProps) {
   const { controller } = useEditorInstance();
   const editable = useEditorSelector((state) => state.isEditable);
   const errorId = useId();
@@ -58,11 +60,19 @@ export function EditorLinkEditor({ messages, className }: EditorLinkEditorProps)
   const [error, setError] = useState("");
   const [errorField, setErrorField] = useState<"text" | "url" | null>(null);
   const displayTextRef = useRef<HTMLInputElement | null>(null);
+  const previousOpenRequestRef = useRef(openRequest ?? 0);
+  const openRef = useRef<() => void>(() => {});
   const labels = { ...defaultMessages, ...messages };
 
   useEffect(() => {
     if (draft) displayTextRef.current?.focus();
   }, [draft]);
+
+  useEffect(() => {
+    if (openRequest === undefined || previousOpenRequestRef.current === openRequest) return;
+    previousOpenRequestRef.current = openRequest;
+    openRef.current();
+  }, [openRequest]);
 
   if (!controller || controller.isDestroyed) return null;
   const editor = controller.editor;
@@ -84,6 +94,7 @@ export function EditorLinkEditor({ messages, className }: EditorLinkEditorProps)
       document: editor.state.doc,
     });
   };
+  openRef.current = open;
 
   const close = () => {
     setDraft(null);
@@ -170,17 +181,24 @@ export function EditorLinkEditor({ messages, className }: EditorLinkEditorProps)
         aria-haspopup="dialog"
         aria-expanded={draft !== null}
         disabled={!editable}
-        title={!editable ? controller.readonlyReason : undefined}
+        title={editable ? labels.label : (controller.readonlyReason ?? labels.label)}
         onMouseDown={(event) => event.preventDefault()}
         onClick={open}
       >
-        {labels.label}
+        <EditorIcon name="link" />
+        <span className="zhishu-ui-visually-hidden">{labels.label}</span>
       </button>
       {draft && (
         <form
           className="zhishu-ui-link-dialog"
           role="dialog"
           aria-label={labels.title}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            event.stopPropagation();
+            close();
+          }}
           onSubmit={save}
         >
           <label>

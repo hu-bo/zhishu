@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { buildApp } from "./app.js";
 import { loadConfig, type AppConfig } from "./config.js";
 import { createCollaborationServer } from "./modules/collaboration/hocuspocus.server.js";
+import { OperationsMetrics } from "./modules/health/operations-metrics.js";
 import type { PrincipalAuthenticator } from "./modules/identity/identity.types.js";
 
 export async function startServer(
@@ -13,8 +14,10 @@ export async function startServer(
   } = {},
 ): Promise<void> {
   const config = options.config ?? loadConfig();
+  const operationsMetrics = new OperationsMetrics();
   const collaborationRef: { current?: ReturnType<typeof createCollaborationServer> } = {};
   const app = await buildApp(config, {
+    operationsMetrics,
     ...(options.identityAuthenticator
       ? { identityAuthenticator: options.identityAuthenticator }
       : {}),
@@ -24,10 +27,16 @@ export async function startServer(
       },
     },
   });
-  const collaboration = createCollaborationServer(config, app.db, app.dbPool, () => {
-    app.log.fatal("Collaboration owner lock was lost; stopping this server instance.");
-    process.kill(process.pid, "SIGTERM");
-  });
+  const collaboration = createCollaborationServer(
+    config,
+    app.db,
+    app.dbPool,
+    () => {
+      app.log.fatal("Collaboration owner lock was lost; stopping this server instance.");
+      process.kill(process.pid, "SIGTERM");
+    },
+    operationsMetrics,
+  );
   collaborationRef.current = collaboration;
   let collaborationStarted = false;
   let closing = false;

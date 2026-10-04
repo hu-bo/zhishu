@@ -1,6 +1,6 @@
 # editor-collaboration 设计规划
 
-状态：M2 实现中。Provider 决策、短时会话授权、PostgreSQL 持久化原型和服务端结构命令原型已实现；正常保存、数据库中断恢复、内容重载、双端结构冲突及正文/结构命令提交后进程崩溃注入 smoke 已通过。剩余 M2 生命周期与集成验收仍待完成。[返回文档地图](../README.md)。服务端配套见 [app-server](../apps/app-server.md)。
+状态：M2 实现中。Provider 决策、短时会话授权、PostgreSQL 持久化、服务端结构命令和 app-web 协同编辑器已实现；正常保存、数据库中断恢复、内容重载、双端结构冲突及正文/结构命令提交后进程崩溃恢复已通过。双客户端 Presence 身份覆盖、离开清理、断线续票和票据过期续期已在真实 Hocuspocus 会话验收。其余 M2 生命周期与集成验收仍待完成。[返回文档地图](../README.md)。服务端配套见 [app-server](../apps/app-server.md)。
 
 ## 1. 产品职责与依赖
 
@@ -8,9 +8,9 @@
 
 首期采用自托管 Hocuspocus v4 WebSocket Provider（上游 MIT，服务端要求 Node.js 22+），允许宿主替换。Tiptap Collaboration 和 `@tiptap/y-tiptap` 也属于 MIT 开源依赖；均可部署在自有环境，不要求使用 Tiptap Cloud。Provider 必须实现明确协议与能力，替换 URL 并不意味着两种不同协议能互通。包可从浏览器使用；服务端实现留在 app-server 的 collaboration 模块。Hocuspocus 的防抖 `onStoreDocument` 不承担 durable ack；PostgreSQL 更新日志是权威持久层。许可/部署依据：[Hocuspocus server manifest](https://github.com/ueberdosis/hocuspocus/blob/main/packages/server/package.json)、[Tiptap Collaboration manifest](https://github.com/ueberdosis/tiptap/blob/main/packages/extension-collaboration/package.json)、[y-tiptap manifest](https://github.com/ueberdosis/y-tiptap/blob/main/package.json)。
 
-客户端可从 `@zhishu/editor-collaboration/tiptap` 使用 `createTiptapCollaborationExtension(document, field)`；`HocuspocusCollaborationSession.waitUntilSynced()` 在 provider 已连接且 state vector 同步后 resolve，不兼容、撤权、断开和超时则 reject。Provider 自动使用退避和随机抖动重连；session 的 `retry()` 可手动重新连接，重连时通过 `refreshSession` 获取新 ticket，并重放尚未确认的本地更新。core `collaborative: true` 禁止本地初始 JSON 并停用 StarterKit 普通撤销；`isTiptapCollaborationFieldEmpty()` 只供同步后检测共享 fragment 是否为空。官方要求 UniqueID editor 在 Provider 同步后挂载，且使用 collaboration 历史时关闭 StarterKit UndoRedo，参见 [Collaboration extension](https://tiptap.dev/docs/editor/extensions/functionality/collaboration) 和 [UniqueID 协同设置](https://tiptap.dev/docs/editor/extensions/functionality/uniqueid)。这完成客户端绑定入口的一部分；服务端一次性初始内容的原子初始化、React 生命周期整合、正文 XML 与 D-03 规范 Block maps 投影仍未完成，不能开放协同结构 UI。
+客户端可从 `@zhishu/editor-collaboration/tiptap` 使用 `createTiptapCollaborationExtension(document, field)`；`HocuspocusCollaborationSession.waitUntilSynced()` 在 provider 已连接且 state vector 同步后 resolve，不兼容、撤权、断开和超时则 reject。Provider 自动使用退避和随机抖动重连；session 的 `retry()` 可手动重新连接，重连时通过 `refreshSession` 获取新 ticket，并重放尚未确认的本地更新。core `collaborative: true` 禁止本地初始 JSON 并停用 StarterKit 普通撤销；`isTiptapCollaborationFieldEmpty()` 只供同步后检测共享 fragment 是否为空。app-server 在事务中原子初始化普通正文、新 generation 和结构投影；React sync gate 等待 Provider 同步后才挂载编辑器，协同 Block 操作通过 `structure-operation` 提交并等待 durable ack。官方要求 UniqueID editor 在 Provider 同步后挂载，且使用 collaboration 历史时关闭 StarterKit UndoRedo，参见 [Collaboration extension](https://tiptap.dev/docs/editor/extensions/functionality/collaboration) 和 [UniqueID 协同设置](https://tiptap.dev/docs/editor/extensions/functionality/uniqueid)。
 
-Provider 会读取 session ticket 中的 tenant/subject 声明，仅用于比较续期前后的主体是否一致；ticket 签名验证和访问控制仍由服务端负责。Hocuspocus session 在 ticket 到期前调用 `sendToken()` 续期，服务端要求同一租户和主体，并按新票据的只读/可写状态重新检查 ACL。宿主未提供 `refreshSession` 时，客户端在 ticket 到期时切为 denied/只读并断开。WebSocket 真实账号切换、权限降级和到期续期验收仍待完成。
+Provider 会读取 session ticket 中的 tenant/subject 声明，仅用于比较续期前后的主体是否一致；ticket 签名验证和访问控制仍由服务端负责。Hocuspocus session 在 ticket 到期前调用 `sendToken()` 续期，服务端要求同一租户和主体，并按新票据的只读/可写状态重新检查 ACL。宿主未提供 `refreshSession` 时，客户端在 ticket 到期时切为 denied/只读并断开。真实会话已验收双客户端 Presence 身份覆盖、断开清理、强制重连续票、无刷新器时到期转 denied，以及刷新器持续续期后会话保持可用；账号切换和 ACL 权限降级路径仍待验收。
 
 ### D-02 决策与持久化次序
 
@@ -64,7 +64,7 @@ connected 不代表 current；current 不代表 persisted。连接断开后可�
 | `flush / awaitPersisted`         | 等待已发送修改的服务端回执，超时返回 pending/failed                    | 仅对声明 durableAck 的 Provider 有效 |
 | `capabilities`                   | durableAck、只读会话、凭据刷新、协议版本等                             | 创建前明确，缺失能力不可伪装         |
 
-标准 Yjs 同步消息之外，本产品使用 Hocuspocus stateless 帧传输持久化回执、`durable-replay` 探测和 `structure-operation` 命令。结构命令返回 accepted/duplicate/conflict/rejected、revision 和 durableSeq；持久化回执携带 generationId、更新 SHA-256 标识和服务端 durableSeq。客户端 Provider 包维护内存待确认更新并暴露 `getStructureRevision()`/`submitStructureOperation()`；Editor 尚未绑定这些结构 API。`onPendingUpdate(updateId)` 在本地更新完成哈希并进入待确认队列时触发，ID 为 `generationId:sha256(update)`；`onPersisted(receipt)` 返回同一 ID 和 durableSeq。`waitForPersisted(updateIds)` 仅在所列 ID 都收到回执后成功，相关持久化错误返回失败，未知 ID 在超时后返回 pending；不传 ID 时等待当前哈希和待确认队列排空。会话仅保留最近 512 个成功回执供稍后的精确等待查询；尚未回执的更新只在当前客户端内存保留，关闭会话不会形成离线持久队列。消费方状态监听与回调异常不会中断 Provider 的协议处理。第三方基础 Provider 若不实现 durable ack，应声明 `durableAck: false`。
+标准 Yjs 同步消息之外，本产品使用 Hocuspocus stateless 帧传输持久化回执、`durable-replay` 探测和 `structure-operation` 命令。结构命令返回 accepted/duplicate/conflict/rejected、revision 和 durableSeq；持久化回执携带 generationId、更新 SHA-256 标识和服务端 durableSeq。客户端 Provider 包维护内存待确认更新并暴露 `getStructureRevision()`/`submitStructureOperation()`；React Editor context 将结构命令提交接口交给 UI。accepted/duplicate 响应到达后，提交 Promise 还会等本地 `zhishu.structure.v1` revision 到达服务端返回值，避免调用方在对应 Yjs 投影更新抵达前继续编辑。`onPendingUpdate(updateId)` 在本地更新完成哈希并进入待确认队列时触发，ID 为 `generationId:sha256(update)`；`onPersisted(receipt)` 返回同一 ID 和 durableSeq。`waitForPersisted(updateIds)` 仅在所列 ID 都收到回执后成功，相关持久化错误返回失败，未知 ID 在超时后返回 pending；不传 ID 时等待当前哈希和待确认队列排空。会话仅保留最近 512 个成功回执供稍后的精确等待查询；尚未回执的更新只在当前客户端内存保留，关闭会话不会形成离线持久队列。消费方状态监听与回调异常不会中断 Provider 的协议处理。第三方基础 Provider 若不实现 durable ack，应声明 `durableAck: false`。
 
 适配器向上暴露一致的语义接口，底层可以使用不同握手和帧编码：
 
@@ -116,7 +116,9 @@ Provider 事件至少表达 `connected`、`synced`、`update-sent`、`persisted`
 
 普通撤销栈与 Yjs 协同撤销不得同时处理同一正文。core 的 `collaborative: true` 已关闭 StarterKit 普通 UndoRedo；Tiptap Collaboration 内置的 Y.UndoManager 默认只追踪本地 `ySyncPluginKey` origin，Hocuspocus 远端更新使用其他 origin，不进入本人的撤销栈。`@zhishu/editor-collaboration/tiptap` 提供 `runTiptapCollaborationUndoGroup(editor, apply)`，在同步应用单次本地变更前后调用 `stopCapturing()`，可把最终接受的一次 AI/宿主操作和附近输入分开撤销；只能包住同步应用回调，不能包住异步生成等待。Tiptap Editor 不存在协同 undo plugin 时该 helper 会抛出明确错误。AI 接受路径尚未实现，故分组 helper 尚无产品调用点或 AI 冲突验收。[官方 UndoManager 文档](https://docs.yjs.dev/api/undo-manager)
 
-`createTiptapAnchor(editor, document, { documentId, generationId }, field)` 把当前 ProseMirror 选区端点映射为 Yjs relative positions，并绑定两端 Block ID 与代次；`resolveTiptapAnchor(editor, document, anchor, currentIdentity, field)` 在当前同步映射下返回有效范围，或明确返回 stale-document、stale-generation、target-missing、invalid-anchor。解析同时确认 Block 仍存在且位置仍落在对应 Block 内；调用方负责隐藏失效装饰/拒绝应用，helper 不自动移动光标，也不把映射失败降级成旧绝对偏移。
+`createTiptapAnchor(editor, document, { documentId, generationId }, field)` 把当前 ProseMirror 选区端点映射为 Yjs relative positions；`createTiptapAnchorFromRange()` 对指定的有效范围执行相同映射。两者都绑定两端 Block ID 与代次，并可记录块内偏移和选区长度。`resolveTiptapAnchor(editor, document, anchor, currentIdentity, field)` 在当前同步映射下返回有效范围，或明确返回 stale-document、stale-generation、target-missing、invalid-anchor。解析优先使用有效 Yjs 相对位置；服务端结构命令重建正文导致相对位置失效时，按仍存在的 Block ID 和块内偏移恢复，同块拆分会跨接后续相邻 Block，同块合并会在偏移仍有效时恢复；最后才使用最多 512 次事务映射。解析确认最终位置仍在当前内容中；调用方负责隐藏失效装饰/拒绝应用，helper 不自动移动光标，也不随 Anchor 保存选中文本。`HocuspocusCollaborationSession.captureAnchor/resolveAnchor` 将该 adapter 暴露给 React 会话，仅在连接且同步当前时创建或解析。
+
+`EditorFindPanel` 在协同会话中为每个查找命中捕获 Anchor，导航时重新解析相对位置，并在文档、代次、Block 失效或同步未完成时显示具体状态。查找支持跨 Block 匹配，Anchor 同时保存命中首尾 Block 和 Yjs 相对位置。Chromium app-web 页面已实际验证两个段落的大小写不敏感查找、上一个/下一个和循环；项目本地协同会话还验证服务端图片 Block 移动、锚点文本 Block 移动以及拆分/合并后的锚点仍选择原文。
 
 异步任务通过 core 的锚点接口使用相对位置，不保存过期的绝对下标。相对位置仍需验证目标存在、generation 一致和内容前置条件；原目标被删时应报告失效，不能把邻近内容当作原目标。[官方相对位置说明](https://docs.yjs.dev/api/relative-positions)
 
@@ -132,7 +134,7 @@ Yjs 文本/树 CRDT 的收敛不能替代业务 ID 与结构不变量。服务�
 
 ## 7. Awareness 与身份
 
-Awareness 用于会话级的在场状态，客户端 ID 不等于用户 ID；同一用户多个标签页有各自的 clientId。Provider 的 `setPresence()`、`getPresences()` 和 `subscribePresence()` 通过独立的 `zhishu` awareness 字段传递协议版本、显示名、颜色和可选选区；选区端点是 generation-local 的 Yjs relative-position Base64URL 编码。共享合约拒绝未知字段、无效位置编码和超过 2 KiB 的状态；客户端把本地 presence 更新合并到最多每 100 ms 一次，服务端每个连接每秒至多接受 30 次 presence 更新，超限只丢弃该次 presence 字段，不影响正文编辑。React Provider 暴露参与者订阅，EditorShell 显示最多五个参与者名字；`./tiptap` 可选入口提供 `createTiptapPresenceExtension()`，绑定后自动发布本地选区并装饰远端光标/选区，也提供独立的选区捕获 helper。当前 React 默认创建流程尚未安装该扩展；名字到认证用户的可信映射和过期状态的专门 UI 仍待完成。Yjs Awareness 负责断线/过期状态回收；手动断开先撤下本地 presence，重连后重发当前状态，不把临时在线信息写入文档版本。[官方 Awareness 文档](https://docs.yjs.dev/api/about-awareness)
+Awareness 用于会话级的在场状态，客户端 ID 不等于用户 ID；同一用户多个标签页有各自的 clientId。Provider 的 `setPresence()`、`getPresences()` 和 `subscribePresence()` 通过独立的 `zhishu` awareness 字段传递协议版本、显示名、颜色和可选选区；选区端点是 generation-local 的 Yjs relative-position Base64URL 编码。共享合约拒绝未知字段、无效位置编码和超过 2 KiB 的状态；客户端把本地 presence 更新合并到最多每 100 ms 一次，服务端每个连接每秒至多接受 30 次 presence 更新，超限只丢弃该次 presence 字段，不影响正文编辑。签名短期会话票据绑定可信主体的显示名与稳定颜色；服务端以票据值覆盖客户端自报展示字段，显示名不参与授权。React Provider 暴露参与者订阅，EditorShell 显示最多五个参与者名字；Hocuspocus session 在 React Provider 创建编辑器时自动安装 `createTiptapPresenceExtension()`，发布本地选区并装饰远端光标/选区。票据拒绝或过期时立即撤下本地 presence；断线和重连由 Awareness 回收及重发状态，不把临时在线信息写入文档版本。[官方 Awareness 文档](https://docs.yjs.dev/api/about-awareness)
 
 服务端认证结果才是权限与审计身份来源。Presence 合约不含用户 ID；显示名和颜色是不可信展示信息，不能通过修改 Awareness 获取他人身份或访问权。当前包不传头像或外部 URL。选区相对位置必须由宿主绑定到当前 Y.Doc/generation 后解析；过期、删除或无法解析的目标应隐藏，而不能回退到绝对偏移。
 
@@ -148,6 +150,10 @@ Awareness 用于会话级的在场状态，客户端 ID 不等于用户 ID；同
 
 持久离线缓存以后按 tenant/user/document/generation 隔离，默认由部署策略显式允许；退出、切换用户和撤权时执行清理/隔离规则。缓存重连必须重新授权，不能将本地缓存存在视为写入资格。
 
+`HocuspocusCollaborationSession.getPendingUpdateBytes()` 返回未获得 durable ack 的原生更新副本，包含异步计算哈希中的更新，不包含凭据。`restorePendingUpdates()` 仅在连接、同步且可写时应用更新；宿主先核对身份、权限、generation、Schema 和基础结构修订，并通过 `waitForPersisted()` 等待确认。不能用旧整文投影替代增量恢复。
+
+浏览器 offline 暂停连接及凭据刷新，online 重新请求授权后连接；显式断开和访问被拒绝不自动恢复。持久化失败关闭连接时保留失败状态和未确认更新。重连同步中的已接受结构项和已删除结构项作为重放处理，新增或删除受保护结构仍被拒绝。
+
 ## 9. 当前实现入口与验收记录
 
 服务端 session API、HMAC ticket、owner-managed ACL、目录和版本 API 位于 `apps/app-server/src/modules/documents` 和 `src/modules/collaboration`；更新事务及重放位于 `src/modules/documents/document.repository.ts` 与 `src/modules/collaboration/hocuspocus.server.ts`；PostgreSQL 表和 migration 位于 `database/schema/document.table.ts` 与 `database/migrations/0001_cute_old_lace.sql` 至 `0005_rich_earthquake.sql`。浏览器客户端类型与状态机在 `packages/editor-collaboration/src`，`/hocuspocus` 是可选 Provider 入口；`examples/collaboration-consumer` 从构建包入口连接真实 API/WS。
@@ -155,6 +161,12 @@ Awareness 用于会话级的在场状态，客户端 ID 不等于用户 ID；同
 在 2026-09-27 的隔离 PostgreSQL 上，正常 smoke 完成创建文档、协商 schema/generation、写入 Yjs 更新、收回执、手动断开/重连并用刷新后的 ticket 确认 pending 更新，随后断开重载；failure smoke 暂停 PostgreSQL，验证客户端仍保留 pending，恢复后重连并经重放回执清队列；同一原始更新字节重复探测两次，收到相同 durableSeq。结构 smoke 验证双端竞争、唯一 ID/拆分合并身份、900 KB Block 移动、重连恢复和服务端投影写保护。真实浏览器 Tiptap/React 消费样例验证正文输入和 Block 菜单复制、删除、段落/标题/代码块转换、上下移均获得 durable ack。新增 post-commit crash smoke 分别在正文更新与结构命令写入 PostgreSQL 事务后、服务端 Y.Doc apply/broadcast/操作回执前终止进程；新进程从数据库恢复内容和 maps，客户端重连后取得原 durableSeq，结构操作以相同 operationId 重放返回 duplicate。迁移 `0001_cute_old_lace.sql` 与 `0002_wise_venus.sql` 已在隔离库应用，后者约束 update 的 documentId/generationId 必须属于同一代次。
 
 ## 10. 交付与剩余验收
+
+2026-10-03 新增 `pnpm --filter @zhishu/collaboration-consumer-example smoke:performance`：仅允许 loopback API，需显式设置 `PERFORMANCE_QA=true` 指向隔离 QA 服务；运行前构建依赖。脚本用 1000 块/约 1 MB 正文建立 20 个真实会话，经 TCP 代理为实际 WebSocket 双向各施加 50ms 延迟；5 次预热、35 次轮流写入，分别测量全部远端 Y.Doc 可见与 PostgreSQL durable ack，并清理自己创建的文档/连接/定时器。初始目标为前者 P95 ≤500ms、后者 ≤2s，超限退出失败。
+
+本机隔离 PostgreSQL 15、Windows/i7-13650HX/32GB 验收发现全文重复序列化和结构块深拷贝导致远端 P95 624.3ms；减少这些分配后为 426.8ms，durable ack P95 422.1ms。规范比较仍忽略 JSON 键序及表格合法默认属性差异；内容、结构完整校验和先持久化再广播保持原语义。表格默认值/键序/文字变化断言与知识库、双端结构/重连回归通过。该数据来自同一身份 20 会话与同机网络代理，测量到 Y.Doc 到达，未测浏览器绘制；跨机参考硬件、20 个不同身份与 UI 完整基线仍待验。
+
+默认性能数据集编辑首段；设置 `PERFORMANCE_POSITION_MATRIX=true` 可轮流编辑第 0/500/999 块。扩展矩阵本轮远端 P95 857.9ms，仍超出 500ms 目标（持久化 P95 834.1ms 满足 2s 目标），因此不能据首段样本宣称完整性能达标。待继续定位同机多客户端压力下的延迟波动，并在参考环境测远端绘制。
 
 Yjs 及协同绑定依赖保持兼容且避免打包重复运行时；Provider 专属 SDK 放在独立导出入口，基础包不自动创建连接。日志记录会话标识与状态，避免写入正文、凭据和完整更新内容。
 

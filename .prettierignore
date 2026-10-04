@@ -10,3 +10,6 @@ apps/app-web/src/routeTree.gen.ts
 .playwright-cli/
 output/playwright/
 *.tmp
+syncscribe/
+output/qa/
+zhishu-demo-gemini/

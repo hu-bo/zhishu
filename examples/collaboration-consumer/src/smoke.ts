@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import * as Y from "yjs";
+import { CURRENT_DOCUMENT_SCHEMA_VERSION } from "@zhishu/document-contracts";
 import type { CollaborationSessionInfo } from "@zhishu/editor-collaboration";
 import { HocuspocusCollaborationSession } from "@zhishu/editor-collaboration/hocuspocus";
 
@@ -72,7 +73,7 @@ async function createSession(): Promise<CollaborationSessionInfo> {
     {
       method: "POST",
       headers: authorization,
-      body: JSON.stringify({ schemaVersion: 1, extensions: [] }),
+      body: JSON.stringify({ schemaVersion: CURRENT_DOCUMENT_SCHEMA_VERSION, extensions: [] }),
     },
   );
 }
@@ -175,6 +176,7 @@ try {
       method: "POST",
       headers: authorization,
       body: JSON.stringify({
+        mode: "collaborative",
         name: "Before reconnect edit",
         expectedGenerationId: document.generationId,
         expectedDurableSeq: collaboratorReceipt.durableSeq,
@@ -204,6 +206,7 @@ try {
     method: "POST",
     headers: authorization,
     body: JSON.stringify({
+      mode: "collaborative",
       expectedGenerationId: documentBeforeRestore.generationId,
       expectedDurableSeq: documentBeforeRestore.durableSeq,
     }),

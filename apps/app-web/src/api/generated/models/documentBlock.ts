@@ -4,7 +4,8 @@
  * Application API
  * OpenAPI spec version: 0.1.0
  */
-
+import type { Table } from './table';
+import type { TaskList } from './taskList';
 
 export type DocumentBlock = {
   type: 'paragraph';
@@ -14,6 +15,7 @@ export type DocumentBlock = {
      * @pattern ^block_[A-Za-z0-9_-]{1,64}$
      */
   blockId: string;
+  align?: 'left' | 'center' | 'right';
 };
   /** @maxItems 100000 */
   content?: ({
@@ -31,7 +33,23 @@ export type DocumentBlock = {
 } | {
   type: 'strike';
 } | {
+  type: 'underline';
+} | {
+  type: 'highlight';
+  attrs: {
+  color: 'yellow' | 'green' | 'blue' | 'pink' | 'purple';
+};
+} | {
   type: 'code';
+} | {
+  type: 'link';
+  attrs: {
+  /**
+     * @maxLength 2048
+     * @pattern ^(https?:\/\/|mailto:)[^\s]+$
+     */
+  href: string;
+};
 } | {
   type: 'link';
   /**
@@ -42,7 +60,27 @@ export type DocumentBlock = {
 })[];
 } | {
   type: 'hardBreak';
+} | {
+  type: 'statusTag';
+  attrs: {
+  status: 'todo' | 'in-progress' | 'in-review' | 'done' | 'blocked';
+};
 })[];
+} | {
+  type: 'callout';
+  attrs: {
+  /**
+     * Stable identity for an addressable block.
+     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
+     */
+  blockId: string;
+  theme: 'info' | 'tip' | 'warning' | 'success' | 'danger';
+};
+  /**
+     * @minItems 1
+     * @maxItems 10000
+     */
+  content: DocumentBlock[];
 } | {
   type: 'heading';
   attrs: {
@@ -56,6 +94,7 @@ export type DocumentBlock = {
      * @maximum 6
      */
   level?: number;
+  align?: 'left' | 'center' | 'right';
 };
   /** @maxItems 100000 */
   content?: ({
@@ -73,7 +112,23 @@ export type DocumentBlock = {
 } | {
   type: 'strike';
 } | {
+  type: 'underline';
+} | {
+  type: 'highlight';
+  attrs: {
+  color: 'yellow' | 'green' | 'blue' | 'pink' | 'purple';
+};
+} | {
   type: 'code';
+} | {
+  type: 'link';
+  attrs: {
+  /**
+     * @maxLength 2048
+     * @pattern ^(https?:\/\/|mailto:)[^\s]+$
+     */
+  href: string;
+};
 } | {
   type: 'link';
   /**
@@ -84,6 +139,11 @@ export type DocumentBlock = {
 })[];
 } | {
   type: 'hardBreak';
+} | {
+  type: 'statusTag';
+  attrs: {
+  status: 'todo' | 'in-progress' | 'in-review' | 'done' | 'blocked';
+};
 })[];
 } | {
   type: 'blockquote';
@@ -184,7 +244,23 @@ export type DocumentBlock = {
 } | {
   type: 'strike';
 } | {
+  type: 'underline';
+} | {
+  type: 'highlight';
+  attrs: {
+  color: 'yellow' | 'green' | 'blue' | 'pink' | 'purple';
+};
+} | {
   type: 'code';
+} | {
+  type: 'link';
+  attrs: {
+  /**
+     * @maxLength 2048
+     * @pattern ^(https?:\/\/|mailto:)[^\s]+$
+     */
+  href: string;
+};
 } | {
   type: 'link';
   /**
@@ -195,6 +271,138 @@ export type DocumentBlock = {
 })[];
 })[];
 } | {
+  type: 'taskList';
+  attrs: {
+  /**
+     * Stable identity for an addressable block.
+     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
+     */
+  blockId: string;
+};
+  /**
+     * @minItems 1
+     * @maxItems 10000
+     */
+  content: ({
+  type: 'taskItem';
+  attrs: {
+  /**
+     * Stable identity for an addressable block.
+     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
+     */
+  blockId: string;
+  checked?: boolean;
+};
+  /** @maxItems 100000 */
+  content?: ({
+  type: 'text';
+  /**
+     * @minLength 1
+     * @maxLength 100000
+     */
+  text: string;
+  /** @maxItems 16 */
+  marks?: ({
+  type: 'bold';
+} | {
+  type: 'italic';
+} | {
+  type: 'strike';
+} | {
+  type: 'underline';
+} | {
+  type: 'highlight';
+  attrs: {
+  color: 'yellow' | 'green' | 'blue' | 'pink' | 'purple';
+};
+} | {
+  type: 'code';
+} | {
+  type: 'link';
+  attrs: {
+  /**
+     * @maxLength 2048
+     * @pattern ^(https?:\/\/|mailto:)[^\s]+$
+     */
+  href: string;
+};
+} | {
+  type: 'link';
+  /**
+     * @maxLength 2048
+     * @pattern ^(https?:\/\/|mailto:)[^\s]+$
+     */
+  href: string;
+})[];
+} | {
+  type: 'hardBreak';
+} | {
+  type: 'statusTag';
+  attrs: {
+  status: 'todo' | 'in-progress' | 'in-review' | 'done' | 'blocked';
+};
+})[];
+} | TaskList)[];
+} | {
+  type: 'taskItem';
+  attrs: {
+  /**
+     * Stable identity for an addressable block.
+     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
+     */
+  blockId: string;
+  checked?: boolean;
+};
+  /** @maxItems 100000 */
+  content?: ({
+  type: 'text';
+  /**
+     * @minLength 1
+     * @maxLength 100000
+     */
+  text: string;
+  /** @maxItems 16 */
+  marks?: ({
+  type: 'bold';
+} | {
+  type: 'italic';
+} | {
+  type: 'strike';
+} | {
+  type: 'underline';
+} | {
+  type: 'highlight';
+  attrs: {
+  color: 'yellow' | 'green' | 'blue' | 'pink' | 'purple';
+};
+} | {
+  type: 'code';
+} | {
+  type: 'link';
+  attrs: {
+  /**
+     * @maxLength 2048
+     * @pattern ^(https?:\/\/|mailto:)[^\s]+$
+     */
+  href: string;
+};
+} | {
+  type: 'link';
+  /**
+     * @maxLength 2048
+     * @pattern ^(https?:\/\/|mailto:)[^\s]+$
+     */
+  href: string;
+})[];
+} | {
+  type: 'hardBreak';
+} | {
+  type: 'statusTag';
+  attrs: {
+  status: 'todo' | 'in-progress' | 'in-review' | 'done' | 'blocked';
+};
+})[];
+} | Table | {
   type: 'horizontalRule';
   attrs: {
   /**
@@ -202,6 +410,8 @@ export type DocumentBlock = {
      * @pattern ^block_[A-Za-z0-9_-]{1,64}$
      */
   blockId: string;
+  /** @maxLength 80 */
+  label?: string;
 };
 } | {
   type: 'image';
@@ -226,5 +436,22 @@ export type DocumentBlock = {
      * @maximum 32768
      */
   height?: number;
+};
+} | {
+  type: 'pdfAttachment';
+  attrs: {
+  /**
+     * Stable identity for an addressable block.
+     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
+     */
+  blockId: string;
+  /** @pattern ^asset_[A-Za-z0-9_-]{1,64}$ */
+  assetId: string;
+  mediaType: 'application/pdf';
+  /**
+     * @minLength 1
+     * @maxLength 255
+     */
+  fileName: string;
 };
 };

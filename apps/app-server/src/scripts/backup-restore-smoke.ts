@@ -34,13 +34,17 @@ const restoredUrl = new URL(databaseUrl);
 restoredUrl.pathname = `/${temporaryDatabase}`;
 const verifiedTables = [
   "documents",
+  "document_json_snapshots",
   "document_generations",
+  "document_generation_checkpoints",
   "collaboration_updates",
   "document_projection_snapshots",
   "document_outbox",
   "document_versions",
+  "document_version_checkpoints",
   "document_audit_events",
   "assets",
+  "document_json_asset_references",
   "asset_references",
 ] as const;
 

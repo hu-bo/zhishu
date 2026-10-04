@@ -7,7 +7,7 @@
 import type { DocumentBlock } from './documentBlock';
 
 /**
- * Version 1 structured document content.
+ * Version 5 structured document content.
  */
 export interface DocumentContent {
   type: 'doc';

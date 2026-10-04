@@ -1,33 +1,50 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { editorOriginMeta } from "@zhishu/editor-core";
-import { useEditorEvents, useEditorInstance } from "@zhishu/editor-react";
+import type { EditorController } from "@zhishu/editor-core";
+import { useEditorEvents, useEditorInstance, useEditorStructureAction } from "@zhishu/editor-react";
+import { EditorIcon, type EditorIconName } from "./editor-icon.js";
+import { EditorStructureFeedback } from "./editor-structure-feedback.js";
 
 export interface EditorSlashMenuMessages {
   label: string;
   noResults: string;
+  keyboardHint: string;
   textGroup: string;
   listGroup: string;
   otherGroup: string;
+  editorNotReady: string;
+  currentlyReadOnly: string;
+  blockStructureUnavailable: string;
 }
 
 const defaultMessages: EditorSlashMenuMessages = {
   label: "插入菜单",
   noResults: "没有匹配的插入项",
+  keyboardHint: "↑↓ 选择 · Enter 插入 · Esc 关闭",
   textGroup: "文本",
   listGroup: "列表",
   otherGroup: "其他",
+  editorNotReady: "编辑器尚未就绪",
+  currentlyReadOnly: "当前为只读",
+  blockStructureUnavailable: "当前模式暂不支持此块操作",
 };
 
 type SlashAction = {
   id: string;
   label: string;
+  description: string;
+  icon: EditorIconName;
   group: "text" | "list" | "other";
   keywords: readonly string[];
   capability: string;
+  collaborativeOperation?: boolean;
   run: (editor: ReturnType<typeof useEditorInstance>["controller"]) => boolean;
 };
 
+type SlashCollaboration = NonNullable<ReturnType<typeof useEditorInstance>["collaboration"]>;
+
 interface SlashMenuState {
+  source: "slash" | "toolbar";
   query: string;
   from: number;
   to: number;
@@ -52,94 +69,454 @@ export interface EditorSlashMenuProps {
   messages?: Partial<EditorSlashMenuMessages>;
   capabilities?: readonly string[];
   className?: string;
+  openRequest?: number;
+  openSelection?: { from: number; to: number } | null;
 }
 
-export function EditorSlashMenu({ messages, capabilities, className }: EditorSlashMenuProps) {
-  const { controller } = useEditorInstance();
+export function EditorSlashMenu({
+  messages,
+  capabilities,
+  className,
+  openRequest = 0,
+  openSelection,
+}: EditorSlashMenuProps) {
+  const { controller, collaboration, collaborationStatus, hostServices } = useEditorInstance();
+  const contentAction = useEditorStructureAction();
   const [menu, setMenu] = useState<SlashMenuState | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const toolbarMenuOpenRef = useRef(false);
   const listboxId = useId();
   const labels = { ...defaultMessages, ...messages };
+  const collaborativeStructureAllowed =
+    collaboration?.readOnly === false &&
+    collaborationStatus?.connection === "connected" &&
+    collaborationStatus.sync === "current" &&
+    typeof collaboration.submitStructureOperation === "function";
+  function runContentAction(kind: "callout" | "divider" | "status"): boolean {
+    if (!controller || contentAction.busy || contentAction.canRetry) return false;
+    const toolbarMenu = menu?.source === "toolbar";
+    if (toolbarMenu && !focusToolbarSelection(controller, menu, collaborativeStructureAllowed))
+      return false;
+    const trigger = toolbarMenu
+      ? null
+      : getSlashTrigger(controller, menu, collaborativeStructureAllowed);
+    if (!toolbarMenu && !trigger) return false;
+    if (kind === "status") {
+      if (trigger && !controller.focusTextRange(trigger.from, trigger.to)) return false;
+      return controller.insertStatusTag();
+    }
+    if (!contentAction.allowed) return false;
+    if (kind === "divider") {
+      const paragraph = controller.editor.state.selection.$from.parent;
+      if (paragraph.type.name !== "paragraph" || typeof paragraph.attrs.blockId !== "string")
+        return false;
+      const expectedText = paragraph.textBetween(0, paragraph.content.size, "", "\uFFFC");
+      if (expectedText !== (trigger?.text ?? "")) {
+        hostServices.reportError?.(new Error("请在空段落中插入分隔线。"));
+        return false;
+      }
+      void contentAction.run({
+        type: "make-divider",
+        targetBlockId: paragraph.attrs.blockId,
+        expectedText,
+        label: "",
+      });
+      return true;
+    }
+    if (trigger && !collaboration && !deleteSlashTrigger(controller, trigger)) return false;
+    const targetBlockIds = controller.getSelectedBlockIds();
+    void contentAction
+      .run({ type: "wrap-callout", targetBlockIds, theme: "info" })
+      .then((success) => {
+        if (success && trigger && collaboration && !controller.isDestroyed)
+          removeSlashTrigger(controller, trigger, hostServices.reportError);
+      });
+    return true;
+  }
   const actions: readonly SlashAction[] = [
+    {
+      id: "callout",
+      label: "提示块",
+      description: "将当前块转换为可切换主题的提示块。",
+      icon: "alert",
+      group: "other",
+      keywords: ["提示", "callout", "警告", "info"],
+      capability: "callout",
+      collaborativeOperation: true,
+      run: () => runContentAction("callout"),
+    },
+    {
+      id: "status-tag",
+      label: "状态标签",
+      description: "插入可切换的文档内状态。",
+      icon: "check",
+      group: "other",
+      keywords: ["状态", "status", "badge"],
+      capability: "statusTag",
+      collaborativeOperation: true,
+      run: () => runContentAction("status"),
+    },
+    {
+      id: "labeled-divider",
+      label: "带标签分隔线",
+      description: "在空段落插入可原位编辑标签的分隔线。",
+      icon: "horizontal-rule",
+      group: "other",
+      keywords: ["分隔", "divider", "标签"],
+      capability: "horizontalRule",
+      collaborativeOperation: true,
+      run: () => runContentAction("divider"),
+    },
     {
       id: "paragraph",
       label: "段落",
+      description: "切换为普通正文段落。",
+      icon: "paragraph",
       group: "text",
       keywords: ["正文", "paragraph", "text"],
       capability: "paragraph",
-      run: (instance) => applySlashAction(instance, menu, (chain) => chain.setParagraph().run()),
+      run: (instance) =>
+        applySlashAction(
+          instance,
+          menu,
+          (chain) => chain.setParagraph().run(),
+          (editor) => editor.setParagraph(),
+        ),
     },
     {
       id: "heading-1",
       label: "一级标题",
+      description: "设置为一级标题，用作文档主章节。",
+      icon: "heading",
       group: "text",
       keywords: ["标题", "heading", "h1"],
       capability: "heading",
       run: (instance) =>
-        applySlashAction(instance, menu, (chain) => chain.setHeading({ level: 1 }).run()),
+        applySlashAction(
+          instance,
+          menu,
+          (chain) => chain.setHeading({ level: 1 }).run(),
+          (editor) => editor.setHeading(1),
+        ),
     },
     {
       id: "heading-2",
       label: "二级标题",
+      description: "设置为二级标题，用作章节小节。",
+      icon: "heading",
       group: "text",
       keywords: ["标题", "heading", "h2"],
       capability: "heading",
       run: (instance) =>
-        applySlashAction(instance, menu, (chain) => chain.setHeading({ level: 2 }).run()),
+        applySlashAction(
+          instance,
+          menu,
+          (chain) => chain.setHeading({ level: 2 }).run(),
+          (editor) => editor.setHeading(2),
+        ),
     },
     {
       id: "bullet-list",
       label: "无序列表",
+      description: "插入带项目符号的列表。",
+      icon: "list",
       group: "list",
       keywords: ["列表", "bullet", "ul"],
       capability: "lists",
       run: (instance) =>
-        applySlashAction(instance, menu, (chain) => chain.toggleBulletList().run()),
+        applySlashAction(
+          instance,
+          menu,
+          (chain) => chain.toggleBulletList().run(),
+          (editor) => editor.toggleBulletList(),
+        ),
     },
     {
       id: "ordered-list",
       label: "有序列表",
+      description: "插入按顺序编号的列表。",
+      icon: "ordered-list",
       group: "list",
       keywords: ["列表", "numbered", "ordered", "ol"],
       capability: "lists",
       run: (instance) =>
-        applySlashAction(instance, menu, (chain) => chain.toggleOrderedList().run()),
+        applySlashAction(
+          instance,
+          menu,
+          (chain) => chain.toggleOrderedList().run(),
+          (editor) => editor.toggleOrderedList(),
+        ),
+    },
+    {
+      id: "task-list",
+      label: "任务清单项",
+      description: "将当前段落转换为可勾选任务。",
+      icon: "task-list",
+      group: "list",
+      keywords: ["任务", "待办", "清单", "checkbox", "todo", "task"],
+      capability: "taskList",
+      collaborativeOperation: true,
+      run: (instance) => {
+        if (!instance) return false;
+        const toolbarMenu = menu?.source === "toolbar";
+        if (toolbarMenu && !focusToolbarSelection(instance, menu, collaborativeStructureAllowed))
+          return false;
+        const trigger = toolbarMenu
+          ? null
+          : getSlashTrigger(instance, menu, collaborativeStructureAllowed);
+        if (!toolbarMenu && !trigger) return false;
+        const targetBlockId = instance.editor.state.selection.$from.parent.attrs.blockId;
+        if (typeof targetBlockId !== "string") return false;
+        const prepared = instance.prepareStructureAction({
+          type: "make-task-item",
+          targetBlockId,
+        });
+        if (!prepared.success) {
+          hostServices.reportError?.(new Error(prepared.result.error.message));
+          return false;
+        }
+        if (collaboration?.submitStructureOperation) {
+          void submitStructureOperationWithRetry(collaboration, prepared.batch)
+            .then((result) => {
+              if (result.status === "accepted" || result.status === "duplicate") {
+                if (trigger) removeSlashTrigger(instance, trigger, hostServices.reportError);
+              } else {
+                hostServices.reportError?.(
+                  new Error("code" in result ? result.code : "任务清单项提交失败。"),
+                );
+              }
+            })
+            .catch((error: unknown) => {
+              hostServices.reportError?.(
+                error instanceof Error ? error : new Error("任务清单项提交失败。"),
+              );
+            });
+          return true;
+        }
+        if (trigger && !deleteSlashTrigger(instance, trigger)) return false;
+        const result = instance.applyOperations(prepared.batch);
+        if (!result.success) hostServices.reportError?.(new Error(result.error.message));
+        return result.success;
+      },
+    },
+    {
+      id: "nested-task-list",
+      label: "嵌套任务清单",
+      description: "在当前任务下添加子任务列表。",
+      icon: "task-list",
+      group: "list",
+      keywords: ["子任务", "嵌套", "任务", "清单", "todo", "task"],
+      capability: "taskList",
+      collaborativeOperation: true,
+      run: (instance) => {
+        if (!instance) return false;
+        const toolbarMenu = menu?.source === "toolbar";
+        if (toolbarMenu && !focusToolbarSelection(instance, menu, collaborativeStructureAllowed))
+          return false;
+        const trigger = toolbarMenu
+          ? null
+          : getSlashTrigger(instance, menu, collaborativeStructureAllowed);
+        if (!toolbarMenu && !trigger) return false;
+        const parentBlockId = instance.editor.state.selection.$from.parent.attrs.blockId;
+        if (typeof parentBlockId !== "string") return false;
+        const prepared = instance.prepareStructureAction({
+          type: "insert-nested-task-list",
+          parentBlockId,
+        });
+        if (!prepared.success) {
+          hostServices.reportError?.(new Error(prepared.result.error.message));
+          return false;
+        }
+        if (collaboration?.submitStructureOperation) {
+          void submitStructureOperationWithRetry(collaboration, prepared.batch)
+            .then((result) => {
+              if (result.status === "accepted" || result.status === "duplicate") {
+                if (trigger) removeSlashTrigger(instance, trigger, hostServices.reportError);
+              } else {
+                hostServices.reportError?.(
+                  new Error("code" in result ? result.code : "嵌套任务清单提交失败。"),
+                );
+              }
+            })
+            .catch((error: unknown) => {
+              hostServices.reportError?.(
+                error instanceof Error ? error : new Error("嵌套任务清单提交失败。"),
+              );
+            });
+          return true;
+        }
+        if (trigger && !deleteSlashTrigger(instance, trigger)) return false;
+        const result = instance.applyOperations(prepared.batch);
+        if (!result.success) hostServices.reportError?.(new Error(result.error.message));
+        return result.success;
+      },
+    },
+    {
+      id: "table",
+      label: "表格",
+      description: "在空段落处插入三列表格。",
+      icon: "table",
+      group: "other",
+      keywords: ["表格", "table", "grid"],
+      capability: "table",
+      collaborativeOperation: true,
+      run: (instance) => {
+        if (!instance) return false;
+        const toolbarMenu = menu?.source === "toolbar";
+        if (toolbarMenu && !focusToolbarSelection(instance, menu, collaborativeStructureAllowed))
+          return false;
+        const trigger = toolbarMenu
+          ? null
+          : getSlashTrigger(instance, menu, collaborativeStructureAllowed);
+        if (!toolbarMenu && !trigger) return false;
+        const selection = instance.editor.state.selection;
+        const parent = selection.$from.parent;
+        const blockId = parent.attrs.blockId;
+        if (typeof blockId !== "string") return false;
+        const actionTarget = trigger ?? {
+          from: selection.from,
+          to: selection.to,
+          text: "",
+          blockId,
+        };
+        if (toolbarMenu && (!selection.empty || parent.type.name !== "paragraph")) {
+          hostServices.reportError?.(new Error("请将光标放在空段落中再插入表格。"));
+          return false;
+        }
+        const paragraphText = instance.editor.state.selection.$from.parent.textBetween(
+          0,
+          instance.editor.state.selection.$from.parent.content.size,
+          "",
+          "\uFFFC",
+        );
+        if (paragraphText !== actionTarget.text) {
+          hostServices.reportError?.(
+            new Error(
+              toolbarMenu
+                ? "请将光标放在空段落中再插入表格。"
+                : "请在空段落中输入 /table 后插入表格。",
+            ),
+          );
+          return false;
+        }
+        const prepared = instance.prepareStructureAction({
+          type: "insert-table",
+          targetBlockId: actionTarget.blockId,
+          expectedText: actionTarget.text,
+        });
+        if (!prepared.success) {
+          hostServices.reportError?.(new Error(prepared.result.error.message));
+          return false;
+        }
+        if (collaboration?.submitStructureOperation) {
+          void submitStructureOperationWithRetry(collaboration, prepared.batch)
+            .then((result) => {
+              if (result.status === "accepted" || result.status === "duplicate") {
+                // Replacing the slash-command paragraph with the table consumes the trigger.
+              } else {
+                hostServices.reportError?.(
+                  new Error("code" in result ? result.code : "表格插入失败。"),
+                );
+              }
+            })
+            .catch((error: unknown) => {
+              hostServices.reportError?.(
+                error instanceof Error ? error : new Error("表格插入失败。"),
+              );
+            });
+          return true;
+        }
+        if (trigger && !deleteSlashTrigger(instance, trigger)) return false;
+        const result = instance.applyOperations(prepared.batch);
+        if (!result.success) hostServices.reportError?.(new Error(result.error.message));
+        return result.success;
+      },
     },
     {
       id: "blockquote",
       label: "引用",
+      description: "将当前段落转换为引用块。",
+      icon: "quote",
       group: "other",
       keywords: ["引用", "quote", "blockquote"],
       capability: "blockquote",
       run: (instance) =>
-        applySlashAction(instance, menu, (chain) => chain.toggleBlockquote().run()),
+        applySlashAction(
+          instance,
+          menu,
+          (chain) => chain.toggleBlockquote().run(),
+          (editor) => editor.toggleBlockquote(),
+        ),
     },
     {
       id: "code-block",
       label: "代码块",
+      description: "插入等宽代码块。",
+      icon: "code",
       group: "other",
       keywords: ["代码", "code", "pre"],
       capability: "codeBlock",
-      run: (instance) => applySlashAction(instance, menu, (chain) => chain.setCodeBlock().run()),
+      run: (instance) =>
+        applySlashAction(
+          instance,
+          menu,
+          (chain) => chain.setCodeBlock().run(),
+          (editor) => editor.setCodeBlock(),
+        ),
     },
     {
       id: "horizontal-rule",
       label: "分隔线",
+      description: "插入正文分隔线。",
+      icon: "horizontal-rule",
       group: "other",
       keywords: ["分隔线", "divider", "rule"],
       capability: "horizontalRule",
       run: (instance) =>
-        applySlashAction(instance, menu, (chain) => chain.setHorizontalRule().run()),
+        applySlashAction(
+          instance,
+          menu,
+          (chain) => chain.setHorizontalRule().run(),
+          (editor) => editor.setHorizontalRule(),
+        ),
     },
   ];
   const visibleActions = actions.filter((action) => {
     if (capabilities && !capabilities.includes(action.capability)) return false;
+    if (
+      action.id === "nested-task-list" &&
+      controller?.editor.state.selection.$from.parent.type.name !== "taskItem"
+    ) {
+      return false;
+    }
+    if (action.id === "table" && isInsideTable(controller)) return false;
     if (!menu?.query) return true;
     const query = menu.query.toLocaleLowerCase();
     return `${action.label} ${action.keywords.join(" ")}`.toLocaleLowerCase().includes(query);
   });
+  const getActionDisabledReason = useCallback(
+    (action: SlashAction) => {
+      if (!controller) return labels.editorNotReady;
+      if (!controller.canExecute("write").allowed) return labels.currentlyReadOnly;
+      const structure = controller.canExecute("block-structure");
+      if (structure.allowed || (action.collaborativeOperation && collaborativeStructureAllowed)) {
+        return undefined;
+      }
+      return structure.reason === "read-only"
+        ? labels.currentlyReadOnly
+        : labels.blockStructureUnavailable;
+    },
+    [
+      collaborativeStructureAllowed,
+      controller,
+      labels.blockStructureUnavailable,
+      labels.currentlyReadOnly,
+      labels.editorNotReady,
+    ],
+  );
 
   const refreshMenu = useCallback(() => {
+    if (toolbarMenuOpenRef.current) return;
     if (!controller || controller.isDestroyed || controller.editor.view.composing) {
       setMenu(null);
       return;
@@ -179,6 +556,7 @@ export function EditorSlashMenu({ messages, capabilities, className }: EditorSla
       return;
     }
     setMenu((current) => ({
+      source: "slash",
       query,
       from,
       to: selection.from,
@@ -188,6 +566,49 @@ export function EditorSlashMenu({ messages, capabilities, className }: EditorSla
       placement,
     }));
   }, [controller]);
+
+  useEffect(() => {
+    if (openRequest === 0 || !controller || controller.isDestroyed) return;
+    if (!controller.canExecute("write").allowed) {
+      hostServices.reportError?.(new Error("当前文档为只读，无法打开插入菜单。"));
+      return;
+    }
+    const range = openSelection ?? {
+      from: controller.editor.state.selection.from,
+      to: controller.editor.state.selection.to,
+    };
+    toolbarMenuOpenRef.current = true;
+    if (!controller.focusTextRange(range.from, range.to)) {
+      toolbarMenuOpenRef.current = false;
+      hostServices.reportError?.(new Error("原编辑位置已失效，请重新选择插入位置。"));
+      return;
+    }
+    let x = 8;
+    let y = 8;
+    let placement: SlashMenuState["placement"] = "below";
+    try {
+      const rect = controller.editor.view.coordsAtPos(range.to);
+      const menuWidth = Math.min(280, Math.max(0, window.innerWidth - 16));
+      x = Math.max(8, Math.min(Math.max(8, window.innerWidth - menuWidth - 8), rect.left));
+      const below = rect.bottom + 6;
+      placement = below + 260 > window.innerHeight ? "above" : "below";
+      y = placement === "below" ? below : Math.max(8, rect.top - 6);
+    } catch {
+      toolbarMenuOpenRef.current = false;
+      hostServices.reportError?.(new Error("无法定位当前插入位置。"));
+      return;
+    }
+    setMenu({
+      source: "toolbar",
+      query: "",
+      from: range.from,
+      to: range.to,
+      index: 0,
+      x,
+      y,
+      placement,
+    });
+  }, [controller, hostServices, openRequest, openSelection]);
 
   useEditorEvents((event) => {
     if (event.docChanged || event.selectionChanged) requestAnimationFrame(refreshMenu);
@@ -201,16 +622,27 @@ export function EditorSlashMenu({ messages, capabilities, className }: EditorSla
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(refreshMenu);
     };
-    const onCompositionStart = () => setMenu(null);
+    const onCompositionStart = () => {
+      toolbarMenuOpenRef.current = false;
+      setMenu(null);
+    };
+    const onOutsidePointerDown = (event: PointerEvent) => {
+      if (!toolbarMenuOpenRef.current) return;
+      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
+      toolbarMenuOpenRef.current = false;
+      setMenu(null);
+    };
     dom.addEventListener("compositionstart", onCompositionStart);
     dom.addEventListener("keyup", scheduleRefresh);
     document.addEventListener("selectionchange", scheduleRefresh);
+    document.addEventListener("pointerdown", onOutsidePointerDown);
     window.addEventListener("resize", scheduleRefresh);
     window.addEventListener("scroll", scheduleRefresh, true);
     scheduleRefresh();
     return () => {
       cancelAnimationFrame(frame);
       dom.removeEventListener("compositionstart", onCompositionStart);
+      document.removeEventListener("pointerdown", onOutsidePointerDown);
       dom.removeEventListener("keyup", scheduleRefresh);
       document.removeEventListener("selectionchange", scheduleRefresh);
       window.removeEventListener("resize", scheduleRefresh);
@@ -266,21 +698,32 @@ export function EditorSlashMenu({ messages, capabilities, className }: EditorSla
       } else if (event.key === "Enter" && visibleActions[menu.index]) {
         event.preventDefault();
         event.stopPropagation();
-        visibleActions[menu.index]?.run(controller);
+        const selectedAction = visibleActions[menu.index];
+        const disabledReason = selectedAction && getActionDisabledReason(selectedAction);
+        if (disabledReason) hostServices.reportError?.(new Error(disabledReason));
+        else selectedAction?.run(controller);
+        toolbarMenuOpenRef.current = false;
         setMenu(null);
       } else if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
+        toolbarMenuOpenRef.current = false;
+        setMenu(null);
+      } else if (menu.source === "toolbar") {
+        toolbarMenuOpenRef.current = false;
         setMenu(null);
       }
     };
     dom.addEventListener("keydown", onKeyDown, true);
     return () => dom.removeEventListener("keydown", onKeyDown, true);
-  }, [controller, menu, visibleActions]);
+  }, [controller, getActionDisabledReason, hostServices, menu, visibleActions]);
 
   useLayoutEffect(() => {
     const element = menuRef.current;
     if (!menu || !element) return;
+    element
+      .querySelector<HTMLElement>('[aria-selected="true"]')
+      ?.scrollIntoView({ block: "nearest" });
     const rect = element.getBoundingClientRect();
     const width = rect.width;
     const maxLeft = Math.max(8, window.innerWidth - width - 8);
@@ -302,7 +745,8 @@ export function EditorSlashMenu({ messages, capabilities, className }: EditorSla
     }
   }, [controller, menu]);
 
-  if (!menu || !controller || controller.isDestroyed) return null;
+  if (!menu || !controller || controller.isDestroyed)
+    return <EditorStructureFeedback action={contentAction} />;
   const style = {
     left: `${menu.x}px`,
     top: `${menu.y}px`,
@@ -339,27 +783,54 @@ export function EditorSlashMenu({ messages, capabilities, className }: EditorSla
           return (
             <div key={group} role="group" aria-label={groupLabels[group]}>
               <p className="zhishu-ui-slash-group-label">{groupLabels[group]}</p>
-              {items.map(({ action, index }) => (
-                <button
-                  key={action.id}
-                  id={`${listboxId}-${action.id}`}
-                  type="button"
-                  role="option"
-                  aria-selected={menu.index === index}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    action.run(controller);
-                    setMenu(null);
-                    controller.focus();
-                  }}
-                >
-                  {action.label}
-                </button>
-              ))}
+              {items.map(({ action, index }) => {
+                const disabledReason = getActionDisabledReason(action);
+                return (
+                  <button
+                    key={action.id}
+                    id={`${listboxId}-${action.id}`}
+                    type="button"
+                    role="option"
+                    aria-selected={menu.index === index}
+                    aria-describedby={`${listboxId}-${action.id}-description`}
+                    aria-disabled={disabledReason !== undefined}
+                    aria-description={disabledReason}
+                    tabIndex={-1}
+                    className="zhishu-ui-slash-option"
+                    disabled={disabledReason !== undefined}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      if (disabledReason) {
+                        hostServices.reportError?.(new Error(disabledReason));
+                        return;
+                      }
+                      action.run(controller);
+                      toolbarMenuOpenRef.current = false;
+                      setMenu(null);
+                      controller.focus();
+                    }}
+                  >
+                    <EditorIcon name={action.icon} />
+                    <span className="zhishu-ui-slash-option-copy">
+                      <span className="zhishu-ui-slash-option-label">{action.label}</span>
+                      <span
+                        id={`${listboxId}-${action.id}-description`}
+                        className="zhishu-ui-slash-option-description"
+                      >
+                        {action.description}
+                      </span>
+                      {disabledReason && (
+                        <span className="zhishu-ui-slash-option-description">{disabledReason}</span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           );
         })
       )}
+      <p className="zhishu-ui-slash-keyboard-hint">{labels.keyboardHint}</p>
     </div>
   );
 }
@@ -368,11 +839,67 @@ function applySlashAction(
   controller: ReturnType<typeof useEditorInstance>["controller"],
   menu: SlashMenuState | null,
   apply: (chain: SlashCommandChain) => boolean,
+  applyToolbar: (controller: EditorController) => boolean,
 ): boolean {
-  if (!controller || !menu || !controller.canExecute("write").allowed) return false;
+  if (!controller) return false;
+  if (menu?.source === "toolbar") {
+    if (!focusToolbarSelection(controller, menu)) return false;
+    return applyToolbar(controller);
+  }
+  const trigger = getSlashTrigger(controller, menu);
+  if (!trigger) return false;
+  const chain = controller.editor
+    .chain()
+    .focus()
+    .setTextSelection({ from: trigger.from, to: trigger.to })
+    .deleteRange({ from: trigger.from, to: trigger.to })
+    .setMeta(editorOriginMeta, "host-command") as unknown as SlashCommandChain;
+  return apply(chain);
+}
+
+function focusToolbarSelection(
+  controller: ReturnType<typeof useEditorInstance>["controller"],
+  menu: SlashMenuState | null,
+  allowCollaborativeStructure = false,
+): boolean {
+  if (
+    !controller ||
+    menu?.source !== "toolbar" ||
+    !controller.canExecute("write").allowed ||
+    (!controller.canExecute("block-structure").allowed && !allowCollaborativeStructure)
+  ) {
+    return false;
+  }
+  return controller.focusTextRange(menu.from, menu.to);
+}
+
+function isInsideTable(controller: ReturnType<typeof useEditorInstance>["controller"]): boolean {
+  if (!controller) return false;
+  const { $from } = controller.editor.state.selection;
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    if ($from.node(depth).type.name === "table") return true;
+  }
+  return false;
+}
+
+type SlashTrigger = { from: number; to: number; text: string; blockId: string };
+
+function getSlashTrigger(
+  controller: ReturnType<typeof useEditorInstance>["controller"],
+  menu: SlashMenuState | null,
+  allowCollaborativeStructure = false,
+): SlashTrigger | null {
+  if (
+    !controller ||
+    !menu ||
+    !controller.canExecute("write").allowed ||
+    (!controller.canExecute("block-structure").allowed && !allowCollaborativeStructure)
+  ) {
+    return null;
+  }
   const { selection } = controller.editor.state;
   if (!selection.empty || selection.from !== menu.to || !selection.$from.parent.inlineContent) {
-    return false;
+    return null;
   }
   const textBefore = selection.$from.parent.textBetween(
     0,
@@ -382,14 +909,92 @@ function applySlashAction(
   );
   const match = /(?:^|\s)\/([^\s]*)$/.exec(textBefore);
   if (!match || match[1] !== menu.query || selection.from - menu.query.length - 1 !== menu.from) {
-    return false;
+    return null;
   }
-  const range = { from: menu.from, to: menu.to };
+  const blockId = selection.$from.parent.attrs.blockId;
+  if (typeof blockId !== "string") return null;
+  return {
+    from: menu.from,
+    to: menu.to,
+    text: `/${menu.query}`,
+    blockId,
+  };
+}
+
+function deleteSlashTrigger(
+  controller: NonNullable<ReturnType<typeof useEditorInstance>["controller"]>,
+  trigger: Pick<SlashTrigger, "from" | "to">,
+): boolean {
   const chain = controller.editor
     .chain()
     .focus()
-    .setTextSelection({ from: range.from, to: range.to })
-    .deleteRange(range)
+    .setTextSelection({ from: trigger.from, to: trigger.to })
+    .deleteRange({ from: trigger.from, to: trigger.to })
     .setMeta(editorOriginMeta, "host-command") as unknown as SlashCommandChain;
-  return apply(chain);
+  return chain.run();
+}
+
+async function submitStructureOperationWithRetry(
+  collaboration: SlashCollaboration,
+  batch: Parameters<NonNullable<SlashCollaboration["submitStructureOperation"]>>[0],
+) {
+  const submit = collaboration.submitStructureOperation;
+  if (!submit) throw new Error("协同结构操作不可用。");
+  let result = await submit.call(collaboration, batch);
+  if (result.status === "conflict" && result.code === "stale-structure-revision") {
+    result = await submit.call(collaboration, batch, result.revision);
+  }
+  return result;
+}
+
+function removeSlashTrigger(
+  controller: NonNullable<ReturnType<typeof useEditorInstance>["controller"]>,
+  trigger: SlashTrigger,
+  reportError: ((error: Error) => void) | undefined,
+): void {
+  const range = findSlashTriggerRange(controller, trigger);
+  if (!range) {
+    reportError?.(new Error("任务结构已提交，但无法定位原斜线命令文字。"));
+    return;
+  }
+  if (
+    controller.editor.state.doc.textBetween(range.from, range.to, "", "\uFFFC") !== trigger.text
+  ) {
+    reportError?.(new Error("任务结构已提交，但斜线命令文字已被其他编辑修改。"));
+    return;
+  }
+  if (!deleteSlashTrigger(controller, range)) {
+    reportError?.(new Error("任务结构已提交，但无法删除斜线命令文字。"));
+  }
+}
+
+function findSlashTriggerRange(
+  controller: NonNullable<ReturnType<typeof useEditorInstance>["controller"]>,
+  trigger: SlashTrigger,
+): { from: number; to: number } | null {
+  const candidates: { from: number; to: number }[] = [];
+  const visit = (
+    node: typeof controller.editor.state.doc,
+    position: number,
+    blockId?: string,
+  ): void => {
+    const currentBlockId = typeof node.attrs.blockId === "string" ? node.attrs.blockId : blockId;
+    if (node.isText) {
+      const index = (node.text ?? "").indexOf(trigger.text);
+      if (currentBlockId === trigger.blockId && index >= 0) {
+        candidates.push({
+          from: position + index,
+          to: position + index + trigger.text.length,
+        });
+      }
+      return;
+    }
+    node.forEach((child, offset) => visit(child, position + 1 + offset, currentBlockId));
+  };
+  visit(controller.editor.state.doc, -1);
+  return (
+    candidates.sort(
+      (left, right) => Math.abs(left.from - trigger.from) - Math.abs(right.from - trigger.from),
+    )[0] ?? null
+  );
 }
