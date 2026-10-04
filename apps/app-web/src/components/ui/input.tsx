@@ -1,19 +1,28 @@
-import * as React from 'react';
-import { Input as InputPrimitive } from '@base-ui/react/input';
+import type { ComponentProps } from 'react';
+import { forwardRef } from 'react';
+import { Input as HeroUIInput } from '@heroui/react';
 import { cn } from '@/lib/cn';
 
-function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
+/**
+ * HeroUI v3 `Input` is the foundation for all text fields in 知书. It is built
+ * on React Aria, which gives us IME composition handling, invalid state
+ * announcements, and focus management for free. This thin wrapper preserves
+ * the Base UI–style call surface (`ref`, native `<input>` props,
+ * `data-slot="input"`) so feature code keeps working unchanged.
+ */
+
+export type InputProps = ComponentProps<typeof HeroUIInput>;
+
+export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
+  { className, ...props },
+  ref,
+) {
   return (
-    <InputPrimitive
-      type={type}
+    <HeroUIInput
+      ref={ref}
       data-slot="input"
-      className={cn(
-        'h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40',
-        className,
-      )}
+      className={cn('h-8 text-sm md:text-sm', className)}
       {...props}
     />
   );
-}
-
-export { Input };
+});

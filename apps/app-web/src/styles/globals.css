@@ -1,30 +1,55 @@
 @import 'tailwindcss';
+@import '@heroui/styles';
+
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * HeroUI v3 brings its own semantic variable palette via `@heroui/styles`. We
+ * override the default theme to fit 知书's Indigo-on-Slate visual identity
+ * (see AGENTS.md) while keeping every existing utility (`bg-background`,
+ * `text-foreground`, `bg-primary`, `border-border`, …) resolvable.
+ *
+ * The `--zhishu-ui-*` layer is consumed by `packages/editor-ui/styles.css` and
+ * must remain. Each one is derived from a HeroUI semantic variable so the
+ * editor shell visually tracks the application theme without duplicating
+ * design tokens.
+ */
 @theme inline {
   --font-sans: 'Inter', 'Segoe UI', 'Microsoft YaHei', sans-serif;
   --font-mono:
     'JetBrains Mono', 'Cascadia Code', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-card: var(--card);
+  --color-card: var(--surface);
   --color-card-foreground: var(--foreground);
-  --color-popover: var(--card);
-  --color-popover-foreground: var(--foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--secondary);
-  --color-accent-foreground: var(--foreground);
-  --color-destructive: var(--destructive);
+  --color-popover: var(--overlay);
+  --color-popover-foreground: var(--overlay-foreground);
+
+  /* Back-compat aliases for legacy utilities still referenced by feature code. */
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-foreground);
+  --color-secondary: var(--surface-secondary);
+  --color-secondary-foreground: var(--surface-secondary-foreground);
+  --color-muted: var(--surface-tertiary);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--danger-foreground);
   --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
+  --color-input: var(--field-border, var(--border));
+  --color-ring: var(--focus);
+
   --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+
+  /* Override radius scale with 知书's softer 12px default (see AGENTS.md). */
+  --radius-xs: 0.25rem;
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
@@ -32,61 +57,208 @@
   --radius-2xl: 1.5rem;
 }
 
+/* Light theme: Slate 50 canvas, white surface, Indigo 600 accent. */
 :root {
   color-scheme: light;
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --card: #fff;
-  --primary: #4f46e5;
-  --primary-foreground: #fff;
-  --secondary: #eef2ff;
-  --muted: #f1f5f9;
-  --muted-foreground: #475569;
-  --destructive: #be123c;
-  --success: #047857;
-  --warning: #a16207;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #6366f1;
-  --zhishu-ui-surface: var(--card);
+  --background: oklch(0.984 0.003 247.86); /* slate-50 #f8fafc */
+  --foreground: oklch(0.279 0.041 260.1); /* slate-900 #0f172a */
+  --surface: oklch(1 0 0); /* white */
+  --surface-foreground: oklch(0.279 0.041 260.1);
+  --surface-secondary: oklch(0.968 0.007 264.5); /* slate-100 #f1f5f9 */
+  --surface-secondary-foreground: oklch(0.279 0.041 260.1);
+  --surface-tertiary: oklch(0.968 0.007 264.5);
+  --surface-tertiary-foreground: oklch(0.279 0.041 260.1);
+  --overlay: oklch(1 0 0);
+  --overlay-foreground: oklch(0.279 0.041 260.1);
+
+  --accent: oklch(0.511 0.262 276.97); /* indigo-600 #6366f1 */
+  --accent-foreground: oklch(0.984 0.003 247.86);
+
+  --default: oklch(0.968 0.007 264.5);
+  --default-foreground: oklch(0.279 0.041 260.1);
+
+  --muted: oklch(0.554 0.046 257.52); /* slate-600 #475569 */
+  --danger: oklch(0.508 0.169 18.39); /* rose-700 */
+  --danger-foreground: oklch(0.984 0.003 247.86);
+  --success: oklch(0.508 0.118 165.51); /* emerald-700 */
+  --success-foreground: oklch(0.984 0.003 247.86);
+  --warning: oklch(0.534 0.143 71.7); /* amber-700 */
+  --warning-foreground: oklch(0.984 0.003 247.86);
+
+  --field-background: oklch(1 0 0);
+  --field-foreground: oklch(0.279 0.041 260.1);
+  --field-placeholder: oklch(0.554 0.046 257.52);
+  --field-border: oklch(0.928 0.006 264.53);
+
+  --segment: oklch(0.968 0.007 264.5);
+  --segment-foreground: oklch(0.279 0.041 260.1);
+
+  --border: oklch(0.928 0.006 264.53); /* slate-200 #e2e8f0 */
+  --separator: oklch(0.928 0.006 264.53);
+  --focus: var(--accent);
+  --link: var(--accent);
+
+  --backdrop: rgb(15 23 42 / 40%);
+
+  /* HeroUI v3 expects these calculated tokens; we expose them so derived
+     soft/hover variants follow the same accent ramp. */
+  --surface-hover: color-mix(in oklab, var(--surface) 92%, var(--foreground) 8%);
+  --accent-hover: color-mix(in oklab, var(--accent) 92%, oklch(0 0 0) 8%);
+  --accent-soft: color-mix(in oklab, var(--accent) 12%, var(--surface));
+  --accent-soft-foreground: var(--accent);
+  --accent-soft-hover: color-mix(in oklab, var(--accent) 18%, var(--surface));
+  --default-hover: color-mix(in oklab, var(--default) 88%, var(--foreground) 12%);
+  --default-soft: color-mix(in oklab, var(--default) 60%, var(--surface));
+  --default-soft-foreground: var(--foreground);
+  --default-soft-hover: color-mix(in oklab, var(--default) 68%, var(--foreground) 16%);
+  --danger-hover: color-mix(in oklab, var(--danger) 92%, oklch(0 0 0) 8%);
+  --danger-soft: color-mix(in oklab, var(--danger) 12%, var(--surface));
+  --danger-soft-foreground: var(--danger);
+  --danger-soft-hover: color-mix(in oklab, var(--danger) 18%, var(--surface));
+  --success-hover: color-mix(in oklab, var(--success) 92%, oklch(0 0 0) 8%);
+  --success-soft: color-mix(in oklab, var(--success) 12%, var(--surface));
+  --success-soft-foreground: var(--success);
+  --success-soft-hover: color-mix(in oklab, var(--success) 18%, var(--surface));
+  --warning-hover: color-mix(in oklab, var(--warning) 92%, oklch(0 0 0) 8%);
+  --warning-soft: color-mix(in oklab, var(--warning) 16%, var(--surface));
+  --warning-soft-foreground: var(--warning);
+  --warning-soft-hover: color-mix(in oklab, var(--warning) 22%, var(--surface));
+  --border-secondary: var(--border);
+  --border-tertiary: color-mix(in oklab, var(--border) 60%, var(--surface));
+  --separator-secondary: var(--separator);
+  --separator-tertiary: color-mix(in oklab, var(--separator) 60%, var(--surface));
+
+  --background-secondary: var(--surface-secondary);
+  --background-tertiary: var(--surface-tertiary);
+  --background-inverse: var(--foreground);
+
+  --surface-shadow: 0 10px 32px -24px rgb(15 23 42 / 24%);
+  --overlay-shadow: 0 16px 40px -20px rgb(15 23 42 / 32%);
+  --field-shadow: 0 1px 0 0 rgb(15 23 42 / 4%);
+
+  --field-focus: var(--field-background);
+  --field-border-hover: var(--border);
+  --field-border-focus: var(--accent);
+
+  /* 知书 → editor-ui bridge (consumed by `packages/editor-ui/styles.css`). */
+  --zhishu-ui-surface: var(--surface);
   --zhishu-ui-canvas: var(--background);
   --zhishu-ui-text: var(--foreground);
-  --zhishu-ui-muted: var(--muted-foreground);
+  --zhishu-ui-muted: var(--muted);
   --zhishu-ui-border: var(--border);
-  --zhishu-ui-border-subtle: color-mix(in srgb, var(--border) 56%, var(--card));
-  --zhishu-ui-accent: var(--primary);
-  --zhishu-ui-accent-soft: color-mix(in srgb, var(--primary) 12%, var(--card));
-  --zhishu-ui-hover: var(--muted);
-  --zhishu-ui-focus: var(--ring);
-  --zhishu-ui-danger: var(--destructive);
+  --zhishu-ui-border-subtle: color-mix(in oklab, var(--border) 56%, var(--surface));
+  --zhishu-ui-accent: var(--accent);
+  --zhishu-ui-accent-soft: color-mix(in oklab, var(--accent) 12%, var(--surface));
+  --zhishu-ui-hover: var(--surface-hover);
+  --zhishu-ui-focus: var(--focus);
+  --zhishu-ui-danger: var(--danger);
   --zhishu-ui-success: var(--success);
   --zhishu-ui-warning: var(--warning);
   --zhishu-ui-shadow: 0 10px 32px -24px rgb(15 23 42 / 24%);
   --zhishu-ui-floating-shadow: 0 16px 40px -20px rgb(15 23 42 / 32%);
   --zhishu-ui-radius: 0.75rem;
+  --zhishu-ui-radius-compact: 0.4375rem;
+  --zhishu-ui-radius-control: 0.5625rem;
+  --zhishu-ui-radius-floating: 0.6875rem;
   --zhishu-ui-control-height: 44px;
   --zhishu-ui-outline-width: 288px;
+  --zhishu-ui-code-background: #0f172a;
+  --zhishu-ui-code-header: #1e293b;
+  --zhishu-ui-code-border: #334155;
+  --zhishu-ui-code-text: #e2e8f0;
+  --zhishu-ui-code-muted: #94a3b8;
+  --zhishu-ui-code-keyword: #c4b5fd;
+  --zhishu-ui-code-string: #86efac;
+  --zhishu-ui-code-number: #fcd34d;
+  --zhishu-ui-code-title: #93c5fd;
+  --zhishu-ui-code-variable: #f9a8d4;
+  --zhishu-ui-code-deletion: #fda4af;
   --zhishu-ui-selection-surface: #0f172a;
   --zhishu-ui-selection-text: #f8fafc;
   --zhishu-ui-selection-border: #334155;
 }
 
+/* Dark theme: Slate 950 canvas, slate-900 surface, indigo-400 accent. */
 .dark {
   color-scheme: dark;
-  --background: #020617;
-  --foreground: #f1f5f9;
-  --card: #0f172a;
-  --primary: #818cf8;
-  --primary-foreground: #1e1b4b;
-  --secondary: #1e293b;
-  --muted: #0f172a;
-  --muted-foreground: #94a3b8;
-  --destructive: #fb7185;
-  --success: #34d399;
-  --warning: #fbbf24;
-  --border: #1e293b;
-  --input: #334155;
-  --ring: #818cf8;
+  --background: oklch(0.13 0.027 261.34); /* slate-950 #020617 */
+  --foreground: oklch(0.967 0.003 264.37); /* slate-100 #f1f5f9 */
+  --surface: oklch(0.205 0.04 257.04); /* slate-900 #0f172a */
+  --surface-foreground: oklch(0.967 0.003 264.37);
+  --surface-secondary: oklch(0.257 0.027 261.34); /* slate-800 #1e293b */
+  --surface-secondary-foreground: oklch(0.967 0.003 264.37);
+  --surface-tertiary: oklch(0.279 0.039 260.05);
+  --surface-tertiary-foreground: oklch(0.967 0.003 264.37);
+  --overlay: oklch(0.205 0.04 257.04);
+  --overlay-foreground: oklch(0.967 0.003 264.37);
+
+  --accent: oklch(0.682 0.157 274.05); /* indigo-400 #818cf8 */
+  --accent-foreground: oklch(0.205 0.04 257.04);
+
+  --default: oklch(0.257 0.027 261.34);
+  --default-foreground: oklch(0.967 0.003 264.37);
+
+  --muted: oklch(0.705 0.04 256.79); /* slate-400 #94a3b8 */
+  --danger: oklch(0.668 0.184 22.99); /* rose-400 #fb7185 */
+  --danger-foreground: oklch(0.13 0.027 261.34);
+  --success: oklch(0.764 0.16 335.414); /* emerald-400 */
+  --success-foreground: oklch(0.13 0.027 261.34);
+  --warning: oklch(0.79 0.16 76.5); /* amber-400 */
+  --warning-foreground: oklch(0.13 0.027 261.34);
+
+  --field-background: oklch(0.257 0.027 261.34);
+  --field-foreground: oklch(0.967 0.003 264.37);
+  --field-placeholder: oklch(0.705 0.04 256.79);
+  --field-border: oklch(0.372 0.039 257.04); /* slate-700 #334155 */
+
+  --segment: oklch(0.279 0.039 260.05);
+  --segment-foreground: oklch(0.967 0.003 264.37);
+
+  --border: oklch(0.257 0.027 261.34); /* slate-800 #1e293b */
+  --separator: oklch(0.279 0.039 260.05);
+  --focus: var(--accent);
+  --link: var(--foreground);
+
+  --backdrop: rgb(0 0 0 / 60%);
+
+  --surface-hover: color-mix(in oklab, var(--surface) 90%, var(--foreground) 10%);
+  --accent-hover: color-mix(in oklab, var(--accent) 88%, oklch(1 0 0) 12%);
+  --accent-soft: color-mix(in oklab, var(--accent) 18%, var(--surface));
+  --accent-soft-foreground: var(--accent);
+  --accent-soft-hover: color-mix(in oklab, var(--accent) 24%, var(--surface));
+  --default-hover: color-mix(in oklab, var(--default) 88%, var(--foreground) 12%);
+  --default-soft: color-mix(in oklab, var(--default) 60%, var(--surface));
+  --default-soft-foreground: var(--foreground);
+  --default-soft-hover: color-mix(in oklab, var(--default) 68%, var(--foreground) 16%);
+  --danger-hover: color-mix(in oklab, var(--danger) 88%, oklch(1 0 0) 12%);
+  --danger-soft: color-mix(in oklab, var(--danger) 18%, var(--surface));
+  --danger-soft-foreground: var(--danger);
+  --danger-soft-hover: color-mix(in oklab, var(--danger) 24%, var(--surface));
+  --success-hover: color-mix(in oklab, var(--success) 88%, oklch(1 0 0) 12%);
+  --success-soft: color-mix(in oklab, var(--success) 18%, var(--surface));
+  --success-soft-foreground: var(--success);
+  --success-soft-hover: color-mix(in oklab, var(--success) 24%, var(--surface));
+  --warning-hover: color-mix(in oklab, var(--warning) 88%, oklch(1 0 0) 12%);
+  --warning-soft: color-mix(in oklab, var(--warning) 22%, var(--surface));
+  --warning-soft-foreground: var(--warning);
+  --warning-soft-hover: color-mix(in oklab, var(--warning) 28%, var(--surface));
+  --border-secondary: var(--border);
+  --border-tertiary: color-mix(in oklab, var(--border) 70%, var(--surface));
+  --separator-secondary: var(--separator);
+  --separator-tertiary: color-mix(in oklab, var(--separator) 70%, var(--surface));
+
+  --background-secondary: var(--surface-secondary);
+  --background-tertiary: var(--surface-tertiary);
+  --background-inverse: var(--foreground);
+
+  --surface-shadow: 0 12px 36px -24px rgb(0 0 0 / 48%);
+  --overlay-shadow: 0 18px 44px -20px rgb(0 0 0 / 70%);
+  --field-shadow: 0 0 0 0 transparent inset;
+
+  --field-focus: var(--field-background);
+  --field-border-hover: var(--border);
+  --field-border-focus: var(--accent);
+
   --zhishu-ui-shadow: 0 12px 36px -24px rgb(0 0 0 / 48%);
   --zhishu-ui-floating-shadow: 0 18px 44px -20px rgb(0 0 0 / 70%);
 }
@@ -109,7 +281,7 @@
     cursor: pointer;
   }
   ::selection {
-    background: color-mix(in srgb, var(--primary) 24%, transparent);
+    background: color-mix(in oklab, var(--accent) 24%, transparent);
   }
 }
 
