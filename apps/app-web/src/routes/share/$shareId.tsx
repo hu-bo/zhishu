@@ -11,7 +11,7 @@ import {
 import type { GetPublicShare200 } from '@/api/generated/models';
 import { errorMessage } from '@/api/api-error';
 import { getAccessToken, subscribeAccessToken } from '@/api/transport';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { DocumentReadonlyView } from '@/features/document/document-readonly-view';
 import type { EditorHostServices } from '@zhishu/editor-react';
 
@@ -62,9 +62,9 @@ function InactiveShareCard({ share }: { share: GetPublicShare200 }) {
         </span>
         <h1 className="mt-4 text-lg font-semibold">{card.title}</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{card.hint(share)}</p>
-        <Button variant="outline" className="mt-6" render={<Link to="/" />}>
+        <Link to="/" className={`${buttonVariants({ variant: 'outline' })} mt-6`}>
           回到知书首页
-        </Button>
+        </Link>
       </div>
     </div>
   );
@@ -142,9 +142,9 @@ function PublicSharePage() {
           <p className="mt-2 text-sm text-muted-foreground">
             {detail.isError ? errorMessage(detail.error) : '分享信息不可用。'}
           </p>
-          <Button variant="outline" className="mt-6" render={<Link to="/" />}>
+          <Link to="/" className={`${buttonVariants({ variant: 'outline' })} mt-6`}>
             回到知书首页
-          </Button>
+          </Link>
         </div>
       </div>
     );

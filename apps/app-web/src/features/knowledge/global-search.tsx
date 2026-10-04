@@ -126,12 +126,10 @@ export function GlobalSearch() {
             void queryClient.cancelQueries({ queryKey: ['knowledge-search', identityKey] });
           setOpen(next);
         }}
+        initialFocus={inputRef}
+        finalFocus={returnRef}
       >
-        <DialogContent
-          className="max-h-[85dvh] sm:max-w-2xl"
-          initialFocus={inputRef}
-          finalFocus={returnRef}
-        >
+        <DialogContent className="max-h-[85dvh] sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>搜索知识库</DialogTitle>
             <DialogDescription>
