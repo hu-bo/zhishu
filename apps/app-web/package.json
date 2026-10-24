@@ -20,6 +20,7 @@
     "@heroui/styles": "3.2.6",
     "@hocuspocus/provider": "^4.7.0",
     "@hookform/resolvers": "5.9.1",
+    "@internationalized/date": "3.12.4",
     "@tanstack/react-query": "5.102.8",
     "@tanstack/react-router": "1.170.33",
     "@tiptap/core": "^3.30.3",
@@ -27,9 +28,10 @@
     "@tiptap/pm": "^3.30.3",
     "@tiptap/react": "^3.30.3",
     "@tiptap/y-tiptap": "^3.0.7",
+    "@zhishu/ai-contracts": "workspace:^",
+    "@zhishu/document-contracts": "workspace:^",
     "@zhishu/editor-collaboration": "workspace:^",
     "@zhishu/editor-core": "workspace:^",
-    "@zhishu/document-contracts": "workspace:^",
     "@zhishu/editor-react": "workspace:^",
     "@zhishu/editor-ui": "workspace:^",
     "clsx": "2.1.1",
@@ -40,7 +42,9 @@
     "tailwind-merge": "3.6.0",
     "tailwind-variants": "0.3.0",
     "yjs": "^13.6.33",
-    "zod": "4.5.4"
+    "zod": "4.5.4",
+    "@zhishu/chat-ui": "workspace:*",
+    "@zhishu/chat-contracts": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",

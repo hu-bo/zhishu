@@ -1,5 +1,7 @@
 # editor-core 设计规划
 
+2026-10-22 新增通用替换预览能力：`EditorReplacementPreviewData` 携带原文与建议，`setReplacementPreview(editor, data | null, actions?)` 校验内容与当前原文一致后创建本实例的 ProseMirror 装饰，返回修改处数；失败返回 null。新内容使用不可编辑的 Schema DOM 展示，原内容以装饰标出；不修改正文、撤销历史或 Yjs。任意正文事务立即清空装饰，宿主须让旧提案失效。`scrollToReplacementPreview(editor, index)` 仅在该实例定位。actions 提供 disabled、onAccept(blockId)、onReject(blockId)，每处装饰中的原生按钮以稳定块身份回调；预览能力不依赖 AI 协议、权限或提交服务，`/schema` 入口继续不导入浏览器视图。
+
 状态：M1/M2 部分实现。对应 `packages/editor-core`；[返回文档地图](../README.md)。内容规范引用 [document-contracts](document-contracts.md)，本文维护编辑行为。当前写入 Schema v4，显式支持读取 v1–v4 历史内容；HTML/纯文本转换须报告无法保留的内容。
 
 ## 1. 产品职责与依赖

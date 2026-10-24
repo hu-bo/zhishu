@@ -5,7 +5,6 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CopyDocumentTemplate201ExtensionsItem } from './copyDocumentTemplate201ExtensionsItem';
-import type { CopyDocumentTemplate201Mode } from './copyDocumentTemplate201Mode';
 import type { CopyDocumentTemplate201TagsItem } from './copyDocumentTemplate201TagsItem';
 
 export type CopyDocumentTemplate201 = {
@@ -23,7 +22,6 @@ export type CopyDocumentTemplate201 = {
   /** @maxItems 12 */
   tags: CopyDocumentTemplate201TagsItem[];
   createdBy: string;
-  mode: CopyDocumentTemplate201Mode;
   /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
   generationId: string;
   /**

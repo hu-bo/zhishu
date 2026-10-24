@@ -24,6 +24,14 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { invalidateSpaceData } from './space-data';
+import { useKnowledgeWorkspace } from './workspace-context';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 /**
  * Catalog/document structure actions. The tree, the browse panel, and the
@@ -85,7 +93,7 @@ export function EmojiField({
           className={`h-8 rounded-lg border px-2 text-xs transition-colors duration-150 ${
             value === null
               ? 'border-primary bg-secondary text-primary'
-              : 'border-transparent text-muted-foreground hover:bg-muted'
+              : 'border-transparent text-muted-foreground hover:bg-secondary'
           }`}
         >
           无图标
@@ -97,7 +105,7 @@ export function EmojiField({
             aria-label={`使用图标 ${emoji}`}
             aria-pressed={value === emoji}
             onClick={() => onChange(value === emoji ? null : emoji)}
-            className={`flex size-8 items-center justify-center rounded-lg border text-base transition-colors duration-150 hover:bg-muted ${
+            className={`flex size-8 items-center justify-center rounded-lg border text-base transition-colors duration-150 hover:bg-secondary ${
               value === emoji ? 'border-primary bg-secondary' : 'border-transparent'
             }`}
           >
@@ -349,7 +357,7 @@ export function DeleteCatalogDialog({
           正在统计影响范围…
         </p>
       ) : impact.data ? (
-        <p className="rounded-lg bg-muted px-3 py-2 text-sm">
+        <p className="rounded-lg bg-secondary px-3 py-2 text-sm">
           将级联删除 <strong className="font-semibold">{impact.data.catalogCount}</strong>{' '}
           个子目录， 并把 <strong className="font-semibold">{impact.data.documentCount}</strong>{' '}
           篇文档移入回收站。
@@ -384,12 +392,12 @@ function PickerRow({
     <div className="flex items-center" style={{ paddingLeft: depth * 14 }}>
       <button
         type="button"
-        tabIndex={-1}
         aria-label={expanded ? '收起子目录' : '展开子目录'}
+        aria-expanded={expandable ? expanded : undefined}
         disabled={!expandable}
         onClick={onToggle}
         className={`flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground ${
-          expandable ? 'hover:bg-muted hover:text-foreground' : 'invisible'
+          expandable ? 'hover:bg-secondary hover:text-foreground' : 'invisible'
         }`}
       >
         <ChevronRight
@@ -409,7 +417,7 @@ function PickerRow({
             ? 'bg-secondary font-medium text-primary'
             : disabled
               ? 'cursor-not-allowed text-muted-foreground/50'
-              : 'hover:bg-muted'
+              : 'hover:bg-secondary'
         }`}
       >
         <span aria-hidden="true" className="shrink-0 text-xs">
@@ -608,12 +616,15 @@ export function MoveDocumentDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { workspaces } = useKnowledgeWorkspace();
+  const [targetWorkspaceId, setTargetWorkspaceId] = useState(workspaceId);
+  const selectedWorkspace = workspaces.find((item) => item.id === targetWorkspaceId);
   const [target, setTarget] = useState<string | null>(null);
   const { busy, error, run } = useSubmit();
   return (
     <FormDialog
       title={`移动文档「${document.title}」`}
-      description="选择文档要归属的目录。"
+      description="选择目标空间和目录；正文、版本及文档授权随文档保留。"
       submitLabel="移动到此处"
       busy={busy}
       error={error}
@@ -622,19 +633,49 @@ export function MoveDocumentDialog({
         void run(async () => {
           if (!target) throw new Error('请选择目标目录。');
           await moveKnowledgeDocument(document.id, {
-            workspaceId,
+            workspaceId: targetWorkspaceId,
             catalogId: target,
             beforeId: null,
             metadataRevision: document.metadataRevision,
           });
           invalidateSpaceData(queryClient, identityKey);
+          void queryClient.invalidateQueries({ queryKey: ['document', document.id] });
           onClose();
         })
       }
     >
+      <label className="space-y-1.5 text-sm">
+        目标空间
+        <Select
+          value={targetWorkspaceId}
+          onValueChange={(value) => {
+            if (value) {
+              setTargetWorkspaceId(value);
+              setTarget(null);
+            }
+          }}
+          items={Object.fromEntries(
+            workspaces.filter((item) => item.canOrganize).map((item) => [item.id, item.name]),
+          )}
+        >
+          <SelectTrigger aria-label="目标空间">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {workspaces
+              .filter((item) => item.canOrganize)
+              .map((item) => (
+                <SelectItem key={item.id} value={item.id}>
+                  {item.icon} {item.name}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+      </label>
       <CatalogPicker
-        workspaceId={workspaceId}
-        rootCatalogId={rootCatalogId}
+        key={targetWorkspaceId}
+        workspaceId={targetWorkspaceId}
+        rootCatalogId={selectedWorkspace?.rootCatalogId ?? rootCatalogId}
         identityKey={identityKey}
         value={target}
         onChange={setTarget}
@@ -658,13 +699,12 @@ export function CreateDocumentDialog({
 }) {
   const queryClient = useQueryClient();
   const [title, setTitle] = useState('');
-  const [mode, setMode] = useState<'collaborative' | 'standard'>('collaborative');
   const { busy, error, run } = useSubmit();
   const idempotencyKey = useIdempotencyKey();
   return (
     <FormDialog
       title="新建文档"
-      description="文档会创建在当前选中的目录下。"
+      description="文档会创建在当前选中的目录下，并直接进入协同编辑。"
       submitLabel="创建并打开"
       busy={busy}
       error={error}
@@ -674,7 +714,6 @@ export function CreateDocumentDialog({
           const created = await createDocument(
             {
               title: title.trim() || '未命名文档',
-              mode,
               workspaceId,
               catalogId,
             },
@@ -699,38 +738,6 @@ export function CreateDocumentDialog({
           onChange={(event) => setTitle(event.target.value)}
         />
       </div>
-      <fieldset className="space-y-1.5">
-        <legend className="text-xs font-medium text-muted-foreground">文档模式</legend>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {(
-            [
-              { value: 'collaborative', label: '实时协同', hint: '多人同时编辑，自动保存' },
-              { value: 'standard', label: '普通快照', hint: '单人编辑，显式保存' },
-            ] as const
-          ).map((option) => (
-            <label
-              key={option.value}
-              className={`flex cursor-pointer flex-col gap-0.5 rounded-xl border px-3 py-2.5 text-sm transition-colors duration-150 ${
-                mode === option.value
-                  ? 'border-primary bg-secondary/60'
-                  : 'border-border hover:border-primary/40'
-              }`}
-            >
-              <span className="flex items-center gap-2 font-medium">
-                <input
-                  type="radio"
-                  name="document-mode"
-                  className="accent-[var(--color-primary)]"
-                  checked={mode === option.value}
-                  onChange={() => setMode(option.value)}
-                />
-                {option.label}
-              </span>
-              <span className="pl-6 text-xs text-muted-foreground">{option.hint}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
     </FormDialog>
   );
 }

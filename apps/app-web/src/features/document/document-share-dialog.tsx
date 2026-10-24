@@ -2,6 +2,8 @@ import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, Link2, Trash2 } from 'lucide-react';
+import { Calendar, DateField, DatePicker } from '@heroui/react';
+import { CalendarDateTime, getLocalTimeZone, type DateValue } from '@internationalized/date';
 import {
   createDocumentShare,
   listDocumentAcl,
@@ -47,9 +49,15 @@ function isExpired(share: { expiresAt: string; revokedAt: string | null }): bool
   return !share.revokedAt && new Date(share.expiresAt).getTime() <= Date.now();
 }
 
-/** `datetime-local` needs a local-timezone string, not a UTC ISO one. */
-function toLocalInputValue(time: number): string {
-  return new Date(time - new Date(time).getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+function calendarDateTimeFromTimestamp(timestamp: number): CalendarDateTime {
+  const date = new Date(timestamp);
+  return new CalendarDateTime(
+    date.getFullYear(),
+    date.getMonth() + 1,
+    date.getDate(),
+    date.getHours(),
+    date.getMinutes(),
+  );
 }
 
 function PermissionBadge({ permission }: { permission: 'read' | 'edit' }) {
@@ -70,7 +78,8 @@ function LinkShareSection({ documentId }: { documentId: string }) {
   const queryClient = useQueryClient();
   const [permission, setPermission] = useState<'read' | 'edit'>('read');
   const [presetDays, setPresetDays] = useState<number | null>(7);
-  const [customExpiry, setCustomExpiry] = useState('');
+  const [customExpiry, setCustomExpiry] = useState<DateValue | null>(null);
+  const [datePickerResetKey, setDatePickerResetKey] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<CreateDocumentShare201 | null>(null);
@@ -81,6 +90,8 @@ function LinkShareSection({ documentId }: { documentId: string }) {
   // Date.now() during render, and this section remounts each time the
   // share dialog opens.
   const [renderNow] = useState(() => Date.now());
+  const minCustomExpiry = calendarDateTimeFromTimestamp(renderNow + 5 * 60_000);
+  const maxCustomExpiry = calendarDateTimeFromTimestamp(renderNow + 365 * DAY_MS);
 
   const shares = useQuery({
     queryKey: ['document-shares', documentId],
@@ -89,8 +100,10 @@ function LinkShareSection({ documentId }: { documentId: string }) {
 
   const resolveExpiresAt = (): string | null => {
     if (customExpiry) {
-      const time = new Date(customExpiry).getTime();
-      if (Number.isNaN(time) || time <= Date.now()) return null;
+      const time = customExpiry.toDate(getLocalTimeZone()).getTime();
+      if (Number.isNaN(time) || time <= Date.now() || time > renderNow + 365 * DAY_MS) {
+        return null;
+      }
       return new Date(time).toISOString();
     }
     if (presetDays) return new Date(Date.now() + presetDays * DAY_MS).toISOString();
@@ -138,9 +151,11 @@ function LinkShareSection({ documentId }: { documentId: string }) {
     return true;
   };
 
-  const customExpiryTime = customExpiry ? new Date(customExpiry).getTime() : Number.NaN;
+  const customExpiryTime = customExpiry?.toDate(getLocalTimeZone()).getTime() ?? Number.NaN;
   const expiryValid = customExpiry
-    ? !Number.isNaN(customExpiryTime) && customExpiryTime > renderNow
+    ? !Number.isNaN(customExpiryTime) &&
+      customExpiryTime > renderNow + 5 * 60_000 &&
+      customExpiryTime <= renderNow + 365 * DAY_MS
     : presetDays !== null;
 
   return (
@@ -202,7 +217,8 @@ function LinkShareSection({ documentId }: { documentId: string }) {
                 aria-pressed={active}
                 onClick={() => {
                   setPresetDays(preset.days);
-                  setCustomExpiry('');
+                  setCustomExpiry(null);
+                  setDatePickerResetKey((key) => key + 1);
                 }}
                 className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 ${
                   active
@@ -214,22 +230,61 @@ function LinkShareSection({ documentId }: { documentId: string }) {
               </button>
             );
           })}
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
-            自定义
-            <Input
-              type="datetime-local"
-              className="h-8 w-auto text-xs"
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>自定义</span>
+            <DatePicker
+              key={datePickerResetKey}
+              aria-label="自定义有效期"
+              className="w-64 max-w-full"
               value={customExpiry}
-              min={toLocalInputValue(renderNow + 5 * 60_000)}
-              onChange={(event) => {
-                setCustomExpiry(event.target.value);
-                if (event.target.value) setPresetDays(null);
+              minValue={minCustomExpiry}
+              maxValue={maxCustomExpiry}
+              granularity="minute"
+              hourCycle={24}
+              hideTimeZone
+              onChange={(value) => {
+                setCustomExpiry(value);
+                setPresetDays(null);
               }}
-            />
-          </label>
+            >
+              <DateField.Group fullWidth className="h-8">
+                <DateField.Input>
+                  {(segment) => <DateField.Segment segment={segment} />}
+                </DateField.Input>
+                <DateField.Suffix>
+                  <DatePicker.Trigger aria-label="打开日期选择器">
+                    <DatePicker.TriggerIndicator />
+                  </DatePicker.Trigger>
+                </DateField.Suffix>
+              </DateField.Group>
+              <DatePicker.Popover>
+                <Calendar aria-label="选择分享链接有效期">
+                  <Calendar.Header>
+                    <Calendar.YearPickerTrigger>
+                      <Calendar.YearPickerTriggerHeading />
+                      <Calendar.YearPickerTriggerIndicator />
+                    </Calendar.YearPickerTrigger>
+                    <Calendar.NavButton slot="previous" />
+                    <Calendar.NavButton slot="next" />
+                  </Calendar.Header>
+                  <Calendar.Grid>
+                    <Calendar.GridHeader>
+                      {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
+                    </Calendar.GridHeader>
+                    <Calendar.GridBody>{(date) => <Calendar.Cell date={date} />}</Calendar.GridBody>
+                  </Calendar.Grid>
+                  <Calendar.YearPickerGrid>
+                    <Calendar.YearPickerGridBody>
+                      {({ year }) => <Calendar.YearPickerCell year={year} />}
+                    </Calendar.YearPickerGridBody>
+                  </Calendar.YearPickerGrid>
+                </Calendar>
+              </DatePicker.Popover>
+            </DatePicker>
+          </div>
         </div>
         {customExpiry && !expiryValid && (
-          <p className="text-xs text-destructive">有效期需要晚于当前时间。</p>
+          <p className="text-xs text-destructive">有效期需在 5 分钟后至一年内。</p>
         )}
       </fieldset>
 
@@ -656,14 +711,19 @@ export function DocumentShareDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="分享与权限"
-      description="创建公开链接分享这篇文档，或按主体 ID 管理成员权限。"
+      description="把知识分享给需要的人，自由控制查看与编辑权限。"
     >
       {canManage ? (
-        <div className="space-y-8">
+        <div className="space-y-8 text-foreground">
           <LinkShareSection documentId={documentId} />
-          <div className="border-t pt-6">
-            <MemberAclSection documentId={documentId} />
-          </div>
+          <details className="rounded-xl border border-border/70 bg-background/50 p-4">
+            <summary className="cursor-pointer text-[13px] font-medium text-muted-foreground">
+              成员权限设置
+            </summary>
+            <div className="mt-5">
+              <MemberAclSection documentId={documentId} />
+            </div>
+          </details>
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">你没有这篇文档的分享管理权限。</p>

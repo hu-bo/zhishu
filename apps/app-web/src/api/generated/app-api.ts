@@ -20,14 +20,37 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AcceptAiProposal200,
+  AcceptAiProposal400,
+  AcceptAiProposal401,
+  AcceptAiProposal403,
+  AcceptAiProposal404,
+  AcceptAiProposal409,
+  AcceptAiProposal429,
+  AcceptAiProposal503,
   ArchiveDocument204,
   ArchiveDocument401,
   ArchiveDocument404,
   ArchiveDocument409,
+  CancelAiTask200,
+  CancelAiTask400,
+  CancelAiTask401,
+  CancelAiTask403,
+  CancelAiTask404,
+  CancelAiTask409,
+  CancelAiTask429,
+  CancelAiTask503,
   CancelAssetUpload200,
   CancelAssetUpload401,
   CancelAssetUpload404,
   CancelAssetUpload503,
+  CancelWritingRun400,
+  CancelWritingRun401,
+  CancelWritingRun403,
+  CancelWritingRun404,
+  CancelWritingRun409,
+  CancelWritingRun429,
+  CancelWritingRun503,
   CompleteAssetUpload200,
   CompleteAssetUpload401,
   CompleteAssetUpload404,
@@ -96,6 +119,22 @@ import type {
   CreateProject400,
   CreateProject401,
   CreateProjectBody,
+  CreateWritingConversation400,
+  CreateWritingConversation401,
+  CreateWritingConversation403,
+  CreateWritingConversation404,
+  CreateWritingConversation409,
+  CreateWritingConversation429,
+  CreateWritingConversation503,
+  CreateWritingConversationBody,
+  DecideWritingApproval400,
+  DecideWritingApproval401,
+  DecideWritingApproval403,
+  DecideWritingApproval404,
+  DecideWritingApproval409,
+  DecideWritingApproval429,
+  DecideWritingApproval503,
+  DecideWritingApprovalBody,
   DeleteCatalog204,
   DeleteCatalog400,
   DeleteCatalog401,
@@ -113,6 +152,30 @@ import type {
   FavoriteDocument204,
   FavoriteDocument401,
   FavoriteDocument404,
+  GetAiCapabilities200,
+  GetAiCapabilities400,
+  GetAiCapabilities401,
+  GetAiCapabilities403,
+  GetAiCapabilities404,
+  GetAiCapabilities409,
+  GetAiCapabilities429,
+  GetAiCapabilities503,
+  GetAiDocumentContext200,
+  GetAiDocumentContext400,
+  GetAiDocumentContext401,
+  GetAiDocumentContext403,
+  GetAiDocumentContext404,
+  GetAiDocumentContext409,
+  GetAiDocumentContext429,
+  GetAiDocumentContext503,
+  GetAiTask200,
+  GetAiTask400,
+  GetAiTask401,
+  GetAiTask403,
+  GetAiTask404,
+  GetAiTask409,
+  GetAiTask429,
+  GetAiTask503,
   GetAssetAccess200,
   GetAssetAccess401,
   GetAssetAccess404,
@@ -155,6 +218,29 @@ import type {
   GetPublicShareContent404,
   GetPublicShareContent409,
   GetReadiness200,
+  GetWritingCapabilities200,
+  GetWritingCapabilities400,
+  GetWritingCapabilities401,
+  GetWritingCapabilities403,
+  GetWritingCapabilities404,
+  GetWritingCapabilities409,
+  GetWritingCapabilities429,
+  GetWritingCapabilities503,
+  GetWritingConversation400,
+  GetWritingConversation401,
+  GetWritingConversation403,
+  GetWritingConversation404,
+  GetWritingConversation409,
+  GetWritingConversation429,
+  GetWritingConversation503,
+  GetWritingImageAccess200,
+  GetWritingImageAccess400,
+  GetWritingImageAccess401,
+  GetWritingImageAccess403,
+  GetWritingImageAccess404,
+  GetWritingImageAccess409,
+  GetWritingImageAccess429,
+  GetWritingImageAccess503,
   ImportDocumentJson200,
   ImportDocumentJson400,
   ImportDocumentJson401,
@@ -199,9 +285,23 @@ import type {
   ListKnowledgeWorkspaces404,
   ListKnowledgeWorkspaces409,
   ListKnowledgeWorkspaces429,
+  ListMockUsers200,
   ListProjects200,
   ListProjects401,
   ListProjectsParams,
+  ListWorkspaceMembers200Item,
+  ListWorkspaceMembers400,
+  ListWorkspaceMembers401,
+  ListWorkspaceMembers404,
+  ListWorkspaceMembers409,
+  ListWorkspaceMembers429,
+  ListWritingImages400,
+  ListWritingImages401,
+  ListWritingImages403,
+  ListWritingImages404,
+  ListWritingImages409,
+  ListWritingImages429,
+  ListWritingImages503,
   LocateDocument200,
   LocateDocument400,
   LocateDocument401,
@@ -209,6 +309,8 @@ import type {
   LocateDocument409,
   LocateDocument429,
   MockLogin200,
+  MockLogin404,
+  MockLoginBody,
   MockLogout204,
   MockLogout401,
   MoveCatalog200,
@@ -225,20 +327,35 @@ import type {
   MoveKnowledgeDocument409,
   MoveKnowledgeDocument429,
   MoveKnowledgeDocumentBody,
+  ObserveWritingConversation400,
+  ObserveWritingConversation401,
+  ObserveWritingConversation403,
+  ObserveWritingConversation404,
+  ObserveWritingConversation409,
+  ObserveWritingConversation429,
+  ObserveWritingConversation503,
+  ObserveWritingConversationParams,
   PermanentlyDeleteDocument204,
   PermanentlyDeleteDocument401,
   PermanentlyDeleteDocument404,
   PermanentlyDeleteDocument409,
-  PutDocumentContent200,
-  PutDocumentContent400,
-  PutDocumentContent401,
-  PutDocumentContent404,
-  PutDocumentContent409,
-  PutDocumentContentBody,
+  RefreshWritingImage400,
+  RefreshWritingImage401,
+  RefreshWritingImage403,
+  RefreshWritingImage404,
+  RefreshWritingImage409,
+  RefreshWritingImage429,
+  RefreshWritingImage503,
   RemoveDocumentAcl204,
   RemoveDocumentAcl401,
   RemoveDocumentAcl404,
   RemoveDocumentAcl409,
+  RemoveWorkspaceMember204,
+  RemoveWorkspaceMember400,
+  RemoveWorkspaceMember401,
+  RemoveWorkspaceMember404,
+  RemoveWorkspaceMember409,
+  RemoveWorkspaceMember429,
   RestoreDocument204,
   RestoreDocument401,
   RestoreDocument404,
@@ -249,6 +366,30 @@ import type {
   RestoreDocumentVersion404,
   RestoreDocumentVersion409,
   RestoreDocumentVersionBody,
+  ResumeAiTask202,
+  ResumeAiTask400,
+  ResumeAiTask401,
+  ResumeAiTask403,
+  ResumeAiTask404,
+  ResumeAiTask409,
+  ResumeAiTask429,
+  ResumeAiTask503,
+  ResumeWritingRun400,
+  ResumeWritingRun401,
+  ResumeWritingRun403,
+  ResumeWritingRun404,
+  ResumeWritingRun409,
+  ResumeWritingRun429,
+  ResumeWritingRun503,
+  ReviewAiProposal200,
+  ReviewAiProposal400,
+  ReviewAiProposal401,
+  ReviewAiProposal403,
+  ReviewAiProposal404,
+  ReviewAiProposal409,
+  ReviewAiProposal429,
+  ReviewAiProposal503,
+  ReviewAiProposalBody,
   RevokeDocumentShare204,
   RevokeDocumentShare400,
   RevokeDocumentShare401,
@@ -267,6 +408,40 @@ import type {
   SetDocumentAcl404,
   SetDocumentAcl409,
   SetDocumentAclBody,
+  SetWorkspaceMember200,
+  SetWorkspaceMember400,
+  SetWorkspaceMember401,
+  SetWorkspaceMember404,
+  SetWorkspaceMember409,
+  SetWorkspaceMember429,
+  SetWorkspaceMemberBody,
+  StartAiAuthoring200One,
+  StartAiAuthoring400,
+  StartAiAuthoring401,
+  StartAiAuthoring403,
+  StartAiAuthoring404,
+  StartAiAuthoring409,
+  StartAiAuthoring429,
+  StartAiAuthoring503,
+  StartAiAuthoringBody,
+  StartAiChat200One,
+  StartAiChat400,
+  StartAiChat401,
+  StartAiChat403,
+  StartAiChat404,
+  StartAiChat409,
+  StartAiChat429,
+  StartAiChat503,
+  StartAiChatBody,
+  SubmitWritingMessage,
+  SubmitWritingMessage202,
+  SubmitWritingMessage400,
+  SubmitWritingMessage401,
+  SubmitWritingMessage403,
+  SubmitWritingMessage404,
+  SubmitWritingMessage409,
+  SubmitWritingMessage429,
+  SubmitWritingMessage503,
   TrashDocument204,
   TrashDocument401,
   TrashDocument404,
@@ -287,6 +462,13 @@ import type {
   UpdateDocumentMetadata404,
   UpdateDocumentMetadata409,
   UpdateDocumentMetadataBody,
+  UpdateKnowledgeWorkspace200,
+  UpdateKnowledgeWorkspace400,
+  UpdateKnowledgeWorkspace401,
+  UpdateKnowledgeWorkspace404,
+  UpdateKnowledgeWorkspace409,
+  UpdateKnowledgeWorkspace429,
+  UpdateKnowledgeWorkspaceBody,
   UpdateProject200,
   UpdateProject400,
   UpdateProject401,
@@ -298,7 +480,9 @@ import type {
   UploadAssetContent404,
   UploadAssetContent409,
   UploadAssetContent503,
-  UploadAssetContentBody
+  UploadAssetContentBody,
+  WritingChatSnapshot,
+  WritingImageJob
 } from './models';
 
 import { apiFetch } from '../transport';
@@ -621,14 +805,28 @@ export const getMockLoginUrl = () => {
   return `/api/auth/mock/login`
 }
 
-export const mockLogin = async ( options?: Parameters<typeof apiFetch>[1]): Promise<MockLogin200> => {
+export const mockLogin = async (mockLoginBody: MockLoginBody, options?: Parameters<typeof apiFetch>[1]): Promise<MockLogin200> => {
 
-  return apiFetch<MockLogin200>(getMockLoginUrl(),
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<MockLogin200>(getMockLoginUrl(),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(mockLoginBody)
   }
 );}
 
@@ -636,23 +834,23 @@ export const mockLogin = async ( options?: Parameters<typeof apiFetch>[1]): Prom
 
 
 
-export const getMockLoginQueryKey = () => {
+export const getMockLoginQueryKey = (mockLoginBody?: BodyType<MockLoginBody>,) => {
     return [
-    'POST', `/api/auth/mock/login`
+    'POST', `/api/auth/mock/login`, mockLoginBody
     ] as const;
     }
 
 
-export const getMockLoginQueryOptions = <TData = Awaited<ReturnType<typeof mockLogin>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof mockLogin>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getMockLoginQueryOptions = <TData = Awaited<ReturnType<typeof mockLogin>>, TError = ErrorType<MockLogin404>>(mockLoginBody: BodyType<MockLoginBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof mockLogin>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getMockLoginQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getMockLoginQueryKey(mockLoginBody);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof mockLogin>>> = ({ signal }) => mockLogin({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof mockLogin>>> = ({ signal }) => mockLogin(mockLoginBody, { signal, ...requestOptions });
 
 
 
@@ -662,11 +860,11 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type MockLoginQueryResult = NonNullable<Awaited<ReturnType<typeof mockLogin>>>
-export type MockLoginQueryError = ErrorType<unknown>
+export type MockLoginQueryError = ErrorType<MockLogin404>
 
 
-export function useMockLogin<TData = Awaited<ReturnType<typeof mockLogin>>, TError = ErrorType<unknown>>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof mockLogin>>, TError, TData>> & Pick<
+export function useMockLogin<TData = Awaited<ReturnType<typeof mockLogin>>, TError = ErrorType<MockLogin404>>(
+ mockLoginBody: BodyType<MockLoginBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof mockLogin>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof mockLogin>>,
           TError,
@@ -675,8 +873,8 @@ export function useMockLogin<TData = Awaited<ReturnType<typeof mockLogin>>, TErr
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useMockLogin<TData = Awaited<ReturnType<typeof mockLogin>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof mockLogin>>, TError, TData>> & Pick<
+export function useMockLogin<TData = Awaited<ReturnType<typeof mockLogin>>, TError = ErrorType<MockLogin404>>(
+ mockLoginBody: BodyType<MockLoginBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof mockLogin>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof mockLogin>>,
           TError,
@@ -685,17 +883,112 @@ export function useMockLogin<TData = Awaited<ReturnType<typeof mockLogin>>, TErr
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useMockLogin<TData = Awaited<ReturnType<typeof mockLogin>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof mockLogin>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export function useMockLogin<TData = Awaited<ReturnType<typeof mockLogin>>, TError = ErrorType<MockLogin404>>(
+ mockLoginBody: BodyType<MockLoginBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof mockLogin>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useMockLogin<TData = Awaited<ReturnType<typeof mockLogin>>, TError = ErrorType<unknown>>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof mockLogin>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export function useMockLogin<TData = Awaited<ReturnType<typeof mockLogin>>, TError = ErrorType<MockLogin404>>(
+ mockLoginBody: BodyType<MockLoginBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof mockLogin>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getMockLoginQueryOptions(options)
+  const queryOptions = getMockLoginQueryOptions(mockLoginBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListMockUsersUrl = () => {
+
+
+
+
+  return `/api/auth/mock/users`
+}
+
+export const listMockUsers = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ListMockUsers200> => {
+
+  return apiFetch<ListMockUsers200>(getListMockUsersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMockUsersQueryKey = () => {
+    return [
+    `/api/auth/mock/users`
+    ] as const;
+    }
+
+
+export const getListMockUsersQueryOptions = <TData = Awaited<ReturnType<typeof listMockUsers>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMockUsers>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMockUsersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMockUsers>>> = ({ signal }) => listMockUsers({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMockUsers>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListMockUsersQueryResult = NonNullable<Awaited<ReturnType<typeof listMockUsers>>>
+export type ListMockUsersQueryError = ErrorType<unknown>
+
+
+export function useListMockUsers<TData = Awaited<ReturnType<typeof listMockUsers>>, TError = ErrorType<unknown>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMockUsers>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listMockUsers>>,
+          TError,
+          Awaited<ReturnType<typeof listMockUsers>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListMockUsers<TData = Awaited<ReturnType<typeof listMockUsers>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMockUsers>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listMockUsers>>,
+          TError,
+          Awaited<ReturnType<typeof listMockUsers>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListMockUsers<TData = Awaited<ReturnType<typeof listMockUsers>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMockUsers>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useListMockUsers<TData = Awaited<ReturnType<typeof listMockUsers>>, TError = ErrorType<unknown>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMockUsers>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListMockUsersQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -2872,122 +3165,6 @@ export function useGetDocumentContent<TData = Awaited<ReturnType<typeof getDocum
 
 
 
-export const getPutDocumentContentUrl = (documentId: string,) => {
-
-
-
-
-  return `/api/documents/${documentId}/content`
-}
-
-export const putDocumentContent = async (documentId: string,
-    putDocumentContentBody: PutDocumentContentBody, options?: Parameters<typeof apiFetch>[1]): Promise<PutDocumentContent200> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return apiFetch<PutDocumentContent200>(getPutDocumentContentUrl(documentId),
-  {
-    ...options,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(putDocumentContentBody)
-  }
-);}
-
-
-
-
-
-export const getPutDocumentContentQueryKey = (documentId: string,
-    putDocumentContentBody?: BodyType<PutDocumentContentBody>,) => {
-    return [
-    'PUT', `/api/documents/${documentId}/content`, putDocumentContentBody
-    ] as const;
-    }
-
-
-export const getPutDocumentContentQueryOptions = <TData = Awaited<ReturnType<typeof putDocumentContent>>, TError = ErrorType<PutDocumentContent400 | PutDocumentContent401 | PutDocumentContent404 | PutDocumentContent409>>(documentId: string,
-    putDocumentContentBody: BodyType<PutDocumentContentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putDocumentContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getPutDocumentContentQueryKey(documentId,putDocumentContentBody);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof putDocumentContent>>> = ({ signal }) => putDocumentContent(documentId,putDocumentContentBody, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: documentId !== null && documentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof putDocumentContent>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type PutDocumentContentQueryResult = NonNullable<Awaited<ReturnType<typeof putDocumentContent>>>
-export type PutDocumentContentQueryError = ErrorType<PutDocumentContent400 | PutDocumentContent401 | PutDocumentContent404 | PutDocumentContent409>
-
-
-export function usePutDocumentContent<TData = Awaited<ReturnType<typeof putDocumentContent>>, TError = ErrorType<PutDocumentContent400 | PutDocumentContent401 | PutDocumentContent404 | PutDocumentContent409>>(
- documentId: string,
-    putDocumentContentBody: BodyType<PutDocumentContentBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof putDocumentContent>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putDocumentContent>>,
-          TError,
-          Awaited<ReturnType<typeof putDocumentContent>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePutDocumentContent<TData = Awaited<ReturnType<typeof putDocumentContent>>, TError = ErrorType<PutDocumentContent400 | PutDocumentContent401 | PutDocumentContent404 | PutDocumentContent409>>(
- documentId: string,
-    putDocumentContentBody: BodyType<PutDocumentContentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putDocumentContent>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof putDocumentContent>>,
-          TError,
-          Awaited<ReturnType<typeof putDocumentContent>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePutDocumentContent<TData = Awaited<ReturnType<typeof putDocumentContent>>, TError = ErrorType<PutDocumentContent400 | PutDocumentContent401 | PutDocumentContent404 | PutDocumentContent409>>(
- documentId: string,
-    putDocumentContentBody: BodyType<PutDocumentContentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putDocumentContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function usePutDocumentContent<TData = Awaited<ReturnType<typeof putDocumentContent>>, TError = ErrorType<PutDocumentContent400 | PutDocumentContent401 | PutDocumentContent404 | PutDocumentContent409>>(
- documentId: string,
-    putDocumentContentBody: BodyType<PutDocumentContentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof putDocumentContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getPutDocumentContentQueryOptions(documentId,putDocumentContentBody,options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-
 export const getListDocumentAclUrl = (documentId: string,) => {
 
 
@@ -4857,6 +5034,444 @@ export function useInitializeKnowledgePresets<TData = Awaited<ReturnType<typeof 
 
 
 
+export const getUpdateKnowledgeWorkspaceUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/knowledge/workspaces/${workspaceId}`
+}
+
+export const updateKnowledgeWorkspace = async (workspaceId: string,
+    updateKnowledgeWorkspaceBody: UpdateKnowledgeWorkspaceBody, options?: Parameters<typeof apiFetch>[1]): Promise<UpdateKnowledgeWorkspace200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<UpdateKnowledgeWorkspace200>(getUpdateKnowledgeWorkspaceUrl(workspaceId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateKnowledgeWorkspaceBody)
+  }
+);}
+
+
+
+
+
+export const getUpdateKnowledgeWorkspaceQueryKey = (workspaceId: string,
+    updateKnowledgeWorkspaceBody?: BodyType<UpdateKnowledgeWorkspaceBody>,) => {
+    return [
+    'PATCH', `/api/knowledge/workspaces/${workspaceId}`, updateKnowledgeWorkspaceBody
+    ] as const;
+    }
+
+
+export const getUpdateKnowledgeWorkspaceQueryOptions = <TData = Awaited<ReturnType<typeof updateKnowledgeWorkspace>>, TError = ErrorType<UpdateKnowledgeWorkspace400 | UpdateKnowledgeWorkspace401 | UpdateKnowledgeWorkspace404 | UpdateKnowledgeWorkspace409 | UpdateKnowledgeWorkspace429>>(workspaceId: string,
+    updateKnowledgeWorkspaceBody: BodyType<UpdateKnowledgeWorkspaceBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof updateKnowledgeWorkspace>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getUpdateKnowledgeWorkspaceQueryKey(workspaceId,updateKnowledgeWorkspaceBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof updateKnowledgeWorkspace>>> = ({ signal }) => updateKnowledgeWorkspace(workspaceId,updateKnowledgeWorkspaceBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: workspaceId !== null && workspaceId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof updateKnowledgeWorkspace>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type UpdateKnowledgeWorkspaceQueryResult = NonNullable<Awaited<ReturnType<typeof updateKnowledgeWorkspace>>>
+export type UpdateKnowledgeWorkspaceQueryError = ErrorType<UpdateKnowledgeWorkspace400 | UpdateKnowledgeWorkspace401 | UpdateKnowledgeWorkspace404 | UpdateKnowledgeWorkspace409 | UpdateKnowledgeWorkspace429>
+
+
+export function useUpdateKnowledgeWorkspace<TData = Awaited<ReturnType<typeof updateKnowledgeWorkspace>>, TError = ErrorType<UpdateKnowledgeWorkspace400 | UpdateKnowledgeWorkspace401 | UpdateKnowledgeWorkspace404 | UpdateKnowledgeWorkspace409 | UpdateKnowledgeWorkspace429>>(
+ workspaceId: string,
+    updateKnowledgeWorkspaceBody: BodyType<UpdateKnowledgeWorkspaceBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof updateKnowledgeWorkspace>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof updateKnowledgeWorkspace>>,
+          TError,
+          Awaited<ReturnType<typeof updateKnowledgeWorkspace>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useUpdateKnowledgeWorkspace<TData = Awaited<ReturnType<typeof updateKnowledgeWorkspace>>, TError = ErrorType<UpdateKnowledgeWorkspace400 | UpdateKnowledgeWorkspace401 | UpdateKnowledgeWorkspace404 | UpdateKnowledgeWorkspace409 | UpdateKnowledgeWorkspace429>>(
+ workspaceId: string,
+    updateKnowledgeWorkspaceBody: BodyType<UpdateKnowledgeWorkspaceBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof updateKnowledgeWorkspace>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof updateKnowledgeWorkspace>>,
+          TError,
+          Awaited<ReturnType<typeof updateKnowledgeWorkspace>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useUpdateKnowledgeWorkspace<TData = Awaited<ReturnType<typeof updateKnowledgeWorkspace>>, TError = ErrorType<UpdateKnowledgeWorkspace400 | UpdateKnowledgeWorkspace401 | UpdateKnowledgeWorkspace404 | UpdateKnowledgeWorkspace409 | UpdateKnowledgeWorkspace429>>(
+ workspaceId: string,
+    updateKnowledgeWorkspaceBody: BodyType<UpdateKnowledgeWorkspaceBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof updateKnowledgeWorkspace>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useUpdateKnowledgeWorkspace<TData = Awaited<ReturnType<typeof updateKnowledgeWorkspace>>, TError = ErrorType<UpdateKnowledgeWorkspace400 | UpdateKnowledgeWorkspace401 | UpdateKnowledgeWorkspace404 | UpdateKnowledgeWorkspace409 | UpdateKnowledgeWorkspace429>>(
+ workspaceId: string,
+    updateKnowledgeWorkspaceBody: BodyType<UpdateKnowledgeWorkspaceBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof updateKnowledgeWorkspace>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getUpdateKnowledgeWorkspaceQueryOptions(workspaceId,updateKnowledgeWorkspaceBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListWorkspaceMembersUrl = (workspaceId: string,) => {
+
+
+
+
+  return `/api/knowledge/workspaces/${workspaceId}/members`
+}
+
+export const listWorkspaceMembers = async (workspaceId: string, options?: Parameters<typeof apiFetch>[1]): Promise<ListWorkspaceMembers200Item[]> => {
+
+  return apiFetch<ListWorkspaceMembers200Item[]>(getListWorkspaceMembersUrl(workspaceId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWorkspaceMembersQueryKey = (workspaceId: string,) => {
+    return [
+    `/api/knowledge/workspaces/${workspaceId}/members`
+    ] as const;
+    }
+
+
+export const getListWorkspaceMembersQueryOptions = <TData = Awaited<ReturnType<typeof listWorkspaceMembers>>, TError = ErrorType<ListWorkspaceMembers400 | ListWorkspaceMembers401 | ListWorkspaceMembers404 | ListWorkspaceMembers409 | ListWorkspaceMembers429>>(workspaceId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWorkspaceMembers>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWorkspaceMembersQueryKey(workspaceId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWorkspaceMembers>>> = ({ signal }) => listWorkspaceMembers(workspaceId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: workspaceId !== null && workspaceId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWorkspaceMembers>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListWorkspaceMembersQueryResult = NonNullable<Awaited<ReturnType<typeof listWorkspaceMembers>>>
+export type ListWorkspaceMembersQueryError = ErrorType<ListWorkspaceMembers400 | ListWorkspaceMembers401 | ListWorkspaceMembers404 | ListWorkspaceMembers409 | ListWorkspaceMembers429>
+
+
+export function useListWorkspaceMembers<TData = Awaited<ReturnType<typeof listWorkspaceMembers>>, TError = ErrorType<ListWorkspaceMembers400 | ListWorkspaceMembers401 | ListWorkspaceMembers404 | ListWorkspaceMembers409 | ListWorkspaceMembers429>>(
+ workspaceId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWorkspaceMembers>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listWorkspaceMembers>>,
+          TError,
+          Awaited<ReturnType<typeof listWorkspaceMembers>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListWorkspaceMembers<TData = Awaited<ReturnType<typeof listWorkspaceMembers>>, TError = ErrorType<ListWorkspaceMembers400 | ListWorkspaceMembers401 | ListWorkspaceMembers404 | ListWorkspaceMembers409 | ListWorkspaceMembers429>>(
+ workspaceId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWorkspaceMembers>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listWorkspaceMembers>>,
+          TError,
+          Awaited<ReturnType<typeof listWorkspaceMembers>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListWorkspaceMembers<TData = Awaited<ReturnType<typeof listWorkspaceMembers>>, TError = ErrorType<ListWorkspaceMembers400 | ListWorkspaceMembers401 | ListWorkspaceMembers404 | ListWorkspaceMembers409 | ListWorkspaceMembers429>>(
+ workspaceId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWorkspaceMembers>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useListWorkspaceMembers<TData = Awaited<ReturnType<typeof listWorkspaceMembers>>, TError = ErrorType<ListWorkspaceMembers400 | ListWorkspaceMembers401 | ListWorkspaceMembers404 | ListWorkspaceMembers409 | ListWorkspaceMembers429>>(
+ workspaceId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWorkspaceMembers>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListWorkspaceMembersQueryOptions(workspaceId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSetWorkspaceMemberUrl = (workspaceId: string,
+    identityId: string,) => {
+
+
+
+
+  return `/api/knowledge/workspaces/${workspaceId}/members/${identityId}`
+}
+
+export const setWorkspaceMember = async (workspaceId: string,
+    identityId: string,
+    setWorkspaceMemberBody: SetWorkspaceMemberBody, options?: Parameters<typeof apiFetch>[1]): Promise<SetWorkspaceMember200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<SetWorkspaceMember200>(getSetWorkspaceMemberUrl(workspaceId,identityId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(setWorkspaceMemberBody)
+  }
+);}
+
+
+
+
+
+export const getSetWorkspaceMemberQueryKey = (workspaceId: string,
+    identityId: string,
+    setWorkspaceMemberBody?: BodyType<SetWorkspaceMemberBody>,) => {
+    return [
+    'PUT', `/api/knowledge/workspaces/${workspaceId}/members/${identityId}`, setWorkspaceMemberBody
+    ] as const;
+    }
+
+
+export const getSetWorkspaceMemberQueryOptions = <TData = Awaited<ReturnType<typeof setWorkspaceMember>>, TError = ErrorType<SetWorkspaceMember400 | SetWorkspaceMember401 | SetWorkspaceMember404 | SetWorkspaceMember409 | SetWorkspaceMember429>>(workspaceId: string,
+    identityId: string,
+    setWorkspaceMemberBody: BodyType<SetWorkspaceMemberBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof setWorkspaceMember>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSetWorkspaceMemberQueryKey(workspaceId,identityId,setWorkspaceMemberBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof setWorkspaceMember>>> = ({ signal }) => setWorkspaceMember(workspaceId,identityId,setWorkspaceMemberBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: workspaceId !== null && workspaceId !== undefined && identityId !== null && identityId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof setWorkspaceMember>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type SetWorkspaceMemberQueryResult = NonNullable<Awaited<ReturnType<typeof setWorkspaceMember>>>
+export type SetWorkspaceMemberQueryError = ErrorType<SetWorkspaceMember400 | SetWorkspaceMember401 | SetWorkspaceMember404 | SetWorkspaceMember409 | SetWorkspaceMember429>
+
+
+export function useSetWorkspaceMember<TData = Awaited<ReturnType<typeof setWorkspaceMember>>, TError = ErrorType<SetWorkspaceMember400 | SetWorkspaceMember401 | SetWorkspaceMember404 | SetWorkspaceMember409 | SetWorkspaceMember429>>(
+ workspaceId: string,
+    identityId: string,
+    setWorkspaceMemberBody: BodyType<SetWorkspaceMemberBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof setWorkspaceMember>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof setWorkspaceMember>>,
+          TError,
+          Awaited<ReturnType<typeof setWorkspaceMember>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSetWorkspaceMember<TData = Awaited<ReturnType<typeof setWorkspaceMember>>, TError = ErrorType<SetWorkspaceMember400 | SetWorkspaceMember401 | SetWorkspaceMember404 | SetWorkspaceMember409 | SetWorkspaceMember429>>(
+ workspaceId: string,
+    identityId: string,
+    setWorkspaceMemberBody: BodyType<SetWorkspaceMemberBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof setWorkspaceMember>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof setWorkspaceMember>>,
+          TError,
+          Awaited<ReturnType<typeof setWorkspaceMember>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSetWorkspaceMember<TData = Awaited<ReturnType<typeof setWorkspaceMember>>, TError = ErrorType<SetWorkspaceMember400 | SetWorkspaceMember401 | SetWorkspaceMember404 | SetWorkspaceMember409 | SetWorkspaceMember429>>(
+ workspaceId: string,
+    identityId: string,
+    setWorkspaceMemberBody: BodyType<SetWorkspaceMemberBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof setWorkspaceMember>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useSetWorkspaceMember<TData = Awaited<ReturnType<typeof setWorkspaceMember>>, TError = ErrorType<SetWorkspaceMember400 | SetWorkspaceMember401 | SetWorkspaceMember404 | SetWorkspaceMember409 | SetWorkspaceMember429>>(
+ workspaceId: string,
+    identityId: string,
+    setWorkspaceMemberBody: BodyType<SetWorkspaceMemberBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof setWorkspaceMember>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getSetWorkspaceMemberQueryOptions(workspaceId,identityId,setWorkspaceMemberBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRemoveWorkspaceMemberUrl = (workspaceId: string,
+    identityId: string,) => {
+
+
+
+
+  return `/api/knowledge/workspaces/${workspaceId}/members/${identityId}`
+}
+
+export const removeWorkspaceMember = async (workspaceId: string,
+    identityId: string, options?: Parameters<typeof apiFetch>[1]): Promise<RemoveWorkspaceMember204> => {
+
+  return apiFetch<RemoveWorkspaceMember204>(getRemoveWorkspaceMemberUrl(workspaceId,identityId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getRemoveWorkspaceMemberQueryKey = (workspaceId: string,
+    identityId: string,) => {
+    return [
+    'DELETE', `/api/knowledge/workspaces/${workspaceId}/members/${identityId}`
+    ] as const;
+    }
+
+
+export const getRemoveWorkspaceMemberQueryOptions = <TData = Awaited<ReturnType<typeof removeWorkspaceMember>>, TError = ErrorType<RemoveWorkspaceMember400 | RemoveWorkspaceMember401 | RemoveWorkspaceMember404 | RemoveWorkspaceMember409 | RemoveWorkspaceMember429>>(workspaceId: string,
+    identityId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof removeWorkspaceMember>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getRemoveWorkspaceMemberQueryKey(workspaceId,identityId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof removeWorkspaceMember>>> = ({ signal }) => removeWorkspaceMember(workspaceId,identityId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: workspaceId !== null && workspaceId !== undefined && identityId !== null && identityId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof removeWorkspaceMember>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type RemoveWorkspaceMemberQueryResult = NonNullable<Awaited<ReturnType<typeof removeWorkspaceMember>>>
+export type RemoveWorkspaceMemberQueryError = ErrorType<RemoveWorkspaceMember400 | RemoveWorkspaceMember401 | RemoveWorkspaceMember404 | RemoveWorkspaceMember409 | RemoveWorkspaceMember429>
+
+
+export function useRemoveWorkspaceMember<TData = Awaited<ReturnType<typeof removeWorkspaceMember>>, TError = ErrorType<RemoveWorkspaceMember400 | RemoveWorkspaceMember401 | RemoveWorkspaceMember404 | RemoveWorkspaceMember409 | RemoveWorkspaceMember429>>(
+ workspaceId: string,
+    identityId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof removeWorkspaceMember>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof removeWorkspaceMember>>,
+          TError,
+          Awaited<ReturnType<typeof removeWorkspaceMember>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useRemoveWorkspaceMember<TData = Awaited<ReturnType<typeof removeWorkspaceMember>>, TError = ErrorType<RemoveWorkspaceMember400 | RemoveWorkspaceMember401 | RemoveWorkspaceMember404 | RemoveWorkspaceMember409 | RemoveWorkspaceMember429>>(
+ workspaceId: string,
+    identityId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof removeWorkspaceMember>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof removeWorkspaceMember>>,
+          TError,
+          Awaited<ReturnType<typeof removeWorkspaceMember>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useRemoveWorkspaceMember<TData = Awaited<ReturnType<typeof removeWorkspaceMember>>, TError = ErrorType<RemoveWorkspaceMember400 | RemoveWorkspaceMember401 | RemoveWorkspaceMember404 | RemoveWorkspaceMember409 | RemoveWorkspaceMember429>>(
+ workspaceId: string,
+    identityId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof removeWorkspaceMember>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useRemoveWorkspaceMember<TData = Awaited<ReturnType<typeof removeWorkspaceMember>>, TError = ErrorType<RemoveWorkspaceMember400 | RemoveWorkspaceMember401 | RemoveWorkspaceMember404 | RemoveWorkspaceMember409 | RemoveWorkspaceMember429>>(
+ workspaceId: string,
+    identityId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof removeWorkspaceMember>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getRemoveWorkspaceMemberQueryOptions(workspaceId,identityId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getMoveKnowledgeDocumentUrl = (documentId: string,) => {
 
 
@@ -6501,6 +7116,2058 @@ export function useJoinShare<TData = Awaited<ReturnType<typeof joinShare>>, TErr
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getJoinShareQueryOptions(shareId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAiCapabilitiesUrl = () => {
+
+
+
+
+  return `/api/ai/capabilities`
+}
+
+export const getAiCapabilities = async ( options?: Parameters<typeof apiFetch>[1]): Promise<GetAiCapabilities200> => {
+
+  return apiFetch<GetAiCapabilities200>(getGetAiCapabilitiesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAiCapabilitiesQueryKey = () => {
+    return [
+    `/api/ai/capabilities`
+    ] as const;
+    }
+
+
+export const getGetAiCapabilitiesQueryOptions = <TData = Awaited<ReturnType<typeof getAiCapabilities>>, TError = ErrorType<GetAiCapabilities400 | GetAiCapabilities401 | GetAiCapabilities403 | GetAiCapabilities404 | GetAiCapabilities409 | GetAiCapabilities429 | GetAiCapabilities503>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiCapabilities>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAiCapabilitiesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAiCapabilities>>> = ({ signal }) => getAiCapabilities({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAiCapabilities>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetAiCapabilitiesQueryResult = NonNullable<Awaited<ReturnType<typeof getAiCapabilities>>>
+export type GetAiCapabilitiesQueryError = ErrorType<GetAiCapabilities400 | GetAiCapabilities401 | GetAiCapabilities403 | GetAiCapabilities404 | GetAiCapabilities409 | GetAiCapabilities429 | GetAiCapabilities503>
+
+
+export function useGetAiCapabilities<TData = Awaited<ReturnType<typeof getAiCapabilities>>, TError = ErrorType<GetAiCapabilities400 | GetAiCapabilities401 | GetAiCapabilities403 | GetAiCapabilities404 | GetAiCapabilities409 | GetAiCapabilities429 | GetAiCapabilities503>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiCapabilities>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAiCapabilities>>,
+          TError,
+          Awaited<ReturnType<typeof getAiCapabilities>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAiCapabilities<TData = Awaited<ReturnType<typeof getAiCapabilities>>, TError = ErrorType<GetAiCapabilities400 | GetAiCapabilities401 | GetAiCapabilities403 | GetAiCapabilities404 | GetAiCapabilities409 | GetAiCapabilities429 | GetAiCapabilities503>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiCapabilities>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAiCapabilities>>,
+          TError,
+          Awaited<ReturnType<typeof getAiCapabilities>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAiCapabilities<TData = Awaited<ReturnType<typeof getAiCapabilities>>, TError = ErrorType<GetAiCapabilities400 | GetAiCapabilities401 | GetAiCapabilities403 | GetAiCapabilities404 | GetAiCapabilities409 | GetAiCapabilities429 | GetAiCapabilities503>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiCapabilities>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetAiCapabilities<TData = Awaited<ReturnType<typeof getAiCapabilities>>, TError = ErrorType<GetAiCapabilities400 | GetAiCapabilities401 | GetAiCapabilities403 | GetAiCapabilities404 | GetAiCapabilities409 | GetAiCapabilities429 | GetAiCapabilities503>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiCapabilities>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetAiCapabilitiesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAiDocumentContextUrl = (documentId: string,) => {
+
+
+
+
+  return `/api/ai/documents/${documentId}/context`
+}
+
+export const getAiDocumentContext = async (documentId: string, options?: Parameters<typeof apiFetch>[1]): Promise<GetAiDocumentContext200> => {
+
+  return apiFetch<GetAiDocumentContext200>(getGetAiDocumentContextUrl(documentId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAiDocumentContextQueryKey = (documentId: string,) => {
+    return [
+    `/api/ai/documents/${documentId}/context`
+    ] as const;
+    }
+
+
+export const getGetAiDocumentContextQueryOptions = <TData = Awaited<ReturnType<typeof getAiDocumentContext>>, TError = ErrorType<GetAiDocumentContext400 | GetAiDocumentContext401 | GetAiDocumentContext403 | GetAiDocumentContext404 | GetAiDocumentContext409 | GetAiDocumentContext429 | GetAiDocumentContext503>>(documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiDocumentContext>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAiDocumentContextQueryKey(documentId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAiDocumentContext>>> = ({ signal }) => getAiDocumentContext(documentId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: documentId !== null && documentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAiDocumentContext>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetAiDocumentContextQueryResult = NonNullable<Awaited<ReturnType<typeof getAiDocumentContext>>>
+export type GetAiDocumentContextQueryError = ErrorType<GetAiDocumentContext400 | GetAiDocumentContext401 | GetAiDocumentContext403 | GetAiDocumentContext404 | GetAiDocumentContext409 | GetAiDocumentContext429 | GetAiDocumentContext503>
+
+
+export function useGetAiDocumentContext<TData = Awaited<ReturnType<typeof getAiDocumentContext>>, TError = ErrorType<GetAiDocumentContext400 | GetAiDocumentContext401 | GetAiDocumentContext403 | GetAiDocumentContext404 | GetAiDocumentContext409 | GetAiDocumentContext429 | GetAiDocumentContext503>>(
+ documentId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiDocumentContext>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAiDocumentContext>>,
+          TError,
+          Awaited<ReturnType<typeof getAiDocumentContext>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAiDocumentContext<TData = Awaited<ReturnType<typeof getAiDocumentContext>>, TError = ErrorType<GetAiDocumentContext400 | GetAiDocumentContext401 | GetAiDocumentContext403 | GetAiDocumentContext404 | GetAiDocumentContext409 | GetAiDocumentContext429 | GetAiDocumentContext503>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiDocumentContext>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAiDocumentContext>>,
+          TError,
+          Awaited<ReturnType<typeof getAiDocumentContext>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAiDocumentContext<TData = Awaited<ReturnType<typeof getAiDocumentContext>>, TError = ErrorType<GetAiDocumentContext400 | GetAiDocumentContext401 | GetAiDocumentContext403 | GetAiDocumentContext404 | GetAiDocumentContext409 | GetAiDocumentContext429 | GetAiDocumentContext503>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiDocumentContext>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetAiDocumentContext<TData = Awaited<ReturnType<typeof getAiDocumentContext>>, TError = ErrorType<GetAiDocumentContext400 | GetAiDocumentContext401 | GetAiDocumentContext403 | GetAiDocumentContext404 | GetAiDocumentContext409 | GetAiDocumentContext429 | GetAiDocumentContext503>>(
+ documentId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiDocumentContext>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetAiDocumentContextQueryOptions(documentId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getStartAiAuthoringUrl = () => {
+
+
+
+
+  return `/api/ai/authoring`
+}
+
+export const startAiAuthoring = async (startAiAuthoringBody: StartAiAuthoringBody, options?: Parameters<typeof apiFetch>[1]): Promise<StartAiAuthoring200One | string> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<StartAiAuthoring200One | string>(getStartAiAuthoringUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(startAiAuthoringBody)
+  }
+);}
+
+
+
+
+
+export const getStartAiAuthoringQueryKey = (startAiAuthoringBody?: BodyType<StartAiAuthoringBody>,) => {
+    return [
+    'POST', `/api/ai/authoring`, startAiAuthoringBody
+    ] as const;
+    }
+
+
+export const getStartAiAuthoringQueryOptions = <TData = Awaited<ReturnType<typeof startAiAuthoring>>, TError = ErrorType<StartAiAuthoring400 | StartAiAuthoring401 | StartAiAuthoring403 | StartAiAuthoring404 | StartAiAuthoring409 | StartAiAuthoring429 | StartAiAuthoring503>>(startAiAuthoringBody: BodyType<StartAiAuthoringBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startAiAuthoring>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStartAiAuthoringQueryKey(startAiAuthoringBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof startAiAuthoring>>> = ({ signal }) => startAiAuthoring(startAiAuthoringBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof startAiAuthoring>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type StartAiAuthoringQueryResult = NonNullable<Awaited<ReturnType<typeof startAiAuthoring>>>
+export type StartAiAuthoringQueryError = ErrorType<StartAiAuthoring400 | StartAiAuthoring401 | StartAiAuthoring403 | StartAiAuthoring404 | StartAiAuthoring409 | StartAiAuthoring429 | StartAiAuthoring503>
+
+
+export function useStartAiAuthoring<TData = Awaited<ReturnType<typeof startAiAuthoring>>, TError = ErrorType<StartAiAuthoring400 | StartAiAuthoring401 | StartAiAuthoring403 | StartAiAuthoring404 | StartAiAuthoring409 | StartAiAuthoring429 | StartAiAuthoring503>>(
+ startAiAuthoringBody: BodyType<StartAiAuthoringBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof startAiAuthoring>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startAiAuthoring>>,
+          TError,
+          Awaited<ReturnType<typeof startAiAuthoring>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartAiAuthoring<TData = Awaited<ReturnType<typeof startAiAuthoring>>, TError = ErrorType<StartAiAuthoring400 | StartAiAuthoring401 | StartAiAuthoring403 | StartAiAuthoring404 | StartAiAuthoring409 | StartAiAuthoring429 | StartAiAuthoring503>>(
+ startAiAuthoringBody: BodyType<StartAiAuthoringBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startAiAuthoring>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startAiAuthoring>>,
+          TError,
+          Awaited<ReturnType<typeof startAiAuthoring>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartAiAuthoring<TData = Awaited<ReturnType<typeof startAiAuthoring>>, TError = ErrorType<StartAiAuthoring400 | StartAiAuthoring401 | StartAiAuthoring403 | StartAiAuthoring404 | StartAiAuthoring409 | StartAiAuthoring429 | StartAiAuthoring503>>(
+ startAiAuthoringBody: BodyType<StartAiAuthoringBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startAiAuthoring>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useStartAiAuthoring<TData = Awaited<ReturnType<typeof startAiAuthoring>>, TError = ErrorType<StartAiAuthoring400 | StartAiAuthoring401 | StartAiAuthoring403 | StartAiAuthoring404 | StartAiAuthoring409 | StartAiAuthoring429 | StartAiAuthoring503>>(
+ startAiAuthoringBody: BodyType<StartAiAuthoringBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startAiAuthoring>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getStartAiAuthoringQueryOptions(startAiAuthoringBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getStartAiChatUrl = () => {
+
+
+
+
+  return `/api/ai/chat`
+}
+
+export const startAiChat = async (startAiChatBody: StartAiChatBody, options?: Parameters<typeof apiFetch>[1]): Promise<StartAiChat200One | string> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<StartAiChat200One | string>(getStartAiChatUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(startAiChatBody)
+  }
+);}
+
+
+
+
+
+export const getStartAiChatQueryKey = (startAiChatBody?: BodyType<StartAiChatBody>,) => {
+    return [
+    'POST', `/api/ai/chat`, startAiChatBody
+    ] as const;
+    }
+
+
+export const getStartAiChatQueryOptions = <TData = Awaited<ReturnType<typeof startAiChat>>, TError = ErrorType<StartAiChat400 | StartAiChat401 | StartAiChat403 | StartAiChat404 | StartAiChat409 | StartAiChat429 | StartAiChat503>>(startAiChatBody: BodyType<StartAiChatBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startAiChat>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStartAiChatQueryKey(startAiChatBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof startAiChat>>> = ({ signal }) => startAiChat(startAiChatBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof startAiChat>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type StartAiChatQueryResult = NonNullable<Awaited<ReturnType<typeof startAiChat>>>
+export type StartAiChatQueryError = ErrorType<StartAiChat400 | StartAiChat401 | StartAiChat403 | StartAiChat404 | StartAiChat409 | StartAiChat429 | StartAiChat503>
+
+
+export function useStartAiChat<TData = Awaited<ReturnType<typeof startAiChat>>, TError = ErrorType<StartAiChat400 | StartAiChat401 | StartAiChat403 | StartAiChat404 | StartAiChat409 | StartAiChat429 | StartAiChat503>>(
+ startAiChatBody: BodyType<StartAiChatBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof startAiChat>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startAiChat>>,
+          TError,
+          Awaited<ReturnType<typeof startAiChat>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartAiChat<TData = Awaited<ReturnType<typeof startAiChat>>, TError = ErrorType<StartAiChat400 | StartAiChat401 | StartAiChat403 | StartAiChat404 | StartAiChat409 | StartAiChat429 | StartAiChat503>>(
+ startAiChatBody: BodyType<StartAiChatBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startAiChat>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof startAiChat>>,
+          TError,
+          Awaited<ReturnType<typeof startAiChat>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStartAiChat<TData = Awaited<ReturnType<typeof startAiChat>>, TError = ErrorType<StartAiChat400 | StartAiChat401 | StartAiChat403 | StartAiChat404 | StartAiChat409 | StartAiChat429 | StartAiChat503>>(
+ startAiChatBody: BodyType<StartAiChatBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startAiChat>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useStartAiChat<TData = Awaited<ReturnType<typeof startAiChat>>, TError = ErrorType<StartAiChat400 | StartAiChat401 | StartAiChat403 | StartAiChat404 | StartAiChat409 | StartAiChat429 | StartAiChat503>>(
+ startAiChatBody: BodyType<StartAiChatBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof startAiChat>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getStartAiChatQueryOptions(startAiChatBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAiTaskUrl = (requestId: string,) => {
+
+
+
+
+  return `/api/ai/requests/${requestId}`
+}
+
+export const getAiTask = async (requestId: string, options?: Parameters<typeof apiFetch>[1]): Promise<GetAiTask200> => {
+
+  return apiFetch<GetAiTask200>(getGetAiTaskUrl(requestId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAiTaskQueryKey = (requestId: string,) => {
+    return [
+    `/api/ai/requests/${requestId}`
+    ] as const;
+    }
+
+
+export const getGetAiTaskQueryOptions = <TData = Awaited<ReturnType<typeof getAiTask>>, TError = ErrorType<GetAiTask400 | GetAiTask401 | GetAiTask403 | GetAiTask404 | GetAiTask409 | GetAiTask429 | GetAiTask503>>(requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiTask>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAiTaskQueryKey(requestId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAiTask>>> = ({ signal }) => getAiTask(requestId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: requestId !== null && requestId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAiTask>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetAiTaskQueryResult = NonNullable<Awaited<ReturnType<typeof getAiTask>>>
+export type GetAiTaskQueryError = ErrorType<GetAiTask400 | GetAiTask401 | GetAiTask403 | GetAiTask404 | GetAiTask409 | GetAiTask429 | GetAiTask503>
+
+
+export function useGetAiTask<TData = Awaited<ReturnType<typeof getAiTask>>, TError = ErrorType<GetAiTask400 | GetAiTask401 | GetAiTask403 | GetAiTask404 | GetAiTask409 | GetAiTask429 | GetAiTask503>>(
+ requestId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiTask>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAiTask>>,
+          TError,
+          Awaited<ReturnType<typeof getAiTask>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAiTask<TData = Awaited<ReturnType<typeof getAiTask>>, TError = ErrorType<GetAiTask400 | GetAiTask401 | GetAiTask403 | GetAiTask404 | GetAiTask409 | GetAiTask429 | GetAiTask503>>(
+ requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiTask>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAiTask>>,
+          TError,
+          Awaited<ReturnType<typeof getAiTask>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAiTask<TData = Awaited<ReturnType<typeof getAiTask>>, TError = ErrorType<GetAiTask400 | GetAiTask401 | GetAiTask403 | GetAiTask404 | GetAiTask409 | GetAiTask429 | GetAiTask503>>(
+ requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiTask>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetAiTask<TData = Awaited<ReturnType<typeof getAiTask>>, TError = ErrorType<GetAiTask400 | GetAiTask401 | GetAiTask403 | GetAiTask404 | GetAiTask409 | GetAiTask429 | GetAiTask503>>(
+ requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiTask>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetAiTaskQueryOptions(requestId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAcceptAiProposalUrl = (requestId: string,) => {
+
+
+
+
+  return `/api/ai/requests/${requestId}/accept`
+}
+
+export const acceptAiProposal = async (requestId: string, options?: Parameters<typeof apiFetch>[1]): Promise<AcceptAiProposal200> => {
+
+  return apiFetch<AcceptAiProposal200>(getAcceptAiProposalUrl(requestId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getAcceptAiProposalQueryKey = (requestId: string,) => {
+    return [
+    'POST', `/api/ai/requests/${requestId}/accept`
+    ] as const;
+    }
+
+
+export const getAcceptAiProposalQueryOptions = <TData = Awaited<ReturnType<typeof acceptAiProposal>>, TError = ErrorType<AcceptAiProposal400 | AcceptAiProposal401 | AcceptAiProposal403 | AcceptAiProposal404 | AcceptAiProposal409 | AcceptAiProposal429 | AcceptAiProposal503>>(requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof acceptAiProposal>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAcceptAiProposalQueryKey(requestId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof acceptAiProposal>>> = ({ signal }) => acceptAiProposal(requestId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: requestId !== null && requestId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof acceptAiProposal>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AcceptAiProposalQueryResult = NonNullable<Awaited<ReturnType<typeof acceptAiProposal>>>
+export type AcceptAiProposalQueryError = ErrorType<AcceptAiProposal400 | AcceptAiProposal401 | AcceptAiProposal403 | AcceptAiProposal404 | AcceptAiProposal409 | AcceptAiProposal429 | AcceptAiProposal503>
+
+
+export function useAcceptAiProposal<TData = Awaited<ReturnType<typeof acceptAiProposal>>, TError = ErrorType<AcceptAiProposal400 | AcceptAiProposal401 | AcceptAiProposal403 | AcceptAiProposal404 | AcceptAiProposal409 | AcceptAiProposal429 | AcceptAiProposal503>>(
+ requestId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof acceptAiProposal>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof acceptAiProposal>>,
+          TError,
+          Awaited<ReturnType<typeof acceptAiProposal>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAcceptAiProposal<TData = Awaited<ReturnType<typeof acceptAiProposal>>, TError = ErrorType<AcceptAiProposal400 | AcceptAiProposal401 | AcceptAiProposal403 | AcceptAiProposal404 | AcceptAiProposal409 | AcceptAiProposal429 | AcceptAiProposal503>>(
+ requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof acceptAiProposal>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof acceptAiProposal>>,
+          TError,
+          Awaited<ReturnType<typeof acceptAiProposal>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAcceptAiProposal<TData = Awaited<ReturnType<typeof acceptAiProposal>>, TError = ErrorType<AcceptAiProposal400 | AcceptAiProposal401 | AcceptAiProposal403 | AcceptAiProposal404 | AcceptAiProposal409 | AcceptAiProposal429 | AcceptAiProposal503>>(
+ requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof acceptAiProposal>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useAcceptAiProposal<TData = Awaited<ReturnType<typeof acceptAiProposal>>, TError = ErrorType<AcceptAiProposal400 | AcceptAiProposal401 | AcceptAiProposal403 | AcceptAiProposal404 | AcceptAiProposal409 | AcceptAiProposal429 | AcceptAiProposal503>>(
+ requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof acceptAiProposal>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAcceptAiProposalQueryOptions(requestId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCancelAiTaskUrl = (requestId: string,) => {
+
+
+
+
+  return `/api/ai/requests/${requestId}/cancel`
+}
+
+export const cancelAiTask = async (requestId: string, options?: Parameters<typeof apiFetch>[1]): Promise<CancelAiTask200> => {
+
+  return apiFetch<CancelAiTask200>(getCancelAiTaskUrl(requestId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCancelAiTaskQueryKey = (requestId: string,) => {
+    return [
+    'POST', `/api/ai/requests/${requestId}/cancel`
+    ] as const;
+    }
+
+
+export const getCancelAiTaskQueryOptions = <TData = Awaited<ReturnType<typeof cancelAiTask>>, TError = ErrorType<CancelAiTask400 | CancelAiTask401 | CancelAiTask403 | CancelAiTask404 | CancelAiTask409 | CancelAiTask429 | CancelAiTask503>>(requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof cancelAiTask>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCancelAiTaskQueryKey(requestId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof cancelAiTask>>> = ({ signal }) => cancelAiTask(requestId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: requestId !== null && requestId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof cancelAiTask>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CancelAiTaskQueryResult = NonNullable<Awaited<ReturnType<typeof cancelAiTask>>>
+export type CancelAiTaskQueryError = ErrorType<CancelAiTask400 | CancelAiTask401 | CancelAiTask403 | CancelAiTask404 | CancelAiTask409 | CancelAiTask429 | CancelAiTask503>
+
+
+export function useCancelAiTask<TData = Awaited<ReturnType<typeof cancelAiTask>>, TError = ErrorType<CancelAiTask400 | CancelAiTask401 | CancelAiTask403 | CancelAiTask404 | CancelAiTask409 | CancelAiTask429 | CancelAiTask503>>(
+ requestId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof cancelAiTask>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof cancelAiTask>>,
+          TError,
+          Awaited<ReturnType<typeof cancelAiTask>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCancelAiTask<TData = Awaited<ReturnType<typeof cancelAiTask>>, TError = ErrorType<CancelAiTask400 | CancelAiTask401 | CancelAiTask403 | CancelAiTask404 | CancelAiTask409 | CancelAiTask429 | CancelAiTask503>>(
+ requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof cancelAiTask>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof cancelAiTask>>,
+          TError,
+          Awaited<ReturnType<typeof cancelAiTask>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCancelAiTask<TData = Awaited<ReturnType<typeof cancelAiTask>>, TError = ErrorType<CancelAiTask400 | CancelAiTask401 | CancelAiTask403 | CancelAiTask404 | CancelAiTask409 | CancelAiTask429 | CancelAiTask503>>(
+ requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof cancelAiTask>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useCancelAiTask<TData = Awaited<ReturnType<typeof cancelAiTask>>, TError = ErrorType<CancelAiTask400 | CancelAiTask401 | CancelAiTask403 | CancelAiTask404 | CancelAiTask409 | CancelAiTask429 | CancelAiTask503>>(
+ requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof cancelAiTask>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCancelAiTaskQueryOptions(requestId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getReviewAiProposalUrl = (requestId: string,) => {
+
+
+
+
+  return `/api/ai/requests/${requestId}/review`
+}
+
+export const reviewAiProposal = async (requestId: string,
+    reviewAiProposalBody: ReviewAiProposalBody, options?: Parameters<typeof apiFetch>[1]): Promise<ReviewAiProposal200> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<ReviewAiProposal200>(getReviewAiProposalUrl(requestId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(reviewAiProposalBody)
+  }
+);}
+
+
+
+
+
+export const getReviewAiProposalQueryKey = (requestId: string,
+    reviewAiProposalBody?: BodyType<ReviewAiProposalBody>,) => {
+    return [
+    'POST', `/api/ai/requests/${requestId}/review`, reviewAiProposalBody
+    ] as const;
+    }
+
+
+export const getReviewAiProposalQueryOptions = <TData = Awaited<ReturnType<typeof reviewAiProposal>>, TError = ErrorType<ReviewAiProposal400 | ReviewAiProposal401 | ReviewAiProposal403 | ReviewAiProposal404 | ReviewAiProposal409 | ReviewAiProposal429 | ReviewAiProposal503>>(requestId: string,
+    reviewAiProposalBody: BodyType<ReviewAiProposalBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof reviewAiProposal>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getReviewAiProposalQueryKey(requestId,reviewAiProposalBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof reviewAiProposal>>> = ({ signal }) => reviewAiProposal(requestId,reviewAiProposalBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: requestId !== null && requestId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof reviewAiProposal>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ReviewAiProposalQueryResult = NonNullable<Awaited<ReturnType<typeof reviewAiProposal>>>
+export type ReviewAiProposalQueryError = ErrorType<ReviewAiProposal400 | ReviewAiProposal401 | ReviewAiProposal403 | ReviewAiProposal404 | ReviewAiProposal409 | ReviewAiProposal429 | ReviewAiProposal503>
+
+
+export function useReviewAiProposal<TData = Awaited<ReturnType<typeof reviewAiProposal>>, TError = ErrorType<ReviewAiProposal400 | ReviewAiProposal401 | ReviewAiProposal403 | ReviewAiProposal404 | ReviewAiProposal409 | ReviewAiProposal429 | ReviewAiProposal503>>(
+ requestId: string,
+    reviewAiProposalBody: BodyType<ReviewAiProposalBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof reviewAiProposal>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof reviewAiProposal>>,
+          TError,
+          Awaited<ReturnType<typeof reviewAiProposal>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useReviewAiProposal<TData = Awaited<ReturnType<typeof reviewAiProposal>>, TError = ErrorType<ReviewAiProposal400 | ReviewAiProposal401 | ReviewAiProposal403 | ReviewAiProposal404 | ReviewAiProposal409 | ReviewAiProposal429 | ReviewAiProposal503>>(
+ requestId: string,
+    reviewAiProposalBody: BodyType<ReviewAiProposalBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof reviewAiProposal>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof reviewAiProposal>>,
+          TError,
+          Awaited<ReturnType<typeof reviewAiProposal>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useReviewAiProposal<TData = Awaited<ReturnType<typeof reviewAiProposal>>, TError = ErrorType<ReviewAiProposal400 | ReviewAiProposal401 | ReviewAiProposal403 | ReviewAiProposal404 | ReviewAiProposal409 | ReviewAiProposal429 | ReviewAiProposal503>>(
+ requestId: string,
+    reviewAiProposalBody: BodyType<ReviewAiProposalBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof reviewAiProposal>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useReviewAiProposal<TData = Awaited<ReturnType<typeof reviewAiProposal>>, TError = ErrorType<ReviewAiProposal400 | ReviewAiProposal401 | ReviewAiProposal403 | ReviewAiProposal404 | ReviewAiProposal409 | ReviewAiProposal429 | ReviewAiProposal503>>(
+ requestId: string,
+    reviewAiProposalBody: BodyType<ReviewAiProposalBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof reviewAiProposal>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getReviewAiProposalQueryOptions(requestId,reviewAiProposalBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getResumeAiTaskUrl = (requestId: string,) => {
+
+
+
+
+  return `/api/ai/requests/${requestId}/resume`
+}
+
+export const resumeAiTask = async (requestId: string, options?: Parameters<typeof apiFetch>[1]): Promise<ResumeAiTask202> => {
+
+  return apiFetch<ResumeAiTask202>(getResumeAiTaskUrl(requestId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getResumeAiTaskQueryKey = (requestId: string,) => {
+    return [
+    'POST', `/api/ai/requests/${requestId}/resume`
+    ] as const;
+    }
+
+
+export const getResumeAiTaskQueryOptions = <TData = Awaited<ReturnType<typeof resumeAiTask>>, TError = ErrorType<ResumeAiTask400 | ResumeAiTask401 | ResumeAiTask403 | ResumeAiTask404 | ResumeAiTask409 | ResumeAiTask429 | ResumeAiTask503>>(requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof resumeAiTask>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getResumeAiTaskQueryKey(requestId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof resumeAiTask>>> = ({ signal }) => resumeAiTask(requestId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: requestId !== null && requestId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof resumeAiTask>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ResumeAiTaskQueryResult = NonNullable<Awaited<ReturnType<typeof resumeAiTask>>>
+export type ResumeAiTaskQueryError = ErrorType<ResumeAiTask400 | ResumeAiTask401 | ResumeAiTask403 | ResumeAiTask404 | ResumeAiTask409 | ResumeAiTask429 | ResumeAiTask503>
+
+
+export function useResumeAiTask<TData = Awaited<ReturnType<typeof resumeAiTask>>, TError = ErrorType<ResumeAiTask400 | ResumeAiTask401 | ResumeAiTask403 | ResumeAiTask404 | ResumeAiTask409 | ResumeAiTask429 | ResumeAiTask503>>(
+ requestId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof resumeAiTask>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof resumeAiTask>>,
+          TError,
+          Awaited<ReturnType<typeof resumeAiTask>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useResumeAiTask<TData = Awaited<ReturnType<typeof resumeAiTask>>, TError = ErrorType<ResumeAiTask400 | ResumeAiTask401 | ResumeAiTask403 | ResumeAiTask404 | ResumeAiTask409 | ResumeAiTask429 | ResumeAiTask503>>(
+ requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof resumeAiTask>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof resumeAiTask>>,
+          TError,
+          Awaited<ReturnType<typeof resumeAiTask>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useResumeAiTask<TData = Awaited<ReturnType<typeof resumeAiTask>>, TError = ErrorType<ResumeAiTask400 | ResumeAiTask401 | ResumeAiTask403 | ResumeAiTask404 | ResumeAiTask409 | ResumeAiTask429 | ResumeAiTask503>>(
+ requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof resumeAiTask>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useResumeAiTask<TData = Awaited<ReturnType<typeof resumeAiTask>>, TError = ErrorType<ResumeAiTask400 | ResumeAiTask401 | ResumeAiTask403 | ResumeAiTask404 | ResumeAiTask409 | ResumeAiTask429 | ResumeAiTask503>>(
+ requestId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof resumeAiTask>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getResumeAiTaskQueryOptions(requestId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetWritingCapabilitiesUrl = () => {
+
+
+
+
+  return `/api/writing/capabilities`
+}
+
+export const getWritingCapabilities = async ( options?: Parameters<typeof apiFetch>[1]): Promise<GetWritingCapabilities200> => {
+
+  return apiFetch<GetWritingCapabilities200>(getGetWritingCapabilitiesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWritingCapabilitiesQueryKey = () => {
+    return [
+    `/api/writing/capabilities`
+    ] as const;
+    }
+
+
+export const getGetWritingCapabilitiesQueryOptions = <TData = Awaited<ReturnType<typeof getWritingCapabilities>>, TError = ErrorType<GetWritingCapabilities400 | GetWritingCapabilities401 | GetWritingCapabilities403 | GetWritingCapabilities404 | GetWritingCapabilities409 | GetWritingCapabilities429 | GetWritingCapabilities503>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWritingCapabilities>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWritingCapabilitiesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWritingCapabilities>>> = ({ signal }) => getWritingCapabilities({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWritingCapabilities>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetWritingCapabilitiesQueryResult = NonNullable<Awaited<ReturnType<typeof getWritingCapabilities>>>
+export type GetWritingCapabilitiesQueryError = ErrorType<GetWritingCapabilities400 | GetWritingCapabilities401 | GetWritingCapabilities403 | GetWritingCapabilities404 | GetWritingCapabilities409 | GetWritingCapabilities429 | GetWritingCapabilities503>
+
+
+export function useGetWritingCapabilities<TData = Awaited<ReturnType<typeof getWritingCapabilities>>, TError = ErrorType<GetWritingCapabilities400 | GetWritingCapabilities401 | GetWritingCapabilities403 | GetWritingCapabilities404 | GetWritingCapabilities409 | GetWritingCapabilities429 | GetWritingCapabilities503>>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWritingCapabilities>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getWritingCapabilities>>,
+          TError,
+          Awaited<ReturnType<typeof getWritingCapabilities>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetWritingCapabilities<TData = Awaited<ReturnType<typeof getWritingCapabilities>>, TError = ErrorType<GetWritingCapabilities400 | GetWritingCapabilities401 | GetWritingCapabilities403 | GetWritingCapabilities404 | GetWritingCapabilities409 | GetWritingCapabilities429 | GetWritingCapabilities503>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWritingCapabilities>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getWritingCapabilities>>,
+          TError,
+          Awaited<ReturnType<typeof getWritingCapabilities>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetWritingCapabilities<TData = Awaited<ReturnType<typeof getWritingCapabilities>>, TError = ErrorType<GetWritingCapabilities400 | GetWritingCapabilities401 | GetWritingCapabilities403 | GetWritingCapabilities404 | GetWritingCapabilities409 | GetWritingCapabilities429 | GetWritingCapabilities503>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWritingCapabilities>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetWritingCapabilities<TData = Awaited<ReturnType<typeof getWritingCapabilities>>, TError = ErrorType<GetWritingCapabilities400 | GetWritingCapabilities401 | GetWritingCapabilities403 | GetWritingCapabilities404 | GetWritingCapabilities409 | GetWritingCapabilities429 | GetWritingCapabilities503>>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWritingCapabilities>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetWritingCapabilitiesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateWritingConversationUrl = () => {
+
+
+
+
+  return `/api/writing/conversations`
+}
+
+export const createWritingConversation = async (createWritingConversationBody: CreateWritingConversationBody, options?: Parameters<typeof apiFetch>[1]): Promise<WritingChatSnapshot> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<WritingChatSnapshot>(getCreateWritingConversationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createWritingConversationBody)
+  }
+);}
+
+
+
+
+
+export const getCreateWritingConversationQueryKey = (createWritingConversationBody?: BodyType<CreateWritingConversationBody>,) => {
+    return [
+    'POST', `/api/writing/conversations`, createWritingConversationBody
+    ] as const;
+    }
+
+
+export const getCreateWritingConversationQueryOptions = <TData = Awaited<ReturnType<typeof createWritingConversation>>, TError = ErrorType<CreateWritingConversation400 | CreateWritingConversation401 | CreateWritingConversation403 | CreateWritingConversation404 | CreateWritingConversation409 | CreateWritingConversation429 | CreateWritingConversation503>>(createWritingConversationBody: BodyType<CreateWritingConversationBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createWritingConversation>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCreateWritingConversationQueryKey(createWritingConversationBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof createWritingConversation>>> = ({ signal }) => createWritingConversation(createWritingConversationBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof createWritingConversation>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CreateWritingConversationQueryResult = NonNullable<Awaited<ReturnType<typeof createWritingConversation>>>
+export type CreateWritingConversationQueryError = ErrorType<CreateWritingConversation400 | CreateWritingConversation401 | CreateWritingConversation403 | CreateWritingConversation404 | CreateWritingConversation409 | CreateWritingConversation429 | CreateWritingConversation503>
+
+
+export function useCreateWritingConversation<TData = Awaited<ReturnType<typeof createWritingConversation>>, TError = ErrorType<CreateWritingConversation400 | CreateWritingConversation401 | CreateWritingConversation403 | CreateWritingConversation404 | CreateWritingConversation409 | CreateWritingConversation429 | CreateWritingConversation503>>(
+ createWritingConversationBody: BodyType<CreateWritingConversationBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof createWritingConversation>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof createWritingConversation>>,
+          TError,
+          Awaited<ReturnType<typeof createWritingConversation>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCreateWritingConversation<TData = Awaited<ReturnType<typeof createWritingConversation>>, TError = ErrorType<CreateWritingConversation400 | CreateWritingConversation401 | CreateWritingConversation403 | CreateWritingConversation404 | CreateWritingConversation409 | CreateWritingConversation429 | CreateWritingConversation503>>(
+ createWritingConversationBody: BodyType<CreateWritingConversationBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createWritingConversation>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof createWritingConversation>>,
+          TError,
+          Awaited<ReturnType<typeof createWritingConversation>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCreateWritingConversation<TData = Awaited<ReturnType<typeof createWritingConversation>>, TError = ErrorType<CreateWritingConversation400 | CreateWritingConversation401 | CreateWritingConversation403 | CreateWritingConversation404 | CreateWritingConversation409 | CreateWritingConversation429 | CreateWritingConversation503>>(
+ createWritingConversationBody: BodyType<CreateWritingConversationBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createWritingConversation>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useCreateWritingConversation<TData = Awaited<ReturnType<typeof createWritingConversation>>, TError = ErrorType<CreateWritingConversation400 | CreateWritingConversation401 | CreateWritingConversation403 | CreateWritingConversation404 | CreateWritingConversation409 | CreateWritingConversation429 | CreateWritingConversation503>>(
+ createWritingConversationBody: BodyType<CreateWritingConversationBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof createWritingConversation>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCreateWritingConversationQueryOptions(createWritingConversationBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetWritingConversationUrl = (conversationId: string,) => {
+
+
+
+
+  return `/api/writing/conversations/${conversationId}`
+}
+
+export const getWritingConversation = async (conversationId: string, options?: Parameters<typeof apiFetch>[1]): Promise<WritingChatSnapshot> => {
+
+  return apiFetch<WritingChatSnapshot>(getGetWritingConversationUrl(conversationId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWritingConversationQueryKey = (conversationId: string,) => {
+    return [
+    `/api/writing/conversations/${conversationId}`
+    ] as const;
+    }
+
+
+export const getGetWritingConversationQueryOptions = <TData = Awaited<ReturnType<typeof getWritingConversation>>, TError = ErrorType<GetWritingConversation400 | GetWritingConversation401 | GetWritingConversation403 | GetWritingConversation404 | GetWritingConversation409 | GetWritingConversation429 | GetWritingConversation503>>(conversationId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWritingConversation>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWritingConversationQueryKey(conversationId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWritingConversation>>> = ({ signal }) => getWritingConversation(conversationId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: conversationId !== null && conversationId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWritingConversation>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetWritingConversationQueryResult = NonNullable<Awaited<ReturnType<typeof getWritingConversation>>>
+export type GetWritingConversationQueryError = ErrorType<GetWritingConversation400 | GetWritingConversation401 | GetWritingConversation403 | GetWritingConversation404 | GetWritingConversation409 | GetWritingConversation429 | GetWritingConversation503>
+
+
+export function useGetWritingConversation<TData = Awaited<ReturnType<typeof getWritingConversation>>, TError = ErrorType<GetWritingConversation400 | GetWritingConversation401 | GetWritingConversation403 | GetWritingConversation404 | GetWritingConversation409 | GetWritingConversation429 | GetWritingConversation503>>(
+ conversationId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWritingConversation>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getWritingConversation>>,
+          TError,
+          Awaited<ReturnType<typeof getWritingConversation>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetWritingConversation<TData = Awaited<ReturnType<typeof getWritingConversation>>, TError = ErrorType<GetWritingConversation400 | GetWritingConversation401 | GetWritingConversation403 | GetWritingConversation404 | GetWritingConversation409 | GetWritingConversation429 | GetWritingConversation503>>(
+ conversationId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWritingConversation>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getWritingConversation>>,
+          TError,
+          Awaited<ReturnType<typeof getWritingConversation>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetWritingConversation<TData = Awaited<ReturnType<typeof getWritingConversation>>, TError = ErrorType<GetWritingConversation400 | GetWritingConversation401 | GetWritingConversation403 | GetWritingConversation404 | GetWritingConversation409 | GetWritingConversation429 | GetWritingConversation503>>(
+ conversationId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWritingConversation>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetWritingConversation<TData = Awaited<ReturnType<typeof getWritingConversation>>, TError = ErrorType<GetWritingConversation400 | GetWritingConversation401 | GetWritingConversation403 | GetWritingConversation404 | GetWritingConversation409 | GetWritingConversation429 | GetWritingConversation503>>(
+ conversationId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWritingConversation>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetWritingConversationQueryOptions(conversationId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSubmitWritingMessageUrl = (conversationId: string,) => {
+
+
+
+
+  return `/api/writing/conversations/${conversationId}/messages`
+}
+
+export const submitWritingMessage = async (conversationId: string,
+    submitWritingMessageBody: SubmitWritingMessage, options?: Parameters<typeof apiFetch>[1]): Promise<SubmitWritingMessage202> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<SubmitWritingMessage202>(getSubmitWritingMessageUrl(conversationId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(submitWritingMessageBody)
+  }
+);}
+
+
+
+
+
+export const getSubmitWritingMessageQueryKey = (conversationId: string,
+    submitWritingMessageBody?: BodyType<SubmitWritingMessage>,) => {
+    return [
+    'POST', `/api/writing/conversations/${conversationId}/messages`, submitWritingMessageBody
+    ] as const;
+    }
+
+
+export const getSubmitWritingMessageQueryOptions = <TData = Awaited<ReturnType<typeof submitWritingMessage>>, TError = ErrorType<SubmitWritingMessage400 | SubmitWritingMessage401 | SubmitWritingMessage403 | SubmitWritingMessage404 | SubmitWritingMessage409 | SubmitWritingMessage429 | SubmitWritingMessage503>>(conversationId: string,
+    submitWritingMessageBody: BodyType<SubmitWritingMessage>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof submitWritingMessage>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSubmitWritingMessageQueryKey(conversationId,submitWritingMessageBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof submitWritingMessage>>> = ({ signal }) => submitWritingMessage(conversationId,submitWritingMessageBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: conversationId !== null && conversationId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof submitWritingMessage>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type SubmitWritingMessageQueryResult = NonNullable<Awaited<ReturnType<typeof submitWritingMessage>>>
+export type SubmitWritingMessageQueryError = ErrorType<SubmitWritingMessage400 | SubmitWritingMessage401 | SubmitWritingMessage403 | SubmitWritingMessage404 | SubmitWritingMessage409 | SubmitWritingMessage429 | SubmitWritingMessage503>
+
+
+export function useSubmitWritingMessage<TData = Awaited<ReturnType<typeof submitWritingMessage>>, TError = ErrorType<SubmitWritingMessage400 | SubmitWritingMessage401 | SubmitWritingMessage403 | SubmitWritingMessage404 | SubmitWritingMessage409 | SubmitWritingMessage429 | SubmitWritingMessage503>>(
+ conversationId: string,
+    submitWritingMessageBody: BodyType<SubmitWritingMessage>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof submitWritingMessage>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof submitWritingMessage>>,
+          TError,
+          Awaited<ReturnType<typeof submitWritingMessage>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSubmitWritingMessage<TData = Awaited<ReturnType<typeof submitWritingMessage>>, TError = ErrorType<SubmitWritingMessage400 | SubmitWritingMessage401 | SubmitWritingMessage403 | SubmitWritingMessage404 | SubmitWritingMessage409 | SubmitWritingMessage429 | SubmitWritingMessage503>>(
+ conversationId: string,
+    submitWritingMessageBody: BodyType<SubmitWritingMessage>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof submitWritingMessage>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof submitWritingMessage>>,
+          TError,
+          Awaited<ReturnType<typeof submitWritingMessage>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSubmitWritingMessage<TData = Awaited<ReturnType<typeof submitWritingMessage>>, TError = ErrorType<SubmitWritingMessage400 | SubmitWritingMessage401 | SubmitWritingMessage403 | SubmitWritingMessage404 | SubmitWritingMessage409 | SubmitWritingMessage429 | SubmitWritingMessage503>>(
+ conversationId: string,
+    submitWritingMessageBody: BodyType<SubmitWritingMessage>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof submitWritingMessage>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useSubmitWritingMessage<TData = Awaited<ReturnType<typeof submitWritingMessage>>, TError = ErrorType<SubmitWritingMessage400 | SubmitWritingMessage401 | SubmitWritingMessage403 | SubmitWritingMessage404 | SubmitWritingMessage409 | SubmitWritingMessage429 | SubmitWritingMessage503>>(
+ conversationId: string,
+    submitWritingMessageBody: BodyType<SubmitWritingMessage>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof submitWritingMessage>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getSubmitWritingMessageQueryOptions(conversationId,submitWritingMessageBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCancelWritingRunUrl = (conversationId: string,
+    runId: string,) => {
+
+
+
+
+  return `/api/writing/conversations/${conversationId}/runs/${runId}/cancel`
+}
+
+export const cancelWritingRun = async (conversationId: string,
+    runId: string, options?: Parameters<typeof apiFetch>[1]): Promise<WritingChatSnapshot> => {
+
+  return apiFetch<WritingChatSnapshot>(getCancelWritingRunUrl(conversationId,runId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getCancelWritingRunQueryKey = (conversationId: string,
+    runId: string,) => {
+    return [
+    'POST', `/api/writing/conversations/${conversationId}/runs/${runId}/cancel`
+    ] as const;
+    }
+
+
+export const getCancelWritingRunQueryOptions = <TData = Awaited<ReturnType<typeof cancelWritingRun>>, TError = ErrorType<CancelWritingRun400 | CancelWritingRun401 | CancelWritingRun403 | CancelWritingRun404 | CancelWritingRun409 | CancelWritingRun429 | CancelWritingRun503>>(conversationId: string,
+    runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof cancelWritingRun>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getCancelWritingRunQueryKey(conversationId,runId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof cancelWritingRun>>> = ({ signal }) => cancelWritingRun(conversationId,runId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: conversationId !== null && conversationId !== undefined && runId !== null && runId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof cancelWritingRun>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type CancelWritingRunQueryResult = NonNullable<Awaited<ReturnType<typeof cancelWritingRun>>>
+export type CancelWritingRunQueryError = ErrorType<CancelWritingRun400 | CancelWritingRun401 | CancelWritingRun403 | CancelWritingRun404 | CancelWritingRun409 | CancelWritingRun429 | CancelWritingRun503>
+
+
+export function useCancelWritingRun<TData = Awaited<ReturnType<typeof cancelWritingRun>>, TError = ErrorType<CancelWritingRun400 | CancelWritingRun401 | CancelWritingRun403 | CancelWritingRun404 | CancelWritingRun409 | CancelWritingRun429 | CancelWritingRun503>>(
+ conversationId: string,
+    runId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof cancelWritingRun>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof cancelWritingRun>>,
+          TError,
+          Awaited<ReturnType<typeof cancelWritingRun>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCancelWritingRun<TData = Awaited<ReturnType<typeof cancelWritingRun>>, TError = ErrorType<CancelWritingRun400 | CancelWritingRun401 | CancelWritingRun403 | CancelWritingRun404 | CancelWritingRun409 | CancelWritingRun429 | CancelWritingRun503>>(
+ conversationId: string,
+    runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof cancelWritingRun>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof cancelWritingRun>>,
+          TError,
+          Awaited<ReturnType<typeof cancelWritingRun>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useCancelWritingRun<TData = Awaited<ReturnType<typeof cancelWritingRun>>, TError = ErrorType<CancelWritingRun400 | CancelWritingRun401 | CancelWritingRun403 | CancelWritingRun404 | CancelWritingRun409 | CancelWritingRun429 | CancelWritingRun503>>(
+ conversationId: string,
+    runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof cancelWritingRun>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useCancelWritingRun<TData = Awaited<ReturnType<typeof cancelWritingRun>>, TError = ErrorType<CancelWritingRun400 | CancelWritingRun401 | CancelWritingRun403 | CancelWritingRun404 | CancelWritingRun409 | CancelWritingRun429 | CancelWritingRun503>>(
+ conversationId: string,
+    runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof cancelWritingRun>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getCancelWritingRunQueryOptions(conversationId,runId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getResumeWritingRunUrl = (conversationId: string,
+    runId: string,) => {
+
+
+
+
+  return `/api/writing/conversations/${conversationId}/runs/${runId}/resume`
+}
+
+export const resumeWritingRun = async (conversationId: string,
+    runId: string, options?: Parameters<typeof apiFetch>[1]): Promise<WritingChatSnapshot> => {
+
+  return apiFetch<WritingChatSnapshot>(getResumeWritingRunUrl(conversationId,runId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getResumeWritingRunQueryKey = (conversationId: string,
+    runId: string,) => {
+    return [
+    'POST', `/api/writing/conversations/${conversationId}/runs/${runId}/resume`
+    ] as const;
+    }
+
+
+export const getResumeWritingRunQueryOptions = <TData = Awaited<ReturnType<typeof resumeWritingRun>>, TError = ErrorType<ResumeWritingRun400 | ResumeWritingRun401 | ResumeWritingRun403 | ResumeWritingRun404 | ResumeWritingRun409 | ResumeWritingRun429 | ResumeWritingRun503>>(conversationId: string,
+    runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof resumeWritingRun>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getResumeWritingRunQueryKey(conversationId,runId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof resumeWritingRun>>> = ({ signal }) => resumeWritingRun(conversationId,runId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: conversationId !== null && conversationId !== undefined && runId !== null && runId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof resumeWritingRun>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ResumeWritingRunQueryResult = NonNullable<Awaited<ReturnType<typeof resumeWritingRun>>>
+export type ResumeWritingRunQueryError = ErrorType<ResumeWritingRun400 | ResumeWritingRun401 | ResumeWritingRun403 | ResumeWritingRun404 | ResumeWritingRun409 | ResumeWritingRun429 | ResumeWritingRun503>
+
+
+export function useResumeWritingRun<TData = Awaited<ReturnType<typeof resumeWritingRun>>, TError = ErrorType<ResumeWritingRun400 | ResumeWritingRun401 | ResumeWritingRun403 | ResumeWritingRun404 | ResumeWritingRun409 | ResumeWritingRun429 | ResumeWritingRun503>>(
+ conversationId: string,
+    runId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof resumeWritingRun>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof resumeWritingRun>>,
+          TError,
+          Awaited<ReturnType<typeof resumeWritingRun>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useResumeWritingRun<TData = Awaited<ReturnType<typeof resumeWritingRun>>, TError = ErrorType<ResumeWritingRun400 | ResumeWritingRun401 | ResumeWritingRun403 | ResumeWritingRun404 | ResumeWritingRun409 | ResumeWritingRun429 | ResumeWritingRun503>>(
+ conversationId: string,
+    runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof resumeWritingRun>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof resumeWritingRun>>,
+          TError,
+          Awaited<ReturnType<typeof resumeWritingRun>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useResumeWritingRun<TData = Awaited<ReturnType<typeof resumeWritingRun>>, TError = ErrorType<ResumeWritingRun400 | ResumeWritingRun401 | ResumeWritingRun403 | ResumeWritingRun404 | ResumeWritingRun409 | ResumeWritingRun429 | ResumeWritingRun503>>(
+ conversationId: string,
+    runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof resumeWritingRun>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useResumeWritingRun<TData = Awaited<ReturnType<typeof resumeWritingRun>>, TError = ErrorType<ResumeWritingRun400 | ResumeWritingRun401 | ResumeWritingRun403 | ResumeWritingRun404 | ResumeWritingRun409 | ResumeWritingRun429 | ResumeWritingRun503>>(
+ conversationId: string,
+    runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof resumeWritingRun>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getResumeWritingRunQueryOptions(conversationId,runId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDecideWritingApprovalUrl = (conversationId: string,) => {
+
+
+
+
+  return `/api/writing/conversations/${conversationId}/approvals`
+}
+
+export const decideWritingApproval = async (conversationId: string,
+    decideWritingApprovalBody: DecideWritingApprovalBody, options?: Parameters<typeof apiFetch>[1]): Promise<WritingChatSnapshot> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<WritingChatSnapshot>(getDecideWritingApprovalUrl(conversationId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(decideWritingApprovalBody)
+  }
+);}
+
+
+
+
+
+export const getDecideWritingApprovalQueryKey = (conversationId: string,
+    decideWritingApprovalBody?: BodyType<DecideWritingApprovalBody>,) => {
+    return [
+    'POST', `/api/writing/conversations/${conversationId}/approvals`, decideWritingApprovalBody
+    ] as const;
+    }
+
+
+export const getDecideWritingApprovalQueryOptions = <TData = Awaited<ReturnType<typeof decideWritingApproval>>, TError = ErrorType<DecideWritingApproval400 | DecideWritingApproval401 | DecideWritingApproval403 | DecideWritingApproval404 | DecideWritingApproval409 | DecideWritingApproval429 | DecideWritingApproval503>>(conversationId: string,
+    decideWritingApprovalBody: BodyType<DecideWritingApprovalBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof decideWritingApproval>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDecideWritingApprovalQueryKey(conversationId,decideWritingApprovalBody);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof decideWritingApproval>>> = ({ signal }) => decideWritingApproval(conversationId,decideWritingApprovalBody, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: conversationId !== null && conversationId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof decideWritingApproval>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DecideWritingApprovalQueryResult = NonNullable<Awaited<ReturnType<typeof decideWritingApproval>>>
+export type DecideWritingApprovalQueryError = ErrorType<DecideWritingApproval400 | DecideWritingApproval401 | DecideWritingApproval403 | DecideWritingApproval404 | DecideWritingApproval409 | DecideWritingApproval429 | DecideWritingApproval503>
+
+
+export function useDecideWritingApproval<TData = Awaited<ReturnType<typeof decideWritingApproval>>, TError = ErrorType<DecideWritingApproval400 | DecideWritingApproval401 | DecideWritingApproval403 | DecideWritingApproval404 | DecideWritingApproval409 | DecideWritingApproval429 | DecideWritingApproval503>>(
+ conversationId: string,
+    decideWritingApprovalBody: BodyType<DecideWritingApprovalBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof decideWritingApproval>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof decideWritingApproval>>,
+          TError,
+          Awaited<ReturnType<typeof decideWritingApproval>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDecideWritingApproval<TData = Awaited<ReturnType<typeof decideWritingApproval>>, TError = ErrorType<DecideWritingApproval400 | DecideWritingApproval401 | DecideWritingApproval403 | DecideWritingApproval404 | DecideWritingApproval409 | DecideWritingApproval429 | DecideWritingApproval503>>(
+ conversationId: string,
+    decideWritingApprovalBody: BodyType<DecideWritingApprovalBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof decideWritingApproval>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof decideWritingApproval>>,
+          TError,
+          Awaited<ReturnType<typeof decideWritingApproval>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useDecideWritingApproval<TData = Awaited<ReturnType<typeof decideWritingApproval>>, TError = ErrorType<DecideWritingApproval400 | DecideWritingApproval401 | DecideWritingApproval403 | DecideWritingApproval404 | DecideWritingApproval409 | DecideWritingApproval429 | DecideWritingApproval503>>(
+ conversationId: string,
+    decideWritingApprovalBody: BodyType<DecideWritingApprovalBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof decideWritingApproval>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useDecideWritingApproval<TData = Awaited<ReturnType<typeof decideWritingApproval>>, TError = ErrorType<DecideWritingApproval400 | DecideWritingApproval401 | DecideWritingApproval403 | DecideWritingApproval404 | DecideWritingApproval409 | DecideWritingApproval429 | DecideWritingApproval503>>(
+ conversationId: string,
+    decideWritingApprovalBody: BodyType<DecideWritingApprovalBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof decideWritingApproval>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDecideWritingApprovalQueryOptions(conversationId,decideWritingApprovalBody,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListWritingImagesUrl = (conversationId: string,) => {
+
+
+
+
+  return `/api/writing/conversations/${conversationId}/images`
+}
+
+export const listWritingImages = async (conversationId: string, options?: Parameters<typeof apiFetch>[1]): Promise<WritingImageJob[]> => {
+
+  return apiFetch<WritingImageJob[]>(getListWritingImagesUrl(conversationId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWritingImagesQueryKey = (conversationId: string,) => {
+    return [
+    `/api/writing/conversations/${conversationId}/images`
+    ] as const;
+    }
+
+
+export const getListWritingImagesQueryOptions = <TData = Awaited<ReturnType<typeof listWritingImages>>, TError = ErrorType<ListWritingImages400 | ListWritingImages401 | ListWritingImages403 | ListWritingImages404 | ListWritingImages409 | ListWritingImages429 | ListWritingImages503>>(conversationId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWritingImages>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWritingImagesQueryKey(conversationId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWritingImages>>> = ({ signal }) => listWritingImages(conversationId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: conversationId !== null && conversationId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWritingImages>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListWritingImagesQueryResult = NonNullable<Awaited<ReturnType<typeof listWritingImages>>>
+export type ListWritingImagesQueryError = ErrorType<ListWritingImages400 | ListWritingImages401 | ListWritingImages403 | ListWritingImages404 | ListWritingImages409 | ListWritingImages429 | ListWritingImages503>
+
+
+export function useListWritingImages<TData = Awaited<ReturnType<typeof listWritingImages>>, TError = ErrorType<ListWritingImages400 | ListWritingImages401 | ListWritingImages403 | ListWritingImages404 | ListWritingImages409 | ListWritingImages429 | ListWritingImages503>>(
+ conversationId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWritingImages>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listWritingImages>>,
+          TError,
+          Awaited<ReturnType<typeof listWritingImages>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListWritingImages<TData = Awaited<ReturnType<typeof listWritingImages>>, TError = ErrorType<ListWritingImages400 | ListWritingImages401 | ListWritingImages403 | ListWritingImages404 | ListWritingImages409 | ListWritingImages429 | ListWritingImages503>>(
+ conversationId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWritingImages>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listWritingImages>>,
+          TError,
+          Awaited<ReturnType<typeof listWritingImages>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListWritingImages<TData = Awaited<ReturnType<typeof listWritingImages>>, TError = ErrorType<ListWritingImages400 | ListWritingImages401 | ListWritingImages403 | ListWritingImages404 | ListWritingImages409 | ListWritingImages429 | ListWritingImages503>>(
+ conversationId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWritingImages>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useListWritingImages<TData = Awaited<ReturnType<typeof listWritingImages>>, TError = ErrorType<ListWritingImages400 | ListWritingImages401 | ListWritingImages403 | ListWritingImages404 | ListWritingImages409 | ListWritingImages429 | ListWritingImages503>>(
+ conversationId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listWritingImages>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListWritingImagesQueryOptions(conversationId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRefreshWritingImageUrl = (conversationId: string,
+    jobId: string,) => {
+
+
+
+
+  return `/api/writing/conversations/${conversationId}/images/${jobId}/refresh`
+}
+
+export const refreshWritingImage = async (conversationId: string,
+    jobId: string, options?: Parameters<typeof apiFetch>[1]): Promise<WritingImageJob> => {
+
+  return apiFetch<WritingImageJob>(getRefreshWritingImageUrl(conversationId,jobId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRefreshWritingImageQueryKey = (conversationId: string,
+    jobId: string,) => {
+    return [
+    'POST', `/api/writing/conversations/${conversationId}/images/${jobId}/refresh`
+    ] as const;
+    }
+
+
+export const getRefreshWritingImageQueryOptions = <TData = Awaited<ReturnType<typeof refreshWritingImage>>, TError = ErrorType<RefreshWritingImage400 | RefreshWritingImage401 | RefreshWritingImage403 | RefreshWritingImage404 | RefreshWritingImage409 | RefreshWritingImage429 | RefreshWritingImage503>>(conversationId: string,
+    jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof refreshWritingImage>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getRefreshWritingImageQueryKey(conversationId,jobId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof refreshWritingImage>>> = ({ signal }) => refreshWritingImage(conversationId,jobId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: conversationId !== null && conversationId !== undefined && jobId !== null && jobId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof refreshWritingImage>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type RefreshWritingImageQueryResult = NonNullable<Awaited<ReturnType<typeof refreshWritingImage>>>
+export type RefreshWritingImageQueryError = ErrorType<RefreshWritingImage400 | RefreshWritingImage401 | RefreshWritingImage403 | RefreshWritingImage404 | RefreshWritingImage409 | RefreshWritingImage429 | RefreshWritingImage503>
+
+
+export function useRefreshWritingImage<TData = Awaited<ReturnType<typeof refreshWritingImage>>, TError = ErrorType<RefreshWritingImage400 | RefreshWritingImage401 | RefreshWritingImage403 | RefreshWritingImage404 | RefreshWritingImage409 | RefreshWritingImage429 | RefreshWritingImage503>>(
+ conversationId: string,
+    jobId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof refreshWritingImage>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof refreshWritingImage>>,
+          TError,
+          Awaited<ReturnType<typeof refreshWritingImage>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useRefreshWritingImage<TData = Awaited<ReturnType<typeof refreshWritingImage>>, TError = ErrorType<RefreshWritingImage400 | RefreshWritingImage401 | RefreshWritingImage403 | RefreshWritingImage404 | RefreshWritingImage409 | RefreshWritingImage429 | RefreshWritingImage503>>(
+ conversationId: string,
+    jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof refreshWritingImage>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof refreshWritingImage>>,
+          TError,
+          Awaited<ReturnType<typeof refreshWritingImage>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useRefreshWritingImage<TData = Awaited<ReturnType<typeof refreshWritingImage>>, TError = ErrorType<RefreshWritingImage400 | RefreshWritingImage401 | RefreshWritingImage403 | RefreshWritingImage404 | RefreshWritingImage409 | RefreshWritingImage429 | RefreshWritingImage503>>(
+ conversationId: string,
+    jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof refreshWritingImage>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useRefreshWritingImage<TData = Awaited<ReturnType<typeof refreshWritingImage>>, TError = ErrorType<RefreshWritingImage400 | RefreshWritingImage401 | RefreshWritingImage403 | RefreshWritingImage404 | RefreshWritingImage409 | RefreshWritingImage429 | RefreshWritingImage503>>(
+ conversationId: string,
+    jobId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof refreshWritingImage>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getRefreshWritingImageQueryOptions(conversationId,jobId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetWritingImageAccessUrl = (conversationId: string,
+    assetId: string,) => {
+
+
+
+
+  return `/api/writing/conversations/${conversationId}/images/${assetId}/access`
+}
+
+export const getWritingImageAccess = async (conversationId: string,
+    assetId: string, options?: Parameters<typeof apiFetch>[1]): Promise<GetWritingImageAccess200> => {
+
+  return apiFetch<GetWritingImageAccess200>(getGetWritingImageAccessUrl(conversationId,assetId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWritingImageAccessQueryKey = (conversationId: string,
+    assetId: string,) => {
+    return [
+    `/api/writing/conversations/${conversationId}/images/${assetId}/access`
+    ] as const;
+    }
+
+
+export const getGetWritingImageAccessQueryOptions = <TData = Awaited<ReturnType<typeof getWritingImageAccess>>, TError = ErrorType<GetWritingImageAccess400 | GetWritingImageAccess401 | GetWritingImageAccess403 | GetWritingImageAccess404 | GetWritingImageAccess409 | GetWritingImageAccess429 | GetWritingImageAccess503>>(conversationId: string,
+    assetId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWritingImageAccess>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWritingImageAccessQueryKey(conversationId,assetId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWritingImageAccess>>> = ({ signal }) => getWritingImageAccess(conversationId,assetId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: conversationId !== null && conversationId !== undefined && assetId !== null && assetId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWritingImageAccess>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetWritingImageAccessQueryResult = NonNullable<Awaited<ReturnType<typeof getWritingImageAccess>>>
+export type GetWritingImageAccessQueryError = ErrorType<GetWritingImageAccess400 | GetWritingImageAccess401 | GetWritingImageAccess403 | GetWritingImageAccess404 | GetWritingImageAccess409 | GetWritingImageAccess429 | GetWritingImageAccess503>
+
+
+export function useGetWritingImageAccess<TData = Awaited<ReturnType<typeof getWritingImageAccess>>, TError = ErrorType<GetWritingImageAccess400 | GetWritingImageAccess401 | GetWritingImageAccess403 | GetWritingImageAccess404 | GetWritingImageAccess409 | GetWritingImageAccess429 | GetWritingImageAccess503>>(
+ conversationId: string,
+    assetId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWritingImageAccess>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getWritingImageAccess>>,
+          TError,
+          Awaited<ReturnType<typeof getWritingImageAccess>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetWritingImageAccess<TData = Awaited<ReturnType<typeof getWritingImageAccess>>, TError = ErrorType<GetWritingImageAccess400 | GetWritingImageAccess401 | GetWritingImageAccess403 | GetWritingImageAccess404 | GetWritingImageAccess409 | GetWritingImageAccess429 | GetWritingImageAccess503>>(
+ conversationId: string,
+    assetId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWritingImageAccess>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getWritingImageAccess>>,
+          TError,
+          Awaited<ReturnType<typeof getWritingImageAccess>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetWritingImageAccess<TData = Awaited<ReturnType<typeof getWritingImageAccess>>, TError = ErrorType<GetWritingImageAccess400 | GetWritingImageAccess401 | GetWritingImageAccess403 | GetWritingImageAccess404 | GetWritingImageAccess409 | GetWritingImageAccess429 | GetWritingImageAccess503>>(
+ conversationId: string,
+    assetId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWritingImageAccess>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetWritingImageAccess<TData = Awaited<ReturnType<typeof getWritingImageAccess>>, TError = ErrorType<GetWritingImageAccess400 | GetWritingImageAccess401 | GetWritingImageAccess403 | GetWritingImageAccess404 | GetWritingImageAccess409 | GetWritingImageAccess429 | GetWritingImageAccess503>>(
+ conversationId: string,
+    assetId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getWritingImageAccess>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetWritingImageAccessQueryOptions(conversationId,assetId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getObserveWritingConversationUrl = (conversationId: string,
+    params?: ObserveWritingConversationParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/writing/conversations/${conversationId}/events?${stringifiedParams}` : `/api/writing/conversations/${conversationId}/events`
+}
+
+export const observeWritingConversation = async (conversationId: string,
+    params?: ObserveWritingConversationParams, options?: Parameters<typeof apiFetch>[1]): Promise<string> => {
+
+  return apiFetch<string>(getObserveWritingConversationUrl(conversationId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getObserveWritingConversationQueryKey = (conversationId: string,
+    params?: ObserveWritingConversationParams,) => {
+    return [
+    `/api/writing/conversations/${conversationId}/events`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getObserveWritingConversationQueryOptions = <TData = Awaited<ReturnType<typeof observeWritingConversation>>, TError = ErrorType<ObserveWritingConversation400 | ObserveWritingConversation401 | ObserveWritingConversation403 | ObserveWritingConversation404 | ObserveWritingConversation409 | ObserveWritingConversation429 | ObserveWritingConversation503>>(conversationId: string,
+    params?: ObserveWritingConversationParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof observeWritingConversation>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getObserveWritingConversationQueryKey(conversationId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof observeWritingConversation>>> = ({ signal }) => observeWritingConversation(conversationId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: conversationId !== null && conversationId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof observeWritingConversation>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ObserveWritingConversationQueryResult = NonNullable<Awaited<ReturnType<typeof observeWritingConversation>>>
+export type ObserveWritingConversationQueryError = ErrorType<ObserveWritingConversation400 | ObserveWritingConversation401 | ObserveWritingConversation403 | ObserveWritingConversation404 | ObserveWritingConversation409 | ObserveWritingConversation429 | ObserveWritingConversation503>
+
+
+export function useObserveWritingConversation<TData = Awaited<ReturnType<typeof observeWritingConversation>>, TError = ErrorType<ObserveWritingConversation400 | ObserveWritingConversation401 | ObserveWritingConversation403 | ObserveWritingConversation404 | ObserveWritingConversation409 | ObserveWritingConversation429 | ObserveWritingConversation503>>(
+ conversationId: string,
+    params: undefined |  ObserveWritingConversationParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof observeWritingConversation>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof observeWritingConversation>>,
+          TError,
+          Awaited<ReturnType<typeof observeWritingConversation>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useObserveWritingConversation<TData = Awaited<ReturnType<typeof observeWritingConversation>>, TError = ErrorType<ObserveWritingConversation400 | ObserveWritingConversation401 | ObserveWritingConversation403 | ObserveWritingConversation404 | ObserveWritingConversation409 | ObserveWritingConversation429 | ObserveWritingConversation503>>(
+ conversationId: string,
+    params?: ObserveWritingConversationParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof observeWritingConversation>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof observeWritingConversation>>,
+          TError,
+          Awaited<ReturnType<typeof observeWritingConversation>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useObserveWritingConversation<TData = Awaited<ReturnType<typeof observeWritingConversation>>, TError = ErrorType<ObserveWritingConversation400 | ObserveWritingConversation401 | ObserveWritingConversation403 | ObserveWritingConversation404 | ObserveWritingConversation409 | ObserveWritingConversation429 | ObserveWritingConversation503>>(
+ conversationId: string,
+    params?: ObserveWritingConversationParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof observeWritingConversation>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useObserveWritingConversation<TData = Awaited<ReturnType<typeof observeWritingConversation>>, TError = ErrorType<ObserveWritingConversation400 | ObserveWritingConversation401 | ObserveWritingConversation403 | ObserveWritingConversation404 | ObserveWritingConversation409 | ObserveWritingConversation429 | ObserveWritingConversation503>>(
+ conversationId: string,
+    params?: ObserveWritingConversationParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof observeWritingConversation>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getObserveWritingConversationQueryOptions(conversationId,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

@@ -10,23 +10,23 @@
 
 ## 2. 功能清单
 
-| 编号  | 能力                | 细节                                                                | 阶段                                        |
-| ----- | ------------------- | ------------------------------------------------------------------- | ------------------------------------------- |
-| DC-01 | 内容树与节点规范    | doc/文本/段落/标题/列表/引用/代码等结构、Mark、合法嵌套、属性默认值 | M1                                          |
-| DC-02 | 可寻址 Block        | 稳定 blockId、树内唯一性、父子位置、复制/拆分/合并/移动规则         | M1                                          |
-| DC-03 | 快照与兼容声明      | schemaVersion、所需扩展、文档代次、durableSeq 与快照版本            | M1/M2 合约已完成；快照存储 M2               |
-| DC-04 | 编辑操作与结果      | 插入/删除/移动/替换、目标前置条件、批次原子性、结构化错误           | M1                                          |
-| DC-05 | 运行时校验          | 大小/深度/节点数量、属性白名单、URL 协议、错误路径、未知扩展处理    | M1                                          |
-| DC-06 | 内容迁移            | 显式版本迁移、可重复执行、失败保留原件、迁移前后审计信息            | M1 定约；M2 执行链                          |
-| DC-07 | 资产与锚点引用      | assetId、替代文本、Block/选区定位、锚点失效与代次绑定               | M2 合约及协同解析已接入；对象存储验收待完成 |
-| DC-08 | AI 编辑提案与流事件 | 请求标识、序号、草稿、目标约束、完整提案、结束/失败事件             | M3                                          |
-| DC-09 | 引用和文档事件      | 来源文档/版本/Block、持久化快照事件、索引所需版本信息               | M3                                          |
+| 编号  | 能力               | 细节                                                                    | 阶段                                        |
+| ----- | ------------------ | ----------------------------------------------------------------------- | ------------------------------------------- |
+| DC-01 | 内容树与节点规范   | doc/文本/段落/标题/列表/引用/代码等结构、Mark、合法嵌套、属性默认值     | M1                                          |
+| DC-02 | 可寻址 Block       | 稳定 blockId、树内唯一性、父子位置、复制/拆分/合并/移动规则             | M1                                          |
+| DC-03 | 快照与兼容声明     | schemaVersion、所需扩展、文档代次、durableSeq 与快照版本                | M1/M2 合约已完成；快照存储 M2               |
+| DC-04 | 编辑操作与结果     | 插入/删除/移动/替换、目标前置条件、批次原子性、结构化错误               | M1                                          |
+| DC-05 | 运行时校验         | 大小/深度/节点数量、属性白名单、URL 协议、错误路径、未知扩展处理        | M1                                          |
+| DC-06 | 内容迁移           | 显式版本迁移、可重复执行、失败保留原件、迁移前后审计信息                | M1 定约；M2 执行链                          |
+| DC-07 | 资产与锚点引用     | assetId、替代文本、Block/选区定位、锚点失效与代次绑定                   | M2 合约及协同解析已接入；对象存储验收待完成 |
+| DC-08 | AI 编辑提案接入    | AI 协议由 ai-contracts 维护，本包继续提供内容、Anchor 与 OperationBatch | M3；详见 AC-01/02                           |
+| DC-09 | 文档事件与引用基础 | 持久化快照事件、索引所需版本；AI 来源/引用载荷由 ai-contracts 维护      | M3                                          |
 
 ## 3. 规范源与包入口
 
 以版本化 JSON Schema 作为内容结构规范源。本仓库以 TypeBox 编写可直接序列化的 JSON Schema 2020-12，并从同一 Schema 推导 TypeScript 类型、运行时结构校验和 OpenAPI 组件；不另行手写内容 DTO，也不将共享包绑定到 Zod 主版本。Tiptap 的可编辑结构约束在 core 中根据这些规范绑定并保持一致。树内 ID 唯一性、父子节点合法性和资源上限由同包语义校验补充。
 
-公共入口：根入口提供基础类型、内容/快照验证、Block ID 操作和迁移接口；`/operations` 提供原子编辑操作；`/events` 提供持久化事件；`/ai` 提供可选创作协议。AI 入口不引入模型 SDK，基础入口不加载 AI 专属定义。
+公共入口：根入口提供基础类型、内容/快照验证、Block ID 操作和迁移接口；`/operations` 提供原子编辑操作；规划的 `/events` 提供持久化事件。原规划的 `/ai` 尚未实现，现由独立的 [ai-contracts](ai-contracts.md) 接续；依赖方向为 ai-contracts → document-contracts，本包不反向 re-export AI 契约，避免循环依赖。
 
 app-server 与 app-web 使用不同 Zod 主版本，共享包不导出任何一方的 Zod 实例。D-01 已选定：HTTP 入参/响应仍由 app-server 的 Zod route contract 拥有；文档内容在 OpenAPI 3.1 `components.schemas` 中直接引用共享 JSON Schema。`GET/PUT /api/documents/:id/content` 的 Zod route contract 由共享 validator 执行语义校验，OpenAPI 导出阶段把读写、导入导出和历史正文字段绑定到共享 `DocumentContent` 组件，不复制节点结构。OpenAPI 离线导出脚本断言规范版本、`DocumentContent` 到 `DocumentBlock` 的 `$ref` 和 Block Schema 存在。这样不会因两端 Zod 主版本不同生成两份结构，也不以 `any` 代替内容定义。
 
@@ -146,9 +146,9 @@ M1 最小操作集为 `insert-block`、`delete-block`、`replace-block`、`move-
 
 `snapshotRef` 是服务端内部引用，不是绕过授权的可公开下载地址。消费者按 `eventId` 去重，并以 `(generationId, durableSeq)` 拒绝旧投影覆盖新投影；相同序列但不同内容摘要属于完整性错误，应告警并停止该次投影。
 
-AI 流只约定编辑器可消费的通用事件：`started`、`text-delta`、`proposal`、`completed`、`failed`，均带 requestId 与单调 seq。文本片段用于草稿展示，只有通过完整 Schema 校验的 proposal 才可变为编辑操作；具体 SSE 编码和重放由 app-server 定义，消费与取消由 ai-bridge 定义。
+AI 请求、事件顺序、最终提案和来源/引用的唯一规范见 [ai-contracts](ai-contracts.md)。AI 提案直接复用本包 DC-04 OperationBatch 和 DC-07 Anchor，文本增量只作为草稿；只有完整校验且收到正常结束的结果才可接受。具体 SSE 编码由 app-server 处理，编辑器任务生命周期由 editor-ai-bridge 管理。
 
-最小事件外壳为 `{ "type": string, "requestId": string, "seq": integer, "payload": object }`。`started` 建立任务与 attempt，`text-delta` 仅含预览文本，`proposal` 携带 DC-04 `OperationBatch` 及其目标摘要，`completed` 表示生成流正常结束，`failed` 携带安全错误码。成功流最多产生一个最终 proposal；增量 proposal 必须显式带递增 proposal 版本，并由客户端替换同任务的草稿，不能重复追加。事件终态（`completed`、`failed` 或宿主取消）后拒绝同一 requestId 的后续事件。
+2026-10-18 包级设计将尚未实现的 DC-08 协议拆入 ai-contracts；这是设计归属调整，不涉及已发布 API 或持久化内容迁移。持久化 snapshot-ready 文档事件继续属于本包，不与浏览器 AI 流事件混用。
 
 引用块的完整来源可携带可选扩展属性；普通编辑器遇到未知必需扩展时保留原始输入并报告不兼容。安全占位展示必须经过兼容渲染路径，不能让不认识该 Schema 的可写编辑器重写原内容。
 

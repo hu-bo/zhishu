@@ -12,6 +12,17 @@ const environmentSchema = z
     METRICS_BEARER_TOKEN: z.string().min(32).optional(),
     MOCK_AUTH_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(28800),
     DATABASE_URL: z.string().url(),
+    AI_MODEL: z.string().trim().min(1).optional(),
+    AI_API_KEY: z.string().min(1).optional(),
+    AI_IMAGE_MODEL: z.string().trim().min(1).optional(),
+    AI_IMAGE_API_KEY: z.string().min(1).optional(),
+    AI_IMAGE_BASE_URL: z.string().url().optional(),
+    AI_BASE_URL: z.string().url().optional(),
+    AI_API_FORMAT: z.enum(["openai", "anthropic"]).optional(),
+    AI_THINKING: z.enum(["adaptive", "disabled"]).optional(),
+    AI_REASONING_EFFORT: z.enum(["low", "medium", "high", "max"]).optional(),
+    AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(600000).default(120000),
+    AI_MAX_CONCURRENT: z.coerce.number().int().min(1).max(16).default(4),
     DATABASE_POOL_MAX: z.coerce.number().int().min(2).max(100).default(10),
     DATABASE_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
     DATABASE_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
@@ -92,6 +103,18 @@ const environmentSchema = z
       .transform((value) => value === "true"),
   })
   .superRefine((config, context) => {
+    if (Boolean(config.AI_IMAGE_MODEL) !== Boolean(config.AI_IMAGE_API_KEY))
+      context.addIssue({
+        code: "custom",
+        path: ["AI_IMAGE_MODEL"],
+        message: "AI_IMAGE_MODEL and AI_IMAGE_API_KEY must be configured together.",
+      });
+    if (Boolean(config.AI_MODEL) !== Boolean(config.AI_API_KEY))
+      context.addIssue({
+        code: "custom",
+        path: ["AI_MODEL"],
+        message: "AI_MODEL and AI_API_KEY must be configured together.",
+      });
     if (config.COLLABORATION_TEST_CRASH_AFTER_COMMIT && config.NODE_ENV !== "test") {
       context.addIssue({
         code: "custom",

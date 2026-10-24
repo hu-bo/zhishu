@@ -58,7 +58,7 @@ export function createKnowledgePresets(): KnowledgePreset[] {
       h("核心用户旅程"),
       list(
         "创建工作区并为内容建立目录：先从项目或主题划分，层级尽量控制在三到五层。",
-        "新建普通文档，明确标题与标签；需要多人同时编辑时，显式启用协同。",
+        "新建文档，明确标题与标签；多人可同时编辑，正文自动保存。",
         "写作过程中通过工具栏、斜杠菜单和选区菜单组织正文；阅读时保留查找与大纲。",
         "保存并重开确认内容；分享时检查接收者身份和权限，文档链接本身不授予访问权限。",
       ),
@@ -68,7 +68,7 @@ export function createKnowledgePresets(): KnowledgePreset[] {
       ),
       table([
         ["场景", "用户可见反馈", "完成标准"],
-        ["普通文档保存", "正在保存 / 已保存 / 保存失败", "服务端返回新正文修订，重开恢复"],
+        ["实时保存", "编辑即保存 / 已持久化", "服务端确认后展示，重开恢复全文"],
         ["实时协同", "连接、同步与持久化分别展示", "收到服务端 durable ack 后显示已保存"],
         ["只读访问", "隐藏写入动作，保留查找、大纲和复制", "不能通过快捷键或菜单修改内容"],
       ]),
@@ -111,15 +111,7 @@ export function createKnowledgePresets(): KnowledgePreset[] {
         ["editor-ui", "排版、工具与节点交互", "依赖应用私有 CSS"],
         ["app-server", "权限、文档、版本与持久化", "把 Fastify 对象传入业务规则"],
       ]),
-      h("普通文档数据流"),
-      p(
-        "读取正文时服务端返回 snapshotRevision。用户修改保留在本地编辑器，显式保存携带 expectedSnapshotRevision；数据库在事务内检查基础修订，成功后推进修订。冲突时保留草稿并提示重新加载或导出，不能自动覆盖新版本。元信息使用独立 metadataRevision，改标签不会替换正文。",
-      ),
-      code(
-        "const result = await putDocumentContent(documentId, {\n  expectedSnapshotRevision: baseRevision,\n  content: controller.getContent(),\n});\n// Only advance the saved revision after the server confirms.\nbaseRevision = result.snapshotRevision;",
-        "typescript",
-      ),
-      h("协同文档数据流"),
+      h("实时保存与协同数据流"),
       callout("连接、内容同步、服务端持久化分别确认。收到保存回执后再显示已保存。", "info"),
       p(
         "协同会话绑定身份、文档和 generation。文本更新通过既有协同适配传输，结构操作通过受控通道提交；服务端负责校验、排序和 durable ack。网络已连接、Yjs 已同步与数据库已持久化是三个不同事实。恢复历史会产生新的 generation，并撤销旧会话，避免旧客户端继续写入。",
@@ -165,7 +157,7 @@ export function createKnowledgePresets(): KnowledgePreset[] {
         ["维护者", "跟随业务变化更新规范", "版本、替代说明与归档时机"],
       ]),
       p(
-        "普通文档适合独立整理与阶段性交付，协同文档适合多人实时写作。开始大幅修改前创建命名版本，并写明评审目标。版本恢复会影响当前正文，执行前确认未保存草稿与其他在线成员。分享只授予实际需要的动作，阅读者无需写入权限。",
+        "正文变更自动保存并实时同步给协作者。开始大幅修改前创建命名版本，并写明评审目标。版本恢复会影响当前正文，执行前确认未保存草稿与其他在线成员。分享只授予实际需要的动作，阅读者无需写入权限。",
       ),
       h("会议结论模板"),
       code(

@@ -22,7 +22,7 @@ export interface CatalogBrowsePanelProps {
   workspaceId: string;
   catalogId: string;
   identityKey: string;
-  workspace: { name: string; icon: string | null };
+  workspace: { name: string; icon: string | null; canOrganize: boolean };
   onOpenDocument: (documentId: string) => void;
   onOpenCatalog: (catalogId: string) => void;
   onAction: (action: CatalogAction) => void;
@@ -31,9 +31,11 @@ export interface CatalogBrowsePanelProps {
 function EmptyState({
   onAction,
   catalogId,
+  canOrganize,
 }: {
   onAction: (action: CatalogAction) => void;
   catalogId: string;
+  canOrganize: boolean;
 }) {
   return (
     <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border/80 px-6 py-14 text-center">
@@ -46,20 +48,22 @@ function EmptyState({
           创建第一篇文档，或建立子目录来组织内容。
         </p>
       </div>
-      <div className="flex gap-2">
-        <Button size="sm" onClick={() => onAction({ kind: 'create-document', catalogId })}>
-          <FilePlus2 size={14} aria-hidden="true" />
-          新建文档
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => onAction({ kind: 'create-catalog', parentId: catalogId })}
-        >
-          <FolderPlus size={14} aria-hidden="true" />
-          新建子目录
-        </Button>
-      </div>
+      {canOrganize && (
+        <div className="flex gap-2">
+          <Button size="sm" onClick={() => onAction({ kind: 'create-document', catalogId })}>
+            <FilePlus2 size={14} aria-hidden="true" />
+            新建文档
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onAction({ kind: 'create-catalog', parentId: catalogId })}
+          >
+            <FolderPlus size={14} aria-hidden="true" />
+            新建子目录
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -103,8 +107,8 @@ export function CatalogBrowsePanel({
   const headerIcon = isRoot ? workspace.icon : catalog.icon;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-card/95 px-5 py-3 backdrop-blur">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+      <header className="flex min-h-20 shrink-0 flex-wrap items-center gap-3 border-b border-border/70 bg-card/95 px-5 py-4 backdrop-blur sm:px-8">
         {!isRoot && parentId && (
           <Button
             variant="ghost"
@@ -128,18 +132,22 @@ export function CatalogBrowsePanel({
           </p>
         </div>
         <div className="ml-auto flex items-center gap-1.5">
-          <Button size="sm" onClick={() => onAction({ kind: 'create-document', catalogId })}>
-            <FilePlus2 size={14} aria-hidden="true" />
-            新建文档
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onAction({ kind: 'create-catalog', parentId: catalogId })}
-          >
-            <FolderPlus size={14} aria-hidden="true" />
-            新建目录
-          </Button>
+          {workspace.canOrganize && (
+            <Button size="sm" onClick={() => onAction({ kind: 'create-document', catalogId })}>
+              <FilePlus2 size={14} aria-hidden="true" />
+              新建文档
+            </Button>
+          )}
+          {workspace.canOrganize && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onAction({ kind: 'create-catalog', parentId: catalogId })}
+            >
+              <FolderPlus size={14} aria-hidden="true" />
+              新建目录
+            </Button>
+          )}
           {!isRoot && catalog.canManage && (
             <Menu>
               <MenuTrigger
@@ -191,9 +199,13 @@ export function CatalogBrowsePanel({
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-8 sm:py-8">
         {catalogs.length === 0 && documents.length === 0 ? (
-          <EmptyState onAction={onAction} catalogId={catalogId} />
+          <EmptyState
+            onAction={onAction}
+            catalogId={catalogId}
+            canOrganize={workspace.canOrganize}
+          />
         ) : (
           <div className="space-y-5">
             {catalogs.length > 0 && (
@@ -201,13 +213,13 @@ export function CatalogBrowsePanel({
                 <h2 className="mb-2 text-xs font-medium tracking-wide text-muted-foreground">
                   目录
                 </h2>
-                <ul className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                <ul className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                   {catalogs.map((item) => (
                     <li key={item.id}>
                       <button
                         type="button"
                         onClick={() => onOpenCatalog(item.id)}
-                        className="flex w-full items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-3 text-left shadow-xs transition-all duration-150 hover:border-primary/40 hover:shadow-sm"
+                        className="zhishu-card flex w-full items-center gap-3 px-4 py-4 text-left"
                       >
                         <span
                           aria-hidden="true"
@@ -237,13 +249,13 @@ export function CatalogBrowsePanel({
                 <h2 className="mb-2 text-xs font-medium tracking-wide text-muted-foreground">
                   文档
                 </h2>
-                <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <ul className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
                   {documents.map((document) => (
                     <li key={document.id} className="group relative">
                       <button
                         type="button"
                         onClick={() => onOpenDocument(document.id)}
-                        className="flex w-full items-start gap-3 rounded-xl border border-border bg-card px-3.5 py-3 text-left shadow-xs transition-all duration-150 hover:border-primary/40 hover:shadow-sm"
+                        className="zhishu-card flex min-h-24 w-full items-start gap-3 px-4 py-4 text-left"
                       >
                         <span
                           aria-hidden="true"
@@ -258,12 +270,12 @@ export function CatalogBrowsePanel({
                             {document.title}
                           </span>
                           <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                            {document.createdBy} · {relativeTime(document.updatedAt)}
+                            更新于 {relativeTime(document.updatedAt)}
                           </span>
                         </span>
                       </button>
                       {document.canManage && (
-                        <div className="absolute top-2 right-2 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+                        <div className="absolute top-2 right-2 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100">
                           <Menu>
                             <MenuTrigger
                               render={

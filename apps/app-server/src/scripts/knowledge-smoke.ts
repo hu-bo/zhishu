@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { buildApp } from "../app.js";
 import { loadConfig } from "../config.js";
 import { sql } from "../../database/index.js";
+import { apiIdempotencyRecords, collaborationUpdates } from "../../database/schema/index.js";
 import { documentSchema } from "../modules/documents/document.schema.js";
 import { createKnowledgePresets } from "@zhishu/document-contracts/examples";
 import {
@@ -10,8 +11,11 @@ import {
   validateDocumentContent,
   validateDocumentContentForSchemaVersion,
   applyOperationBatch,
+  type DocumentContent,
 } from "@zhishu/document-contracts";
 import { exportDocumentMarkdown } from "@zhishu/editor-core/conversions";
+import { DocumentRepository } from "../modules/documents/document.repository.js";
+import { createCollaborationStateFromContent } from "../modules/documents/document.service.js";
 import type { Principal } from "../modules/identity/identity.types.js";
 import type { z } from "zod";
 import { sameDocumentContent } from "../modules/collaboration/structure-operations.js";
@@ -163,14 +167,50 @@ const create = async (
   identity = "owner",
 ) =>
   (
-    await call(
-      "POST",
-      "/api/documents/",
-      { title, workspaceId, catalogId, mode: "standard" },
-      201,
-      identity,
-    )
+    await call("POST", "/api/documents/", { title, workspaceId, catalogId }, 201, identity)
   ).json<Document>();
+// Collaboration is the only write path now; the smoke test drives it by seeding the
+// same durable update + projection snapshot the live editor produces on save.
+const seedStory = async (document: Document, content: unknown) => {
+  const updateBytes = createCollaborationStateFromContent(content as DocumentContent);
+  const updateHash = createHash("sha256").update(updateBytes).digest("hex");
+  const repository = new DocumentRepository(app.db);
+  await app.db.insert(collaborationUpdates).values({
+    documentId: document.id,
+    generationId: document.generationId,
+    updateHash,
+    sourceUpdateHash: updateHash,
+    updateBytes: Buffer.from(updateBytes),
+    durableSeq: 1,
+    createdBy: "owner",
+  });
+  await app.db.execute(sql`
+    update document_generations set durable_seq = 1
+    where document_id = ${document.id} and status = 'active'
+  `);
+  await repository.backfillProjectionSnapshot({
+    tenantId,
+    documentId: document.id,
+    generationId: document.generationId,
+    durableSeq: 1,
+    content: content as DocumentContent,
+  });
+};
+// Preset installation goes through the real outbox → worker pipeline; poll until
+// the in-process projection worker has materialized each document's snapshot.
+const waitForProjection = async (documentId: string) => {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/documents/${documentId}/content`,
+      headers: { authorization: `Bearer owner` },
+    });
+    if (response.statusCode === 200) return response.json<{ content: object }>();
+    assert.equal(response.statusCode, 409, "Projection must eventually succeed");
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  throw new Error(`Projection worker never produced a snapshot for ${documentId}`);
+};
 const createCatalog = async (
   workspaceId: string,
   body: { name: string; parentId?: string | null },
@@ -282,7 +322,7 @@ try {
   await call(
     "POST",
     "/api/documents/",
-    { title: "无效目录页", workspaceId: workspace.id, catalogId: catalogA.id, mode: "standard" },
+    { title: "无效目录页", workspaceId: workspace.id, catalogId: catalogA.id },
     404,
   );
 
@@ -407,38 +447,21 @@ try {
       },
     ],
   };
-  await call("PUT", `/api/documents/${child.id}/content`, { expectedSnapshotRevision: 1, content });
+  await seedStory(child, content);
   const reopened = (await call("GET", `/api/documents/${child.id}/content`)).json<{
     content: unknown;
-    snapshotRevision: number;
+    durableSeq: number;
   }>();
   assert.deepEqual(reopened.content, content);
-  await call(
-    "PUT",
-    `/api/documents/${child.id}/content`,
-    {
-      expectedSnapshotRevision: 1,
-      content: {
-        type: "doc",
-        content: [
-          {
-            type: "paragraph",
-            attrs: { blockId: "block_stale_draft" },
-            content: [{ type: "text", text: "不应覆盖较新正文" }],
-          },
-        ],
-      },
-    },
-    409,
-  );
+  assert.equal(reopened.durableSeq, 1);
   const version = (
     await call(
       "POST",
       `/api/documents/${child.id}/versions`,
       {
-        mode: "standard",
         name: "格式历史版本",
-        expectedSnapshotRevision: reopened.snapshotRevision,
+        expectedGenerationId: child.generationId,
+        expectedDurableSeq: 1,
       },
       201,
     )
@@ -447,111 +470,32 @@ try {
     await call("GET", `/api/documents/${child.id}/versions/${version.id}/content`)
   ).json<{ content: unknown }>();
   assert.deepEqual(historical.content, content);
+  // Opening a document authored on an older schema migrates it in place; empty
+  // history replays to the migrated empty content at the target schema version.
   const legacy = await create("旧内容契约升级验证");
   await app.db.execute(sql`
     update document_generations set schema_version = 3
     where document_id = ${legacy.id} and status = 'active'
   `);
-  const legacyVersion = (
+  const legacySession = (
     await call(
       "POST",
-      `/api/documents/${legacy.id}/versions`,
-      {
-        mode: "standard",
-        name: "升级前",
-        expectedSnapshotRevision: 1,
-      },
+      `/api/documents/${legacy.id}/collaboration-session`,
+      { schemaVersion: CURRENT_DOCUMENT_SCHEMA_VERSION, extensions: [] },
       201,
     )
-  ).json<{ id: string; generationId: string }>();
-  const formattedLegacy = structuredClone(content);
-  formattedLegacy.content[0]!.content[0]!.text = "旧文档采用新版格式";
-  const upgraded = (
-    await call("PUT", `/api/documents/${legacy.id}/content`, {
-      expectedSnapshotRevision: 1,
-      content: formattedLegacy,
-    })
-  ).json<{ schemaVersion: number; snapshotRevision: number }>();
-  assert.equal(upgraded.schemaVersion, CURRENT_DOCUMENT_SCHEMA_VERSION);
-  assert.equal(upgraded.snapshotRevision, 2);
-  await call("PUT", `/api/documents/${legacy.id}/content`, {
-    expectedSnapshotRevision: 1,
-    content: formattedLegacy,
-  });
-  const oldHistorical = (
-    await call("GET", `/api/documents/${legacy.id}/versions/${legacyVersion.id}/content`)
-  ).json<{ schemaVersion: number; content: { type: string; content: unknown[] } }>();
-  assert.equal(oldHistorical.schemaVersion, 3);
-  assert.deepEqual(oldHistorical.content, { type: "doc", content: [] });
+  ).json<{ schemaVersion: number }>();
+  assert.equal(legacySession.schemaVersion, CURRENT_DOCUMENT_SCHEMA_VERSION);
   const exportedLegacy = (await call("GET", `/api/documents/${legacy.id}/export`)).json<{
     schemaVersion: number;
     content: unknown;
   }>();
   assert.equal(exportedLegacy.schemaVersion, CURRENT_DOCUMENT_SCHEMA_VERSION);
-  assert.deepEqual(exportedLegacy.content, formattedLegacy);
-  const modernVersion = (
-    await call(
-      "POST",
-      `/api/documents/${legacy.id}/versions`,
-      {
-        mode: "standard",
-        name: "升级后",
-        expectedSnapshotRevision: 2,
-      },
-      201,
-    )
-  ).json<{ id: string; generationId: string }>();
-  assert.notEqual(modernVersion.generationId, legacyVersion.generationId);
-  const restoreKey = `restore-${randomUUID()}`;
-  const restoredLegacy = (
-    await call(
-      "POST",
-      `/api/documents/${legacy.id}/versions/${legacyVersion.id}/restore`,
-      {
-        mode: "standard",
-        expectedSnapshotRevision: 2,
-      },
-      200,
-      "owner",
-      { "idempotency-key": restoreKey },
-    )
-  ).json<Document>();
-  assert.equal(restoredLegacy.schemaVersion, 3);
-  assert.notEqual(restoredLegacy.generationId, modernVersion.generationId);
-  const replayedRestore = (
-    await call(
-      "POST",
-      `/api/documents/${legacy.id}/versions/${legacyVersion.id}/restore`,
-      {
-        mode: "standard",
-        expectedSnapshotRevision: 2,
-      },
-      200,
-      "owner",
-      { "idempotency-key": restoreKey },
-    )
-  ).json<Document>();
-  assert.equal(replayedRestore.generationId, restoredLegacy.generationId);
-  const restoredModern = (
-    await call("POST", `/api/documents/${legacy.id}/versions/${modernVersion.id}/restore`, {
-      mode: "standard",
-      expectedSnapshotRevision: 3,
-    })
-  ).json<Document>();
-  assert.equal(restoredModern.schemaVersion, CURRENT_DOCUMENT_SCHEMA_VERSION);
-  await call("GET", `/api/documents/${legacy.id}/export`);
   await call(
     "POST",
     `/api/documents/${legacy.id}/collaboration-session`,
-    {
-      schemaVersion: CURRENT_DOCUMENT_SCHEMA_VERSION,
-      extensions: [],
-    },
+    { schemaVersion: CURRENT_DOCUMENT_SCHEMA_VERSION, extensions: [] },
     201,
-  );
-  assert.equal(
-    (await call("GET", `/api/documents/${legacy.id}`)).json<Document>().mode,
-    "collaborative",
   );
   const extended = await create("通用内容扩展验证");
   const extendedContent = {
@@ -632,10 +576,7 @@ try {
   );
   assert.ok(wrappedAgain.success);
   assert.equal(wrappedAgain.content.content[0]!.type, "callout");
-  await call("PUT", `/api/documents/${extended.id}/content`, {
-    expectedSnapshotRevision: 1,
-    content: extendedContent,
-  });
+  await seedStory(extended, extendedContent);
   assert.deepEqual(
     (await call("GET", `/api/documents/${extended.id}/content`)).json<{ content: unknown }>()
       .content,
@@ -646,9 +587,9 @@ try {
       "POST",
       `/api/documents/${extended.id}/versions`,
       {
-        mode: "standard",
         name: "提示块状态分隔线",
-        expectedSnapshotRevision: 2,
+        expectedGenerationId: extended.generationId,
+        expectedDurableSeq: 1,
       },
       201,
     )
@@ -765,8 +706,8 @@ try {
   );
   const restored = (
     await call("POST", `/api/documents/${child.id}/versions/${version.id}/restore`, {
-      mode: "standard",
-      expectedSnapshotRevision: reopened.snapshotRevision,
+      expectedGenerationId: child.generationId,
+      expectedDurableSeq: 1,
     })
   ).json<Document>();
   assert.equal(restored.icon, "📚");
@@ -774,7 +715,7 @@ try {
   await call(
     "POST",
     `/api/documents/${child.id}/versions/${version.id}/restore`,
-    { mode: "standard", expectedSnapshotRevision: reopened.snapshotRevision },
+    { expectedGenerationId: child.generationId, expectedDurableSeq: 1 },
     409,
   );
   const firstPresets = (
@@ -782,14 +723,8 @@ try {
   ).json<{ items: Array<{ documentId: string; status: string }> }>();
   assert.equal(firstPresets.items.filter((item) => item.status === "created").length, 3);
   for (const installed of firstPresets.items) {
-    const snapshot = (await call("GET", `/api/documents/${installed.documentId}/content`)).json<{
-      content: object;
-      snapshotRevision: number;
-    }>();
-    await call("PUT", `/api/documents/${installed.documentId}/content`, {
-      expectedSnapshotRevision: snapshot.snapshotRevision,
-      content: snapshot.content,
-    });
+    const snapshot = await waitForProjection(installed.documentId);
+    assert.ok((snapshot.content as { content: unknown[] }).content.length > 0);
     await call("GET", `/api/documents/${installed.documentId}/export`);
   }
   const repeated = (await call("POST", `/api/knowledge/workspaces/${workspace.id}/presets`)).json<
@@ -874,7 +809,7 @@ try {
     state: "active" | "expired" | "revoked" | "unknown";
     permission: "read" | "edit" | null;
     expiresAt: string | null;
-    document: { id: string; title: string; mode: string } | null;
+    document: { id: string; title: string } | null;
   };
   type JoinResult = {
     joined: boolean;
@@ -948,9 +883,8 @@ try {
   }>();
   const publicContent = (
     await call("GET", `/api/public/shares/${readShare.id}/content`, undefined, 200, "missing")
-  ).json<{ readOnly: boolean; mode: string; content: unknown }>();
+  ).json<{ readOnly: boolean; content: unknown }>();
   assert.equal(publicContent.readOnly, true);
-  assert.equal(publicContent.mode, "standard");
   assert.deepEqual(publicContent.content, ownerContent.content);
   // No object storage in smoke: asset access must degrade to 503, not leak.
   await call(
@@ -1042,6 +976,310 @@ try {
   ).json<PublicDetail>();
   assert.equal(trashedDetail.state, "unknown");
 
+  // Space roles govern organization; adding a member must never leak a private document.
+  type ManagedWorkspace = {
+    id: string;
+    kind: "personal" | "team" | "unclassified";
+    personalOwnerId: string | null;
+    rootCatalogId: string;
+    role: string;
+    canManage: boolean;
+    canOrganize: boolean;
+    memberCount: number;
+    name: string;
+  };
+  const workspaceRequest = { name: "成员权限验收", description: "空间资料" };
+  const workspaceKey = `workspace-${randomUUID()}`;
+  const managed = (
+    await call("POST", "/api/knowledge/workspaces", workspaceRequest, 201, "owner", {
+      "idempotency-key": workspaceKey,
+    })
+  ).json<ManagedWorkspace>();
+  assert.equal(managed.role, "owner");
+  assert.equal(managed.kind, "team");
+  assert.equal(managed.personalOwnerId, null);
+  assert.equal(managed.memberCount, 1);
+  assert.equal(
+    (
+      await call("POST", "/api/knowledge/workspaces", workspaceRequest, 201, "owner", {
+        "idempotency-key": workspaceKey,
+      })
+    ).json<ManagedWorkspace>().id,
+    managed.id,
+  );
+  await call("POST", "/api/knowledge/workspaces", { name: "不同请求" }, 409, "owner", {
+    "idempotency-key": workspaceKey,
+  });
+  const workspaceUrl = `/api/knowledge/workspaces/${managed.id}`;
+  const memberUrl = `${workspaceUrl}/members`;
+  const setMember = (
+    id: string,
+    role: "admin" | "editor" | "viewer",
+    actor = "owner",
+    status = 200,
+  ) => call("PUT", `${memberUrl}/${id}`, { role, displayName: `${id} 成员` }, status, actor);
+  principals.set("admin", principal("admin"));
+  await call("PATCH", workspaceUrl, { name: "越权修改" }, 404, "outsider");
+  await setMember("reader", "editor", "outsider", 404);
+  await setMember("owner", "viewer", "owner", 400);
+  await call("DELETE", `${memberUrl}/owner`, undefined, 400);
+  await call("PUT", `${memberUrl}/reader`, { role: "invalid", displayName: "错误角色" }, 400);
+  await setMember("reader", "editor");
+  await setMember("admin", "admin");
+  const readerSpaces = (
+    await call("GET", "/api/knowledge/workspaces", undefined, 200, "reader")
+  ).json<ManagedWorkspace[]>();
+  const readerSpace = readerSpaces.find((space) => space.id === managed.id);
+  assert.equal(readerSpace?.role, "editor");
+  assert.equal(readerSpace?.canManage, false);
+  assert.equal(readerSpace?.canOrganize, true);
+  assert.equal(readerSpace?.memberCount, 3);
+  await call(
+    "PATCH",
+    workspaceUrl,
+    { name: "管理员修改名称", description: "保存成功" },
+    200,
+    "admin",
+  );
+  await setMember("outsider", "admin", "admin", 400);
+  await call("DELETE", `${memberUrl}/admin`, undefined, 400, "admin");
+  await call("GET", memberUrl, undefined, 404, "other-tenant");
+  await setMember("outsider", "viewer", "other-tenant", 404);
+
+  const ownedDirectory = await createCatalog(managed.id, {
+    name: "共同目录",
+    parentId: managed.rootCatalogId,
+  });
+  const readerDirectory = await createCatalog(
+    managed.id,
+    { name: "成员目录", parentId: ownedDirectory.id },
+    201,
+    "reader",
+  );
+  const readerDocument = await create("成员自己的正文", managed.id, readerDirectory.id, "reader");
+  const privateDocument = await create("空间中的私密正文", managed.id);
+  await call("GET", `/api/documents/${privateDocument.id}`, undefined, 404, "reader");
+  await call("PUT", `/api/documents/${privateDocument.id}/acl/reader`, { actions: ["read"] });
+  await call("GET", `/api/documents/${privateDocument.id}`, undefined, 200, "reader");
+  await call("DELETE", `/api/knowledge/catalogs/${ownedDirectory.id}`, undefined, 409);
+  await call("GET", `/api/documents/${readerDocument.id}`, undefined, 200, "reader");
+
+  await setMember("reader", "viewer");
+  await call(
+    "PATCH",
+    `/api/knowledge/catalogs/${readerDirectory.id}`,
+    { name: "降级后改名" },
+    404,
+    "reader",
+  );
+  await createCatalog(managed.id, { name: "降级后新建" }, 404, "reader");
+  await call(
+    "POST",
+    "/api/documents/",
+    { title: "降级后新建正文", workspaceId: managed.id },
+    404,
+    "reader",
+  );
+  await call("POST", `${workspaceUrl}/presets`, undefined, 404, "reader");
+  const forbiddenMove = await create("不可移入只读空间", "ws_default", null, "reader");
+  await call(
+    "PATCH",
+    `/api/knowledge/documents/${forbiddenMove.id}/location`,
+    {
+      workspaceId: managed.id,
+      catalogId: managed.rootCatalogId,
+      metadataRevision: forbiddenMove.metadataRevision,
+    },
+    404,
+    "reader",
+  );
+  await call("DELETE", `${memberUrl}/reader`, undefined, 204, "admin");
+  const removedReader = (await call("GET", "/api/knowledge/workspaces", undefined, 200, "reader"))
+    .json<ManagedWorkspace[]>()
+    .find((space) => space.id === managed.id);
+  assert.equal(removedReader?.canOrganize, false);
+  await call("GET", `/api/documents/${privateDocument.id}`, undefined, 200, "reader");
+  await call("DELETE", `/api/documents/${privateDocument.id}/acl/reader`, undefined, 204);
+  await call("GET", `/api/documents/${privateDocument.id}`, undefined, 404, "reader");
+
+  const moved = (
+    await call("PATCH", `/api/knowledge/documents/${privateDocument.id}/location`, {
+      workspaceId: "ws_default",
+      catalogId: "cat_root_ws_default",
+      metadataRevision: privateDocument.metadataRevision,
+    })
+  ).json<{ metadataRevision: number }>();
+  assert.equal(moved.metadataRevision, privateDocument.metadataRevision + 1);
+  await call(
+    "PATCH",
+    `/api/knowledge/documents/${privateDocument.id}/location`,
+    {
+      workspaceId: managed.id,
+      catalogId: managed.rootCatalogId,
+      metadataRevision: privateDocument.metadataRevision,
+    },
+    409,
+  );
+  const movedLocation = (
+    await call("GET", `/api/knowledge/documents/${privateDocument.id}/locate`)
+  ).json<{ workspaceId: string }>();
+  assert.equal(movedLocation.workspaceId, "ws_default");
+  const roster = (await call("GET", memberUrl)).json<Array<{ identityId: string; role: string }>>();
+  assert.equal(roster[0]?.identityId, "owner");
+  assert.equal(roster[0]?.role, "owner");
+  assert.ok(!roster.some((member) => member.identityId === "reader"));
+
+  const personalInput = { name: "本人的创作空间", kind: "personal" };
+  const personalKey = `personal-${randomUUID()}`;
+  const personal = (
+    await call("POST", "/api/knowledge/workspaces", personalInput, 201, "owner", {
+      "idempotency-key": personalKey,
+    })
+  ).json<ManagedWorkspace>();
+  assert.equal(personal.kind, "personal");
+  assert.equal(personal.personalOwnerId, "owner");
+  assert.equal(personal.role, "owner");
+  assert.equal(
+    (
+      await call("POST", "/api/knowledge/workspaces", personalInput, 201, "owner", {
+        "idempotency-key": personalKey,
+      })
+    ).json<ManagedWorkspace>().id,
+    personal.id,
+  );
+  await call(
+    "POST",
+    "/api/knowledge/workspaces",
+    { ...personalInput, kind: "team" },
+    409,
+    "owner",
+    { "idempotency-key": personalKey },
+  );
+  await call(
+    "POST",
+    "/api/knowledge/workspaces",
+    { ...personalInput, personalOwnerId: "reader" },
+    400,
+  );
+  await call(
+    "POST",
+    "/api/knowledge/workspaces",
+    { name: "伪装旧空间", kind: "unclassified" },
+    400,
+  );
+  const personalUrl = `/api/knowledge/workspaces/${personal.id}`;
+  await call("PATCH", personalUrl, { name: "不得更改类型", kind: "team" }, 400);
+  await call("PATCH", personalUrl, { name: "不得更改所有者", personalOwnerId: "reader" }, 400);
+  await call("PATCH", personalUrl, { name: "本人修改名称" });
+  await call("PATCH", personalUrl, { name: "外部主体修改" }, 404, "reader");
+  await call("PUT", `${personalUrl}/members/reader`, { role: "admin", displayName: "读者" }, 400);
+  await call("DELETE", `${personalUrl}/members/owner`, undefined, 400);
+  await createCatalog(personal.id, { name: "本人目录" });
+  await createCatalog(personal.id, { name: "他人目录" }, 404, "reader");
+  const personalDocument = await create("个人文档授权仍独立", personal.id);
+  await call("GET", `/api/documents/${personalDocument.id}`, undefined, 404, "reader");
+  await call("PUT", `/api/documents/${personalDocument.id}/acl/reader`, { actions: ["read"] });
+  await call("GET", `/api/documents/${personalDocument.id}`, undefined, 200, "reader");
+  await call(
+    "POST",
+    "/api/documents/",
+    { title: "不能借共享权限新建", workspaceId: personal.id },
+    404,
+    "reader",
+  );
+
+  // Membership cannot substitute for explicit ownership, even if an old/imported row exists.
+  await app.db.execute(
+    sql`insert into workspace_members (tenant_id, workspace_id, identity_id, display_name, role) values (${tenantId}, ${personal.id}, 'reader', '读者', 'admin')`,
+  );
+  const otherPersonal = (await call("GET", "/api/knowledge/workspaces", undefined, 200, "reader"))
+    .json<ManagedWorkspace[]>()
+    .find((row) => row.id === personal.id);
+  assert.equal(otherPersonal?.role, "viewer");
+  assert.equal(otherPersonal?.canManage, false);
+  assert.equal(otherPersonal?.canOrganize, false);
+  assert.equal(otherPersonal?.memberCount, 1);
+  await call("PATCH", personalUrl, { name: "伪管理员修改" }, 404, "reader");
+  await createCatalog(personal.id, { name: "伪管理员目录" }, 404, "reader");
+  const personalRoster = (await call("GET", `${personalUrl}/members`)).json<
+    Array<{ identityId: string }>
+  >();
+  assert.deepEqual(
+    personalRoster.map((row) => row.identityId),
+    ["owner"],
+  );
+  await call("GET", `${personalUrl}/members`, undefined, 404, "other-tenant");
+
+  const legacyId = `ws_${randomUUID()}`;
+  await app.db.execute(
+    sql`insert into workspaces (tenant_id, id, name, created_by) values (${tenantId}, ${legacyId}, '旧单人空间', 'owner')`,
+  );
+  const legacyWorkspace = (await call("GET", "/api/knowledge/workspaces"))
+    .json<ManagedWorkspace[]>()
+    .find((row) => row.id === legacyId);
+  assert.equal(legacyWorkspace?.kind, "unclassified");
+  assert.equal(legacyWorkspace?.personalOwnerId, null);
+  assert.ok(legacyWorkspace);
+  const legacyCreateInput = { name: "旧单人空间", description: "" };
+  const legacyReceiptKey = `legacy-${randomUUID()}`;
+  const legacyResponse = Object.fromEntries(
+    Object.entries(legacyWorkspace).filter(([key]) => key !== "kind" && key !== "personalOwnerId"),
+  );
+  await app.db.insert(apiIdempotencyRecords).values({
+    tenantId,
+    subjectId: "owner",
+    operationId: "workspaces.create",
+    keyHash: createHash("sha256").update(legacyReceiptKey).digest("hex"),
+    requestHash: createHash("sha256").update(JSON.stringify(legacyCreateInput)).digest("hex"),
+    responseStatus: 201,
+    responseBody: legacyResponse,
+  });
+  const legacyReplay = (
+    await call("POST", "/api/knowledge/workspaces", legacyCreateInput, 201, "owner", {
+      "idempotency-key": legacyReceiptKey,
+    })
+  ).json<ManagedWorkspace>();
+  assert.equal(legacyReplay.id, legacyWorkspace.id);
+  assert.equal(legacyReplay.kind, "unclassified");
+  assert.equal(legacyReplay.personalOwnerId, null);
+  await call(
+    "POST",
+    "/api/knowledge/workspaces",
+    { ...legacyCreateInput, kind: "personal" },
+    409,
+    "owner",
+    {
+      "idempotency-key": legacyReceiptKey,
+    },
+  );
+  await assert.rejects(
+    app.db.execute(
+      sql`insert into workspaces (tenant_id, id, name, created_by, kind) values (${tenantId}, 'ws_bad_owner', '错误所有者', 'owner', 'personal')`,
+    ),
+  );
+  await assert.rejects(
+    app.db.execute(
+      sql`insert into workspaces (tenant_id, id, name, created_by, kind, personal_owner_id) values (${tenantId}, 'ws_forged_owner', '错误所有者', 'owner', 'personal', 'reader')`,
+    ),
+  );
+  await assert.rejects(
+    app.db.execute(
+      sql`insert into workspaces (tenant_id, id, name, created_by, kind, personal_owner_id) values (${tenantId}, 'ws_bad_team', '错误团队', 'owner', 'team', 'owner')`,
+    ),
+  );
+  await assert.rejects(
+    app.db.execute(
+      sql`insert into workspaces (tenant_id, id, name, created_by, kind) values (${tenantId}, 'ws_bad_kind', '错误类型', 'owner', 'invalid')`,
+    ),
+  );
+
+  process.stdout.write(
+    "Personal workspace regression passed: trusted classification/ownership, immutable settings, idempotency, member bypass denial, document ACL preservation and legacy defaults.\n",
+  );
+
+  process.stdout.write(
+    "Workspace regression passed: settings, idempotent creation, member roles and removal, owner/admin protection, read-only organization, cross-tenant denial, explicit ACL preservation, cross-space moves/revision conflicts and safe directory deletion.\n",
+  );
   process.stdout.write(
     "Knowledge smoke passed: catalogs (CRUD, lazy children, depth ceiling, cascade delete), document moves, locate paths, ACL/tenant isolation, metadata/revision, formats/history, literal body search, idempotent presets, and the full share lifecycle (mint, anonymous read, tiered join, revoke, expiry). MinIO was not contacted.\n",
   );
@@ -1053,6 +1291,7 @@ try {
     sql`delete from knowledge_preset_installations where tenant_id = ${tenantId}`,
   );
   await app.db.execute(sql`delete from document_audit_events where tenant_id = ${tenantId}`);
+  await app.db.execute(sql`delete from api_idempotency_records where tenant_id = ${tenantId}`);
   await app.db.execute(
     sql`delete from catalogs where tenant_id in (${tenantId}, ${`${tenantId}-other`})`,
   );

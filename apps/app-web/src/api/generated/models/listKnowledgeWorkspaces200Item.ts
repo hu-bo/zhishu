@@ -4,11 +4,15 @@
  * Application API
  * OpenAPI spec version: 0.1.0
  */
+import type { ListKnowledgeWorkspaces200ItemKind } from './listKnowledgeWorkspaces200ItemKind';
+import type { ListKnowledgeWorkspaces200ItemRole } from './listKnowledgeWorkspaces200ItemRole';
 
 export type ListKnowledgeWorkspaces200Item = {
   /** @pattern ^ws_[A-Za-z0-9_-]{1,64}$ */
   id: string;
   name: string;
+  kind: ListKnowledgeWorkspaces200ItemKind;
+  personalOwnerId: string | null;
   icon: string | null;
   description: string;
   createdBy: string;
@@ -16,4 +20,10 @@ export type ListKnowledgeWorkspaces200Item = {
   rootCatalogId: string;
   /** @minimum 0 */
   documentCount: number;
+  /** @minimum 0 */
+  memberCount: number;
+  role: ListKnowledgeWorkspaces200ItemRole;
+  canManage: boolean;
+  canOrganize: boolean;
+  createdAt: string;
 };

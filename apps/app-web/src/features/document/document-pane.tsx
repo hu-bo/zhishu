@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { Link } from '@tanstack/react-router';
+import { Sparkles } from 'lucide-react';
+import { useKnowledgeWorkspace } from '@/features/knowledge/workspace-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, LoaderCircle } from 'lucide-react';
 import {
@@ -9,6 +12,7 @@ import {
 } from '@/api/generated/app-api';
 import { ApiError, errorMessage } from '@/api/api-error';
 import { Button } from '@/components/ui/button';
+import type { EditorCollaborationPresence } from '@zhishu/editor-react';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { PanelDialog } from '@/components/ui/panel-dialog';
 import type { CatalogAction } from '@/features/knowledge/catalog-dialogs';
@@ -20,7 +24,6 @@ import {
 import { DocumentInfoDialog } from './document-info-dialog';
 import { DocumentMetadata } from './document-metadata';
 import { DocumentShareDialog } from './document-share-dialog';
-import { DocumentStandardEditor } from './document-standard-editor';
 import { DocumentTopbar } from './document-topbar';
 import { DocumentTransferActions } from './document-transfer-actions';
 
@@ -30,13 +33,20 @@ export interface DocumentPaneProps {
   rootCatalogId: string;
   identityKey: string;
   workspaceName: string;
+  workspaceMemberCount: number;
+  canManageWorkspace: boolean;
+  onlineCount: number;
+  onOpenMembers: () => void;
+  onOpenWorkspaceSettings: () => void;
+  onOpenDirectory: () => void;
+  onOnlineCountChange?: (count: number) => void;
   onBack: () => void;
   onOpenCatalog: (catalogId: string) => void;
   onAction: (action: CatalogAction) => void;
 }
 
 /**
- * Editing surface for `/spaces/$workspaceId?doc=…`: one slim topbar plus the
+ * Editing surface for `/spaces/$workspaceId/doc/$documentId`: one slim topbar plus the
  * editor. Metadata, details, sharing, import/export and trash all live in
  * dialogs owned here.
  */
@@ -46,11 +56,21 @@ export function DocumentPane({
   rootCatalogId,
   identityKey,
   workspaceName,
+  workspaceMemberCount,
+  canManageWorkspace,
+  onlineCount,
+  onOpenMembers,
+  onOpenWorkspaceSettings,
+  onOpenDirectory,
+  onOnlineCountChange,
   onBack,
   onOpenCatalog,
   onAction,
 }: DocumentPaneProps) {
   const queryClient = useQueryClient();
+  const { workspaces } = useKnowledgeWorkspace();
+  const workspace = workspaces.find((item) => item.id === workspaceId);
+  const personalTarget = workspace?.kind === 'personal' && workspace.role === 'owner';
   const noRetryOn404 = (count: number, error: unknown) =>
     !(error instanceof ApiError && error.status === 404) && count < 2;
 
@@ -74,6 +94,9 @@ export function DocumentPane({
       return 'edit';
     }
   });
+  const [readOnlyReason, setReadOnlyReason] = useState<string | null>(() =>
+    viewMode === 'read' ? '当前为阅读模式。' : null,
+  );
   const toggleViewMode = () =>
     setViewMode((previous) => {
       const next = previous === 'edit' ? 'read' : 'edit';
@@ -92,6 +115,11 @@ export function DocumentPane({
   const [infoOpen, setInfoOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [collabSnapshot, setCollabSnapshot] = useState<DocumentCollaborationSnapshot | null>(null);
+  const onCollaborationPresenceChange = useCallback(
+    (participants: readonly EditorCollaborationPresence[]) =>
+      onOnlineCountChange?.(participants.length),
+    [onOnlineCountChange],
+  );
 
   const document = documentQuery.data;
   const [titleSaving, setTitleSaving] = useState(false);
@@ -157,15 +185,35 @@ export function DocumentPane({
     locate.data?.catalogPath.filter((segment) => segment.id !== rootCatalogId) ?? null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
       <DocumentTopbar
+        aiEntry={
+          <Link
+            to="/ai"
+            search={{
+              sourceWorkspaceId: workspaceId,
+              contextDocumentId: documentId,
+              targetDocumentId: personalTarget ? documentId : undefined,
+            }}
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-2 text-xs text-muted-foreground outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={personalTarget ? 'AI 创作' : '讨论与创作'}
+          >
+            <Sparkles size={14} />
+            <span className="hidden xl:inline">{personalTarget ? 'AI 创作' : '讨论与创作'}</span>
+          </Link>
+        }
         workspaceName={workspaceName}
+        workspaceMemberCount={workspaceMemberCount}
+        canManageWorkspace={canManageWorkspace}
+        onlineCount={onlineCount}
+        onOpenMembers={onOpenMembers}
+        onOpenWorkspaceSettings={onOpenWorkspaceSettings}
+        onOpenDirectory={onOpenDirectory}
         catalogPath={catalogPath}
         title={document.title}
         icon={document.icon}
         canManage={document.canManage}
-        collaborative={document.mode === 'collaborative'}
-        durableSeq={collabSnapshot?.durableSeq ?? document.durableSeq}
+        readOnlyReason={viewMode === 'read' ? '当前为阅读模式。' : readOnlyReason}
         titleSaving={titleSaving}
         onTitleSave={(nextTitle) => void saveTitle(nextTitle)}
         viewMode={viewMode}
@@ -199,25 +247,17 @@ export function DocumentPane({
         </p>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {document.mode === 'standard' ? (
-          <DocumentStandardEditor
-            key={`standard-${document.generationId}`}
-            document={document}
-            viewMode={viewMode}
-            versionsOpen={versionsOpen}
-            onVersionsOpenChange={setVersionsOpen}
-          />
-        ) : (
-          <DocumentCollaborationEditor
-            key={`collaborative-${document.generationId}`}
-            document={document}
-            viewMode={viewMode}
-            onStatusChange={setCollabSnapshot}
-            versionsOpen={versionsOpen}
-            onVersionsOpenChange={setVersionsOpen}
-          />
-        )}
+      <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
+        <DocumentCollaborationEditor
+          key={`collaborative-${document.generationId}`}
+          document={document}
+          viewMode={viewMode}
+          onStatusChange={setCollabSnapshot}
+          onReadOnlyReasonChange={setReadOnlyReason}
+          onCollaborationPresenceChange={onCollaborationPresenceChange}
+          versionsOpen={versionsOpen}
+          onVersionsOpenChange={setVersionsOpen}
+        />
       </div>
 
       <DocumentShareDialog
@@ -237,8 +277,8 @@ export function DocumentPane({
       <PanelDialog
         open={metadataOpen}
         onOpenChange={setMetadataOpen}
-        title="文档元数据"
-        description="维护文档的图标与标签。"
+        title="图标与标签"
+        description="为文档添上专属标记，让内容更容易辨认与查找。"
       >
         <DocumentMetadata document={document} editable={document.canManage} />
       </PanelDialog>
@@ -256,11 +296,7 @@ export function DocumentPane({
         confirmLabel="移入回收站"
         destructive
         onConfirm={async () => {
-          try {
-            await trashDocument(documentId);
-          } catch {
-            return false;
-          }
+          await trashDocument(documentId);
           invalidateSpaceData(queryClient, identityKey, workspaceId);
           void queryClient.invalidateQueries({ queryKey: ['document', documentId] });
           onBack();

@@ -204,6 +204,55 @@
       "when": 1791079407749,
       "tag": "0028_woozy_paladin",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1791256665661,
+      "tag": "0029_sudden_catseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1791329798715,
+      "tag": "0030_secret_rictor",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1792543777500,
+      "tag": "0031_fat_lord_hawal",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792558616395,
+      "tag": "0032_gorgeous_stone_men",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792625588435,
+      "tag": "0033_empty_sentry",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792777459879,
+      "tag": "0034_sleepy_katie_power",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792778544638,
+      "tag": "0035_organic_hammerhead",
+      "breakpoints": true
     }
   ]
 }

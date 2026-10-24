@@ -5,7 +5,6 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { UpdateDocumentMetadata200ExtensionsItem } from './updateDocumentMetadata200ExtensionsItem';
-import type { UpdateDocumentMetadata200Mode } from './updateDocumentMetadata200Mode';
 import type { UpdateDocumentMetadata200TagsItem } from './updateDocumentMetadata200TagsItem';
 
 export type UpdateDocumentMetadata200 = {
@@ -23,7 +22,6 @@ export type UpdateDocumentMetadata200 = {
   /** @maxItems 12 */
   tags: UpdateDocumentMetadata200TagsItem[];
   createdBy: string;
-  mode: UpdateDocumentMetadata200Mode;
   /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
   generationId: string;
   /**

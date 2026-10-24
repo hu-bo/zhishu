@@ -29,7 +29,6 @@ export type ImportDocumentJson200 = {
   color: 'slate' | 'indigo' | 'violet' | 'green' | 'amber' | 'rose';
 })[];
   createdBy: string;
-  mode: 'standard' | 'collaborative';
   /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
   generationId: string;
   /**

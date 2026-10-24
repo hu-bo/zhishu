@@ -35,3 +35,4 @@ export type {
   SafeReactNodeViewRendererOptions,
 } from "./react-node-view.js";
 export { useEditorStructureAction } from "./use-editor-structure-action.js";
+export { useEditorReplacementPreview } from "./use-editor-replacement-preview.js";

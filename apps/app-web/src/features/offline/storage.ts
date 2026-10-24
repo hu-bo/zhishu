@@ -12,19 +12,6 @@ type Entry = {
   value: unknown;
   updatedAt: number;
 };
-export type StandardDraft = {
-  documentId: string;
-  workspaceId: string;
-  generationId: string | null;
-  schemaVersion: number;
-  extensions: ExtensionRequirement[];
-  baseRevision: number;
-  title: string;
-  content: DocumentContent;
-  tabId: string;
-  updatedAt: number;
-  draftVersion: string;
-};
 export type CollaborationCheckpoint = {
   documentId: string;
   workspaceId: string;
@@ -39,6 +26,7 @@ export type CollaborationCheckpoint = {
   tabId: string;
 };
 let database: Promise<IDBDatabase> | undefined;
+let openConnection: IDBDatabase | undefined;
 const errorListeners = new Set<() => void>();
 export function subscribeStorageError(listener: () => void) {
   errorListeners.add(listener);
@@ -76,7 +64,9 @@ function openDatabase(): Promise<IDBDatabase> {
         db.onversionchange = () => {
           db.close();
           database = undefined;
+          openConnection = undefined;
         };
+        openConnection = db;
         resolve(db);
       };
     });
@@ -133,6 +123,30 @@ export function writeRecord(
     complete(undefined);
   });
 }
+/** Start the transaction before pagehide returns; awaiting database opening can lose the final edit. */
+export function writeRecordOnPageExit(
+  identity: string,
+  kind: string,
+  id: string,
+  value: unknown,
+): void {
+  if (!openConnection) return;
+  try {
+    const tx = openConnection.transaction('entries', 'readwrite');
+    tx.onerror = storageFailure;
+    tx.onabort = storageFailure;
+    tx.objectStore('entries').put({
+      key: entryKey(identity, kind, id),
+      identity,
+      kind,
+      id,
+      value,
+      updatedAt: Date.now(),
+    } satisfies Entry);
+  } catch {
+    storageFailure();
+  }
+}
 export function deleteRecord(identity: string, kind: string, id: string): Promise<void> {
   return transact('readwrite', (store, complete) => {
     store.delete(entryKey(identity, kind, id));
@@ -175,24 +189,6 @@ export function deleteRecords(
     };
     complete(undefined);
   });
-}
-export function isStandardDraft(value: unknown): value is StandardDraft {
-  if (!value || typeof value !== 'object') return false;
-  const draft = value as Partial<StandardDraft>;
-  return (
-    typeof draft.documentId === 'string' &&
-    typeof draft.workspaceId === 'string' &&
-    typeof draft.tabId === 'string' &&
-    typeof draft.title === 'string' &&
-    typeof draft.draftVersion === 'string' &&
-    (draft.generationId === null || typeof draft.generationId === 'string') &&
-    draft.schemaVersion === CURRENT_DOCUMENT_SCHEMA_VERSION &&
-    Array.isArray(draft.extensions) &&
-    Number.isSafeInteger(draft.baseRevision) &&
-    Number(draft.baseRevision) > 0 &&
-    typeof draft.updatedAt === 'number' &&
-    validateDocumentContent(draft.content).success
-  );
 }
 export function isCollaborationCheckpoint(value: unknown): value is CollaborationCheckpoint {
   if (!value || typeof value !== 'object') return false;
@@ -245,20 +241,4 @@ export function currentTabId(): string {
     }
   }
   return tabId;
-}
-export async function readStandardDraft(
-  identity: string,
-  documentId: string,
-): Promise<StandardDraft | null> {
-  const entries = await recordsForIdentity(identity);
-  const drafts = entries
-    .filter((entry) => entry.kind === 'draft')
-    .map((entry) => entry.value)
-    .filter(isStandardDraft)
-    .filter((draft) => draft.documentId === documentId);
-  return (
-    drafts.find((draft) => draft.tabId === currentTabId()) ??
-    drafts.sort((a, b) => b.updatedAt - a.updatedAt)[0] ??
-    null
-  );
 }

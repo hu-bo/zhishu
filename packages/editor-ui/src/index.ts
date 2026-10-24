@@ -26,6 +26,8 @@ export type {
 export { EditorSlashMenu } from "./editor-slash-menu.js";
 export type { EditorSlashMenuMessages, EditorSlashMenuProps } from "./editor-slash-menu.js";
 export { EditorShell } from "./editor-shell.js";
+export { EditorReplacementReview } from "./editor-replacement-review.js";
+export type { EditorReplacementReviewProps } from "./editor-replacement-review.js";
 export type { EditorShellMessages, EditorShellProps } from "./editor-shell.js";
 export { EditorCollaborationIndicator } from "./editor-collaboration-indicator.js";
 export type { EditorCollaborationIndicatorProps } from "./editor-collaboration-indicator.js";
@@ -38,6 +40,8 @@ export { EditorTableToolbar } from "./editor-table-toolbar.js";
 export type { EditorTableToolbarMessages } from "./editor-table-toolbar.js";
 export { EditorStatsFooter } from "./editor-stats-footer.js";
 export type { EditorStatsFooterMessages, EditorStatsFooterProps } from "./editor-stats-footer.js";
+export { EditorKeyboardHelp } from "./editor-keyboard-help.js";
+export type { EditorKeyboardHelpMessages } from "./editor-keyboard-help.js";
 export {
   EditorCalloutView,
   EditorDividerView,

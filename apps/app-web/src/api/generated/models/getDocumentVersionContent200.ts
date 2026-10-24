@@ -5,14 +5,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DocumentContent } from './documentContent';
-import type { GetDocumentVersionContent200SourceMode } from './getDocumentVersionContent200SourceMode';
 
 export type GetDocumentVersionContent200 = {
   /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
   documentId: string;
   /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
   generationId: string;
-  sourceMode: GetDocumentVersionContent200SourceMode;
   /**
      * @minimum 0
      * @exclusiveMinimum
@@ -20,10 +18,5 @@ export type GetDocumentVersionContent200 = {
   schemaVersion: number;
   /** @minimum 0 */
   durableSeq: number;
-  /**
-     * @minimum 0
-     * @exclusiveMinimum
-     */
-  snapshotRevision: number | null;
   content?: DocumentContent;
 };

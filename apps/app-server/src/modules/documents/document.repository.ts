@@ -17,7 +17,9 @@ import {
 import type { Database } from "../../../database/index.js";
 import type { DocumentTag } from "./document.schema.js";
 import { DomainError } from "../../shared/domain-error.js";
+import type { DocumentWriteTransaction } from "../collaboration/owner.js";
 import { ensureRootCatalog } from "./catalog.repository.js";
+import { requireWorkspaceOrganizer } from "./workspace-access.js";
 import {
   assetReferences,
   assets,
@@ -29,9 +31,6 @@ import {
   documentFavorites,
   documentGenerationCheckpoints,
   documentGenerations,
-  documentJsonAssetReferences,
-  documentJsonSnapshots,
-  documentJsonVersionSnapshots,
   documentMigrationSnapshots,
   documentOutbox,
   documentProjectionSnapshots,
@@ -119,23 +118,8 @@ export function summarizeDocumentContent(content: DocumentContent): ProjectionSu
   return { blockCount, textLength, assetCount };
 }
 
-function hashDocumentContent(content: DocumentContent): string {
+export function hashDocumentContent(content: DocumentContent): string {
   return createHash("sha256").update(JSON.stringify(content)).digest("hex");
-}
-
-export function hashStandardDocumentContent(content: DocumentContent): string {
-  const canonicalize = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(canonicalize);
-    if (typeof value !== "object" || value === null) return value;
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-        .map(([key, child]) => [key, canonicalize(child)]),
-    );
-  };
-  return createHash("sha256")
-    .update(JSON.stringify(canonicalize(content)))
-    .digest("hex");
 }
 
 function stableJsonStringify(value: unknown): string {
@@ -226,39 +210,7 @@ async function insertMigrationSnapshots(
 
 type ProjectionOutboxExecutor = Pick<Database, "insert" | "update">;
 
-async function replaceStandardGeneration(
-  executor: ProjectionOutboxExecutor,
-  input: {
-    documentId: string;
-    previousGenerationId: string;
-    schemaVersion: number;
-    extensions: ActiveDocument["extensions"];
-  },
-): Promise<string> {
-  // Versions reference their original generation; its schema metadata must remain immutable.
-  await executor
-    .update(documentGenerations)
-    .set({ status: "retired" })
-    .where(
-      and(
-        eq(documentGenerations.documentId, input.documentId),
-        eq(documentGenerations.id, input.previousGenerationId),
-        eq(documentGenerations.status, "active"),
-      ),
-    );
-  const generationId = `gen_${randomUUID()}`;
-  await executor.insert(documentGenerations).values({
-    id: generationId,
-    documentId: input.documentId,
-    schemaVersion: input.schemaVersion,
-    extensions: input.extensions,
-    durableSeq: 0,
-    status: "active",
-  });
-  return generationId;
-}
-
-async function insertProjectionOutbox(
+export async function insertProjectionOutbox(
   executor: ProjectionOutboxExecutor,
   input: {
     tenantId: string;
@@ -321,11 +273,6 @@ function parseDocumentVersionKind(kind: string): DocumentVersion["kind"] {
   throw new Error("Unsupported document version kind");
 }
 
-function parseDocumentMode(mode: string): "standard" | "collaborative" {
-  if (mode === "standard" || mode === "collaborative") return mode;
-  throw new Error("Unsupported document mode");
-}
-
 export type ActiveDocument = {
   id: string;
   tenantId: string;
@@ -335,7 +282,6 @@ export type ActiveDocument = {
   position?: number;
   icon?: string | null;
   tags?: DocumentTag[];
-  mode?: "standard" | "collaborative";
   createdBy: string;
   schemaVersion: number;
   extensions: Array<{ name: string; version: string; required: boolean }>;
@@ -377,8 +323,7 @@ function parseStoredActiveDocument(value: Record<string, unknown>): ActiveDocume
     typeof value.durableSeq !== "number" ||
     Number.isNaN(createdAt.getTime()) ||
     Number.isNaN(updatedAt.getTime()) ||
-    typeof value.metadataRevision !== "number" ||
-    (value.mode !== undefined && value.mode !== "standard" && value.mode !== "collaborative")
+    typeof value.metadataRevision !== "number"
   ) {
     throw new Error("Stored document creation response is invalid");
   }
@@ -391,7 +336,6 @@ function parseStoredActiveDocument(value: Record<string, unknown>): ActiveDocume
     position: typeof value.position === "number" ? value.position : 0,
     icon: typeof value.icon === "string" ? value.icon : null,
     tags: Array.isArray(value.tags) ? (value.tags as NonNullable<ActiveDocument["tags"]>) : [],
-    ...(value.mode ? { mode: value.mode } : {}),
     createdBy: value.createdBy,
     schemaVersion: value.schemaVersion,
     extensions: value.extensions as ActiveDocument["extensions"],
@@ -409,8 +353,6 @@ function parseStoredDocumentVersion(value: Record<string, unknown>): DocumentVer
     typeof value.id !== "string" ||
     typeof value.documentId !== "string" ||
     typeof value.generationId !== "string" ||
-    (value.sourceMode !== "standard" && value.sourceMode !== "collaborative") ||
-    (value.snapshotRevision !== null && typeof value.snapshotRevision !== "number") ||
     typeof value.name !== "string" ||
     (value.kind !== "named" && value.kind !== "automatic") ||
     typeof value.durableSeq !== "number" ||
@@ -423,8 +365,6 @@ function parseStoredDocumentVersion(value: Record<string, unknown>): DocumentVer
     id: value.id,
     documentId: value.documentId,
     generationId: value.generationId,
-    sourceMode: value.sourceMode,
-    snapshotRevision: value.snapshotRevision,
     name: value.name,
     kind: value.kind,
     durableSeq: value.durableSeq,
@@ -592,7 +532,6 @@ export type DocumentLifecycleResult =
 export type DocumentListItem = ActiveDocument & {
   isFavorite: boolean;
   deletedAt: Date | null;
-  snapshotRevision: number | null;
   workspaceName: string;
   excerpt: string;
 };
@@ -600,8 +539,6 @@ export type DocumentVersion = {
   id: string;
   documentId: string;
   generationId: string;
-  sourceMode: "standard" | "collaborative";
-  snapshotRevision: number | null;
   name: string;
   kind: "named" | "automatic";
   durableSeq: number;
@@ -645,11 +582,6 @@ export type VersionCheckpointInput = {
   versionId: string;
   durableSeq: number;
   stateBytes: Uint8Array;
-};
-
-export type StandardContentSnapshot = {
-  snapshotRevision: number;
-  content: DocumentContent;
 };
 
 export type AclChangeResult =
@@ -1014,7 +946,6 @@ export class DocumentRepository {
     requestId?: string,
     maxDocumentsPerTenant = 10_000,
     initialUpdate?: { updateHash: string; updateBytes: Uint8Array; content: DocumentContent },
-    mode: "standard" | "collaborative" = "collaborative",
     idempotency?: DocumentIdempotency,
     migrationReport?: ContentMigrationReport,
     migrationPersistence?: {
@@ -1045,7 +976,13 @@ export class DocumentRepository {
       );
       await tx
         .insert(workspaces)
-        .values({ tenantId, id: "ws_default", name: "团队知识库", createdBy: "system" })
+        .values({
+          tenantId,
+          id: "ws_default",
+          name: "团队知识库",
+          kind: "team",
+          createdBy: "system",
+        })
         .onConflictDoNothing();
       const [workspace] = await tx
         .select({ id: workspaces.id })
@@ -1053,6 +990,7 @@ export class DocumentRepository {
         .where(and(eq(workspaces.tenantId, tenantId), eq(workspaces.id, location.workspaceId)))
         .limit(1);
       if (!workspace) throw new DomainError("NOT_FOUND", "Workspace not found");
+      await requireWorkspaceOrganizer(tx, { tenantId, identityId: ownerId }, location.workspaceId);
       const catalogId =
         location.catalogId ?? (await ensureRootCatalog(tx, tenantId, location.workspaceId));
       if (location.catalogId) {
@@ -1097,7 +1035,6 @@ export class DocumentRepository {
           tenantId,
           title,
           createdBy: ownerId,
-          mode,
           workspaceId: location.workspaceId,
           catalogId,
           position: lastPosition?.value ?? 0,
@@ -1167,18 +1104,6 @@ export class DocumentRepository {
         });
       }
 
-      if (mode === "standard") {
-        const summary = summarizeDocumentContent(emptyDocumentContent);
-        await tx.insert(documentJsonSnapshots).values({
-          tenantId,
-          documentId,
-          snapshotRevision: 1,
-          content: emptyDocumentContent,
-          contentHash: hashStandardDocumentContent(emptyDocumentContent),
-          ...summary,
-        });
-      }
-
       const createdDocument: ActiveDocument = {
         id: document.id,
         tenantId: document.tenantId,
@@ -1188,7 +1113,6 @@ export class DocumentRepository {
         position: document.position,
         icon: document.icon,
         tags: document.tags,
-        mode,
         createdBy: document.createdBy,
         schemaVersion: generation.schemaVersion,
         extensions: generation.extensions,
@@ -1214,7 +1138,6 @@ export class DocumentRepository {
     tenantId: string;
     identityId: string;
     templateId: string;
-    expectedSourceSnapshotRevision?: number;
     expectedGenerationId: string;
     expectedDurableSeq: number;
     title: string;
@@ -1250,7 +1173,6 @@ export class DocumentRepository {
           id: documents.id,
           tenantId: documents.tenantId,
           createdBy: documents.createdBy,
-          mode: documents.mode,
         })
         .from(documents)
         .where(
@@ -1263,24 +1185,6 @@ export class DocumentRepository {
         .for("update")
         .limit(1);
       if (!template) return { status: "not-found" };
-
-      if (input.expectedSourceSnapshotRevision !== undefined) {
-        if (template.mode !== "standard") return { status: "conflict" };
-        const [snapshot] = await tx
-          .select({ snapshotRevision: documentJsonSnapshots.snapshotRevision })
-          .from(documentJsonSnapshots)
-          .where(
-            and(
-              eq(documentJsonSnapshots.tenantId, input.tenantId),
-              eq(documentJsonSnapshots.documentId, input.templateId),
-            ),
-          )
-          .for("update")
-          .limit(1);
-        if (snapshot?.snapshotRevision !== input.expectedSourceSnapshotRevision) {
-          return { status: "conflict" };
-        }
-      }
 
       if (template.createdBy !== input.identityId) {
         const grants = await tx
@@ -1418,7 +1322,6 @@ export class DocumentRepository {
         position: document.position,
         icon: document.icon,
         tags: document.tags,
-        mode: "collaborative",
         createdBy: document.createdBy,
         schemaVersion: copiedGeneration.schemaVersion,
         extensions: copiedGeneration.extensions,
@@ -1498,7 +1401,7 @@ export class DocumentRepository {
         when 'horizontalRule' then value#>>'{attrs,label}'
         when 'statusTag' then case value#>>'{attrs,status}' ${statusLabels} end
       end, ' ')
-      from jsonb_path_query(case when ${documents.mode} = 'standard' then ${documentJsonSnapshots.content} else ${documentProjectionSnapshots.content} end,
+      from jsonb_path_query(${documentProjectionSnapshots.content},
         'strict $.** ? (@.type() == "object" && (@.type == "text" || @.type == "horizontalRule" || @.type == "statusTag"))') as value), ''), 160)`;
     const rows = await this.db
       .select({
@@ -1511,14 +1414,12 @@ export class DocumentRepository {
         position: documents.position,
         icon: documents.icon,
         tags: documents.tags,
-        mode: documents.mode,
         createdBy: documents.createdBy,
         excerpt,
         schemaVersion: documentGenerations.schemaVersion,
         extensions: documentGenerations.extensions,
         generationId: documentGenerations.id,
         durableSeq: documentGenerations.durableSeq,
-        snapshotRevision: documentJsonSnapshots.snapshotRevision,
         createdAt: documents.createdAt,
         updatedAt: documents.updatedAt,
         deletedAt: documents.deletedAt,
@@ -1546,14 +1447,6 @@ export class DocumentRepository {
         ),
       )
       .leftJoin(
-        documentJsonSnapshots,
-        and(
-          eq(documentJsonSnapshots.tenantId, documents.tenantId),
-          eq(documentJsonSnapshots.documentId, documents.id),
-          eq(documents.mode, "standard"),
-        ),
-      )
-      .leftJoin(
         documentProjectionSnapshots,
         and(
           eq(documentProjectionSnapshots.tenantId, documents.tenantId),
@@ -1578,7 +1471,6 @@ export class DocumentRepository {
       hasMore,
       items: rows.slice(0, input.limit).map((row) => ({
         ...row,
-        mode: parseDocumentMode(row.mode),
         isFavorite: row.isFavorite,
       })),
     };
@@ -1642,7 +1534,6 @@ export class DocumentRepository {
           id: documents.id,
           tenantId: documents.tenantId,
           createdBy: documents.createdBy,
-          mode: documents.mode,
           createdAt: documents.createdAt,
           metadataRevision: documents.metadataRevision,
         })
@@ -1728,7 +1619,6 @@ export class DocumentRepository {
         position: updatedDocument.position,
         icon: updatedDocument.icon,
         tags: updatedDocument.tags,
-        mode: parseDocumentMode(updatedDocument.mode),
         createdBy: updatedDocument.createdBy,
         schemaVersion: generation.schemaVersion,
         extensions: generation.extensions,
@@ -1938,150 +1828,6 @@ export class DocumentRepository {
       });
       const createdVersion: DocumentVersion = {
         ...version,
-        sourceMode: "collaborative",
-        snapshotRevision: null,
-        kind: parseDocumentVersionKind(version.kind),
-      };
-      if (input.idempotency) {
-        await saveIdempotencyReplay(tx, {
-          tenantId: input.tenantId,
-          subjectId: input.identityId,
-          idempotency: input.idempotency,
-          response: createdVersion,
-        });
-      }
-      return {
-        status: "created",
-        version: createdVersion,
-      };
-    });
-  }
-
-  async createStandardSnapshotVersion(input: {
-    tenantId: string;
-    documentId: string;
-    identityId: string;
-    name: string;
-    expectedSnapshotRevision: number;
-    requestId?: string;
-    idempotency?: DocumentIdempotency;
-  }): Promise<VersionMutationResult> {
-    return this.db.transaction(async (tx) => {
-      const [document] = await tx
-        .select({ createdBy: documents.createdBy, mode: documents.mode })
-        .from(documents)
-        .where(
-          and(
-            eq(documents.id, input.documentId),
-            eq(documents.tenantId, input.tenantId),
-            eq(documents.status, "active"),
-          ),
-        )
-        .for("update")
-        .limit(1);
-      if (!document) return { status: "not-found" };
-      if (document.createdBy !== input.identityId) {
-        const [writeGrant] = await tx
-          .select({ action: documentAcl.action })
-          .from(documentAcl)
-          .where(
-            and(
-              eq(documentAcl.tenantId, input.tenantId),
-              eq(documentAcl.documentId, input.documentId),
-              eq(documentAcl.identityId, input.identityId),
-              eq(documentAcl.action, "write"),
-            ),
-          )
-          .limit(1);
-        if (!writeGrant) return { status: "not-found" };
-      }
-      if (input.idempotency) {
-        const replay = await loadVersionIdempotencyReplay(tx, {
-          tenantId: input.tenantId,
-          subjectId: input.identityId,
-          idempotency: input.idempotency,
-        });
-        if (replay) return { status: "replayed", version: replay };
-      }
-      if (document.mode !== "standard") return { status: "conflict" };
-      const [generation] = await tx
-        .select({ id: documentGenerations.id, durableSeq: documentGenerations.durableSeq })
-        .from(documentGenerations)
-        .where(
-          and(
-            eq(documentGenerations.documentId, input.documentId),
-            eq(documentGenerations.status, "active"),
-          ),
-        )
-        .for("update")
-        .limit(1);
-      if (!generation) return { status: "conflict" };
-      const [snapshot] = await tx
-        .select()
-        .from(documentJsonSnapshots)
-        .where(
-          and(
-            eq(documentJsonSnapshots.tenantId, input.tenantId),
-            eq(documentJsonSnapshots.documentId, input.documentId),
-          ),
-        )
-        .for("update")
-        .limit(1);
-      if (
-        !snapshot ||
-        snapshot.snapshotRevision !== input.expectedSnapshotRevision ||
-        hashStandardDocumentContent(snapshot.content) !== snapshot.contentHash
-      ) {
-        return { status: "conflict" };
-      }
-      const versionId = `ver_${randomUUID()}`;
-      const [version] = await tx
-        .insert(documentVersions)
-        .values({
-          id: versionId,
-          tenantId: input.tenantId,
-          documentId: input.documentId,
-          generationId: generation.id,
-          name: input.name,
-          kind: "named",
-          durableSeq: generation.durableSeq,
-          createdBy: input.identityId,
-        })
-        .onConflictDoNothing()
-        .returning();
-      if (!version) return { status: "conflict" };
-      await tx.insert(documentJsonVersionSnapshots).values({
-        versionId,
-        tenantId: input.tenantId,
-        documentId: input.documentId,
-        snapshotRevision: snapshot.snapshotRevision,
-        content: snapshot.content,
-        contentHash: snapshot.contentHash,
-      });
-      await tx.execute(sql`
-        INSERT INTO document_json_version_asset_references
-          (version_id, tenant_id, document_id, asset_id, block_id)
-        SELECT ${versionId}, tenant_id, document_id, asset_id, block_id
-        FROM document_json_asset_references
-        WHERE tenant_id = ${input.tenantId} AND document_id = ${input.documentId}
-      `);
-      await insertDocumentAudit(tx, {
-        tenantId: input.tenantId,
-        actorIdentityId: input.identityId,
-        action: "document.version-created",
-        resourceId: input.documentId,
-        generationId: generation.id,
-        requestId: input.requestId,
-        details: {
-          versionId,
-          sourceMode: "standard",
-          snapshotRevision: snapshot.snapshotRevision,
-        },
-      });
-      const createdVersion: DocumentVersion = {
-        ...version,
-        sourceMode: "standard",
-        snapshotRevision: snapshot.snapshotRevision,
         kind: parseDocumentVersionKind(version.kind),
       };
       if (input.idempotency) {
@@ -2105,7 +1851,6 @@ export class DocumentRepository {
         id: documentVersions.id,
         documentId: documentVersions.documentId,
         generationId: documentVersions.generationId,
-        snapshotRevision: documentJsonVersionSnapshots.snapshotRevision,
         name: documentVersions.name,
         kind: documentVersions.kind,
         durableSeq: documentVersions.durableSeq,
@@ -2113,17 +1858,12 @@ export class DocumentRepository {
         createdAt: documentVersions.createdAt,
       })
       .from(documentVersions)
-      .leftJoin(
-        documentJsonVersionSnapshots,
-        eq(documentJsonVersionSnapshots.versionId, documentVersions.id),
-      )
       .where(
         and(eq(documentVersions.tenantId, tenantId), eq(documentVersions.documentId, documentId)),
       )
       .orderBy(desc(documentVersions.createdAt), desc(documentVersions.id));
     return versions.map((version) => ({
       ...version,
-      sourceMode: version.snapshotRevision === null ? "collaborative" : "standard",
       kind: parseDocumentVersionKind(version.kind),
     }));
   }
@@ -2138,7 +1878,6 @@ export class DocumentRepository {
         id: documentVersions.id,
         documentId: documentVersions.documentId,
         generationId: documentVersions.generationId,
-        snapshotRevision: documentJsonVersionSnapshots.snapshotRevision,
         name: documentVersions.name,
         kind: documentVersions.kind,
         durableSeq: documentVersions.durableSeq,
@@ -2146,10 +1885,6 @@ export class DocumentRepository {
         createdAt: documentVersions.createdAt,
       })
       .from(documentVersions)
-      .leftJoin(
-        documentJsonVersionSnapshots,
-        eq(documentJsonVersionSnapshots.versionId, documentVersions.id),
-      )
       .where(
         and(
           eq(documentVersions.tenantId, tenantId),
@@ -2161,35 +1896,9 @@ export class DocumentRepository {
     return version
       ? {
           ...version,
-          sourceMode: version.snapshotRevision === null ? "collaborative" : "standard",
           kind: parseDocumentVersionKind(version.kind),
         }
       : null;
-  }
-
-  async findJsonVersionSnapshot(
-    tenantId: string,
-    documentId: string,
-    versionId: string,
-  ): Promise<{ snapshotRevision: number; content: DocumentContent } | null> {
-    const [snapshot] = await this.db
-      .select({
-        snapshotRevision: documentJsonVersionSnapshots.snapshotRevision,
-        content: documentJsonVersionSnapshots.content,
-        contentHash: documentJsonVersionSnapshots.contentHash,
-      })
-      .from(documentJsonVersionSnapshots)
-      .where(
-        and(
-          eq(documentJsonVersionSnapshots.tenantId, tenantId),
-          eq(documentJsonVersionSnapshots.documentId, documentId),
-          eq(documentJsonVersionSnapshots.versionId, versionId),
-        ),
-      )
-      .limit(1);
-    if (!snapshot || hashStandardDocumentContent(snapshot.content) !== snapshot.contentHash)
-      return null;
-    return { snapshotRevision: snapshot.snapshotRevision, content: snapshot.content };
   }
 
   async findGenerationSchemaVersion(
@@ -2234,7 +1943,6 @@ export class DocumentRepository {
           tags: documents.tags,
           createdBy: documents.createdBy,
           status: documents.status,
-          mode: documents.mode,
           metadataRevision: documents.metadataRevision,
           createdAt: documents.createdAt,
         })
@@ -2243,7 +1951,6 @@ export class DocumentRepository {
         .for("update")
         .limit(1);
       if (!document || document.status !== "active") return { status: "not-found" };
-      if (document.mode !== "collaborative") return { status: "conflict" };
       if (document.createdBy !== input.identityId) {
         const [writeGrant] = await tx
           .select({ action: documentAcl.action })
@@ -2301,12 +2008,6 @@ export class DocumentRepository {
       ) {
         return { status: "conflict" };
       }
-      const [jsonVersionSnapshot] = await tx
-        .select({ versionId: documentJsonVersionSnapshots.versionId })
-        .from(documentJsonVersionSnapshots)
-        .where(eq(documentJsonVersionSnapshots.versionId, version.id))
-        .limit(1);
-      const isStandardSnapshotVersion = Boolean(jsonVersionSnapshot);
       const [sourceGeneration] = await tx
         .select({
           schemaVersion: documentGenerations.schemaVersion,
@@ -2325,7 +2026,7 @@ export class DocumentRepository {
         return { status: "conflict" };
 
       const nextGenerationId = `gen_${randomUUID()}`;
-      const targetDurableSeq = isStandardSnapshotVersion ? 1 : version.durableSeq;
+      const targetDurableSeq = version.durableSeq;
       await tx
         .update(documentGenerations)
         .set({ status: "retired" })
@@ -2342,7 +2043,7 @@ export class DocumentRepository {
         extensions: sourceGeneration.extensions,
         durableSeq: targetDurableSeq,
       });
-      if (!isStandardSnapshotVersion && version.durableSeq === 0) {
+      if (version.durableSeq === 0) {
         await insertEmptyProjectionSnapshot(tx, {
           tenantId: input.tenantId,
           documentId: input.documentId,
@@ -2375,15 +2076,7 @@ export class DocumentRepository {
           content: input.content,
         });
       }
-      if (isStandardSnapshotVersion) {
-        await tx.execute(sql`
-          INSERT INTO asset_references
-            (tenant_id, document_id, generation_id, durable_seq, asset_id, block_id)
-          SELECT tenant_id, document_id, ${nextGenerationId}, ${targetDurableSeq}, asset_id, block_id
-          FROM document_json_version_asset_references
-          WHERE version_id = ${version.id}
-        `);
-      } else {
+      if (targetDurableSeq > 0) {
         await tx.execute(sql`
           INSERT INTO asset_references
             (tenant_id, document_id, generation_id, durable_seq, asset_id, block_id)
@@ -2451,442 +2144,11 @@ export class DocumentRepository {
     });
   }
 
-  async restoreStandardSnapshotVersion(input: {
-    tenantId: string;
-    documentId: string;
-    versionId: string;
-    identityId: string;
-    expectedSnapshotRevision: number;
-    requestId?: string;
-    content: DocumentContent;
-    assetReferences: readonly DocumentAssetReference[];
-    idempotency?: DocumentIdempotency;
-  }): Promise<VersionMutationResult> {
-    return this.db.transaction(async (tx) => {
-      const [document] = await tx
-        .select({
-          id: documents.id,
-          tenantId: documents.tenantId,
-          title: documents.title,
-          workspaceId: documents.workspaceId,
-          catalogId: documents.catalogId,
-          position: documents.position,
-          icon: documents.icon,
-          tags: documents.tags,
-          createdBy: documents.createdBy,
-          status: documents.status,
-          mode: documents.mode,
-          metadataRevision: documents.metadataRevision,
-          createdAt: documents.createdAt,
-        })
-        .from(documents)
-        .where(and(eq(documents.id, input.documentId), eq(documents.tenantId, input.tenantId)))
-        .for("update")
-        .limit(1);
-      if (!document || document.status !== "active") return { status: "not-found" };
-      if (document.mode !== "standard") return { status: "conflict" };
-      if (document.createdBy !== input.identityId) {
-        const [writeGrant] = await tx
-          .select({ action: documentAcl.action })
-          .from(documentAcl)
-          .where(
-            and(
-              eq(documentAcl.tenantId, input.tenantId),
-              eq(documentAcl.documentId, input.documentId),
-              eq(documentAcl.identityId, input.identityId),
-              eq(documentAcl.action, "write"),
-            ),
-          )
-          .limit(1);
-        if (!writeGrant) return { status: "not-found" };
-      }
-      const [version] = await tx
-        .select({
-          id: documentVersions.id,
-          schemaVersion: documentGenerations.schemaVersion,
-          extensions: documentGenerations.extensions,
-        })
-        .from(documentVersions)
-        .innerJoin(documentGenerations, eq(documentGenerations.id, documentVersions.generationId))
-        .where(
-          and(
-            eq(documentVersions.tenantId, input.tenantId),
-            eq(documentVersions.documentId, input.documentId),
-            eq(documentVersions.id, input.versionId),
-          ),
-        )
-        .limit(1);
-      if (!version) return { status: "not-found" };
-      if (input.idempotency) {
-        const replay = await loadVersionRestoreIdempotencyReplay(tx, {
-          tenantId: input.tenantId,
-          subjectId: input.identityId,
-          idempotency: input.idempotency,
-        });
-        if (replay) return { status: "restore-replayed", ...replay };
-      }
-      const [generation] = await tx
-        .select({
-          id: documentGenerations.id,
-          schemaVersion: documentGenerations.schemaVersion,
-          extensions: documentGenerations.extensions,
-          durableSeq: documentGenerations.durableSeq,
-        })
-        .from(documentGenerations)
-        .where(
-          and(
-            eq(documentGenerations.documentId, input.documentId),
-            eq(documentGenerations.status, "active"),
-          ),
-        )
-        .for("update")
-        .limit(1);
-      if (!generation) return { status: "conflict" };
-      const [snapshot] = await tx
-        .select({ snapshotRevision: documentJsonSnapshots.snapshotRevision })
-        .from(documentJsonSnapshots)
-        .where(
-          and(
-            eq(documentJsonSnapshots.tenantId, input.tenantId),
-            eq(documentJsonSnapshots.documentId, input.documentId),
-          ),
-        )
-        .for("update")
-        .limit(1);
-      if (!snapshot || snapshot.snapshotRevision !== input.expectedSnapshotRevision) {
-        return { status: "conflict" };
-      }
-
-      const referencedAssetIds = [...new Set(input.assetReferences.map(({ assetId }) => assetId))];
-      if (referencedAssetIds.length > 0) {
-        const readyAssets = await tx
-          .select({ id: assets.id, mediaType: assets.mediaType })
-          .from(assets)
-          .where(
-            and(
-              eq(assets.tenantId, input.tenantId),
-              eq(assets.documentId, input.documentId),
-              eq(assets.status, "ready"),
-              inArray(assets.id, referencedAssetIds),
-            ),
-          );
-        if (
-          !assetReferencesMatchReadyAssets(input.assetReferences, readyAssets) ||
-          readyAssets.length !== referencedAssetIds.length
-        ) {
-          return { status: "conflict" };
-        }
-      }
-
-      const generationId = await replaceStandardGeneration(tx, {
-        documentId: input.documentId,
-        previousGenerationId: generation.id,
-        schemaVersion: version.schemaVersion,
-        extensions: version.extensions,
-      });
-      const snapshotRevision = snapshot.snapshotRevision + 1;
-      const contentHash = hashStandardDocumentContent(input.content);
-      const summary = summarizeDocumentContent(input.content);
-      const updatedAt = new Date();
-      await tx
-        .update(documentJsonSnapshots)
-        .set({ snapshotRevision, content: input.content, contentHash, ...summary, updatedAt })
-        .where(
-          and(
-            eq(documentJsonSnapshots.tenantId, input.tenantId),
-            eq(documentJsonSnapshots.documentId, input.documentId),
-          ),
-        );
-      await tx
-        .delete(documentJsonAssetReferences)
-        .where(
-          and(
-            eq(documentJsonAssetReferences.tenantId, input.tenantId),
-            eq(documentJsonAssetReferences.documentId, input.documentId),
-          ),
-        );
-      if (input.assetReferences.length > 0) {
-        await tx.insert(documentJsonAssetReferences).values(
-          input.assetReferences.map(({ assetId, blockId }) => ({
-            tenantId: input.tenantId,
-            documentId: input.documentId,
-            assetId,
-            blockId,
-          })),
-        );
-      }
-      await tx
-        .update(documents)
-        .set({ updatedAt, metadataRevision: document.metadataRevision + 1 })
-        .where(eq(documents.id, input.documentId));
-      await insertDocumentAudit(tx, {
-        tenantId: input.tenantId,
-        actorIdentityId: input.identityId,
-        action: "document.version-restored",
-        resourceId: input.documentId,
-        generationId,
-        requestId: input.requestId,
-        details: { versionId: version.id, sourceMode: "standard", snapshotRevision },
-      });
-      const restored: ActiveDocument = {
-        id: document.id,
-        tenantId: document.tenantId,
-        title: document.title,
-        workspaceId: document.workspaceId,
-        catalogId: document.catalogId,
-        position: document.position,
-        icon: document.icon,
-        tags: document.tags,
-        createdBy: document.createdBy,
-        mode: "standard",
-        schemaVersion: version.schemaVersion,
-        extensions: version.extensions,
-        generationId,
-        durableSeq: 0,
-        createdAt: document.createdAt,
-        updatedAt,
-        metadataRevision: document.metadataRevision + 1,
-      };
-      if (input.idempotency) {
-        await saveIdempotencyReplay(tx, {
-          tenantId: input.tenantId,
-          subjectId: input.identityId,
-          idempotency: input.idempotency,
-          response: { previousGenerationId: generation.id, document: restored },
-          responseStatus: 200,
-        });
-      }
-      return { status: "restored", previousGenerationId: generation.id, document: restored };
-    });
-  }
-
-  async switchActiveGeneration(input: {
-    tenantId: string;
-    documentId: string;
-    identityId: string;
-    expectedGenerationId: string;
-    expectedSchemaVersion: number;
-    expectedDurableSeq: number;
-    targetSchemaVersion: number;
-    extensions: Array<{ name: string; version: string; required: boolean }>;
-    updateHash: string;
-    updateBytes: Uint8Array;
-    content: DocumentContent;
-    migrationReport?: ContentMigrationReport;
-    migrationPersistence?: {
-      migrationId: string;
-      stepSnapshots: readonly ContentMigrationStepSnapshot[];
-    };
-    requestId?: string;
-  }): Promise<GenerationSwitchResult> {
-    return this.db.transaction(async (tx) => {
-      const [document] = await tx
-        .select({
-          id: documents.id,
-          tenantId: documents.tenantId,
-          title: documents.title,
-          workspaceId: documents.workspaceId,
-          catalogId: documents.catalogId,
-          position: documents.position,
-          icon: documents.icon,
-          tags: documents.tags,
-          createdBy: documents.createdBy,
-          status: documents.status,
-          metadataRevision: documents.metadataRevision,
-          createdAt: documents.createdAt,
-        })
-        .from(documents)
-        .where(and(eq(documents.id, input.documentId), eq(documents.tenantId, input.tenantId)))
-        .for("update")
-        .limit(1);
-      if (!document || document.status !== "active") return { status: "not-found" };
-      if (document.createdBy !== input.identityId) {
-        const [writeGrant] = await tx
-          .select({ action: documentAcl.action })
-          .from(documentAcl)
-          .where(
-            and(
-              eq(documentAcl.tenantId, input.tenantId),
-              eq(documentAcl.documentId, input.documentId),
-              eq(documentAcl.identityId, input.identityId),
-              eq(documentAcl.action, "write"),
-            ),
-          )
-          .limit(1);
-        if (!writeGrant) return { status: "not-found" };
-      }
-
-      const [generation] = await tx
-        .select({
-          id: documentGenerations.id,
-          schemaVersion: documentGenerations.schemaVersion,
-          extensions: documentGenerations.extensions,
-          durableSeq: documentGenerations.durableSeq,
-        })
-        .from(documentGenerations)
-        .where(
-          and(
-            eq(documentGenerations.documentId, input.documentId),
-            eq(documentGenerations.status, "active"),
-          ),
-        )
-        .for("update")
-        .limit(1);
-      if (
-        !generation ||
-        generation.id !== input.expectedGenerationId ||
-        generation.schemaVersion !== input.expectedSchemaVersion ||
-        generation.durableSeq !== input.expectedDurableSeq ||
-        input.targetSchemaVersion < generation.schemaVersion
-      ) {
-        return { status: "conflict" };
-      }
-
-      const nextGenerationId = `gen_${randomUUID()}`;
-      const durableSeq = 1;
-      const updatedAt = new Date();
-      await tx
-        .update(documentGenerations)
-        .set({ status: "retired" })
-        .where(
-          and(
-            eq(documentGenerations.documentId, input.documentId),
-            eq(documentGenerations.id, generation.id),
-            eq(documentGenerations.status, "active"),
-          ),
-        );
-      await tx.insert(documentGenerations).values({
-        id: nextGenerationId,
-        documentId: input.documentId,
-        schemaVersion: input.targetSchemaVersion,
-        extensions: input.extensions,
-        durableSeq,
-        status: "active",
-      });
-      await tx.insert(collaborationUpdates).values({
-        documentId: input.documentId,
-        generationId: nextGenerationId,
-        updateHash: input.updateHash,
-        sourceUpdateHash: input.updateHash,
-        updateBytes: Buffer.from(input.updateBytes),
-        durableSeq,
-        createdBy: input.identityId,
-      });
-      await insertProjectionOutbox(tx, {
-        tenantId: input.tenantId,
-        documentId: input.documentId,
-        generationId: nextGenerationId,
-        durableSeq,
-        updateHash: input.updateHash,
-        contentChanged: true,
-        content: input.content,
-      });
-      await insertDocumentAudit(tx, {
-        tenantId: input.tenantId,
-        actorIdentityId: input.identityId,
-        action:
-          input.targetSchemaVersion === generation.schemaVersion
-            ? "document.block-ids-repaired"
-            : "document.schema-migrated",
-        resourceId: input.documentId,
-        generationId: nextGenerationId,
-        requestId: input.requestId,
-        details: {
-          previousGenerationId: generation.id,
-          fromSchemaVersion: generation.schemaVersion,
-          toSchemaVersion: input.targetSchemaVersion,
-          ...(input.migrationReport ? { migration: input.migrationReport } : {}),
-          ...(input.migrationPersistence
-            ? { migrationId: input.migrationPersistence.migrationId }
-            : {}),
-        },
-      });
-      await insertMigrationSnapshots(tx, {
-        tenantId: input.tenantId,
-        documentId: input.documentId,
-        ...input.migrationPersistence,
-      });
-      await tx
-        .update(documents)
-        .set({ updatedAt, metadataRevision: document.metadataRevision + 1 })
-        .where(eq(documents.id, input.documentId));
-
-      return {
-        status: input.targetSchemaVersion === generation.schemaVersion ? "repaired" : "migrated",
-        previousGenerationId: generation.id,
-        document: {
-          id: document.id,
-          tenantId: document.tenantId,
-          title: document.title,
-          workspaceId: document.workspaceId,
-          catalogId: document.catalogId,
-          position: document.position,
-          icon: document.icon,
-          tags: document.tags,
-          createdBy: document.createdBy,
-          schemaVersion: input.targetSchemaVersion,
-          extensions: input.extensions,
-          generationId: nextGenerationId,
-          durableSeq,
-          createdAt: document.createdAt,
-          updatedAt,
-          metadataRevision: document.metadataRevision + 1,
-        },
-      };
-    });
-  }
-
-  async findActiveForAction(
-    documentId: string,
-    tenantId: string,
-    identityId: string,
-    action: DocumentPermissionAction,
-  ): Promise<ActiveDocument | null> {
-    const row = await this.findActiveRow(documentId, tenantId);
-    if (!row) return null;
-    if (row.createdBy === identityId) return row;
-
-    const grants = await this.db
-      .select({ action: documentAcl.action })
-      .from(documentAcl)
-      .where(
-        and(
-          eq(documentAcl.tenantId, tenantId),
-          eq(documentAcl.documentId, documentId),
-          eq(documentAcl.identityId, identityId),
-        ),
-      );
-    return hasDocumentAction(new Set(grants.map((grant) => grant.action)), action) ? row : null;
-  }
-
-  async findStandardContentSnapshot(
-    tenantId: string,
-    documentId: string,
-  ): Promise<StandardContentSnapshot | null> {
-    const [snapshot] = await this.db
-      .select({
-        snapshotRevision: documentJsonSnapshots.snapshotRevision,
-        content: documentJsonSnapshots.content,
-        contentHash: documentJsonSnapshots.contentHash,
-      })
-      .from(documentJsonSnapshots)
-      .where(
-        and(
-          eq(documentJsonSnapshots.tenantId, tenantId),
-          eq(documentJsonSnapshots.documentId, documentId),
-        ),
-      )
-      .limit(1);
-    if (!snapshot || hashStandardDocumentContent(snapshot.content) !== snapshot.contentHash)
-      return null;
-    return { snapshotRevision: snapshot.snapshotRevision, content: snapshot.content };
-  }
-
   async findProjectionContentSnapshot(
     tenantId: string,
     documentId: string,
     generationId: string,
-  ): Promise<(StandardContentSnapshot & { durableSeq: number }) | null> {
+  ): Promise<{ snapshotRevision: number; durableSeq: number; content: DocumentContent } | null> {
     const [snapshot] = await this.db
       .select({
         snapshotRevision: documentProjectionSnapshots.snapshotRevision,
@@ -2910,509 +2172,6 @@ export class DocumentRepository {
     };
   }
 
-  async saveStandardContentSnapshot(input: {
-    tenantId: string;
-    documentId: string;
-    identityId: string;
-    expectedSnapshotRevision: number;
-    expectedGenerationId: string;
-    targetSchemaVersion: number;
-    migrationReport?: ContentMigrationReport;
-    migrationPersistence?: {
-      migrationId: string;
-      stepSnapshots: readonly ContentMigrationStepSnapshot[];
-    };
-    content: DocumentContent;
-    assetReferences: readonly DocumentAssetReference[];
-    requestId?: string;
-  }): Promise<
-    | { status: "not-found" | "not-writable" | "conflict" }
-    | { status: "updated"; snapshotRevision: number; schemaVersion: number }
-  > {
-    return this.db.transaction(async (tx) => {
-      const [document] = await tx
-        .select({ createdBy: documents.createdBy, mode: documents.mode })
-        .from(documents)
-        .where(
-          and(
-            eq(documents.id, input.documentId),
-            eq(documents.tenantId, input.tenantId),
-            eq(documents.status, "active"),
-          ),
-        )
-        .for("update")
-        .limit(1);
-      if (!document) return { status: "not-found" };
-      if (document.mode !== "standard") return { status: "conflict" };
-      if (document.createdBy !== input.identityId) {
-        const [writeGrant] = await tx
-          .select({ action: documentAcl.action })
-          .from(documentAcl)
-          .where(
-            and(
-              eq(documentAcl.tenantId, input.tenantId),
-              eq(documentAcl.documentId, input.documentId),
-              eq(documentAcl.identityId, input.identityId),
-              eq(documentAcl.action, "write"),
-            ),
-          )
-          .limit(1);
-        if (!writeGrant) return { status: "not-found" };
-      }
-
-      const [snapshot] = await tx
-        .select({
-          snapshotRevision: documentJsonSnapshots.snapshotRevision,
-          content: documentJsonSnapshots.content,
-          contentHash: documentJsonSnapshots.contentHash,
-        })
-        .from(documentJsonSnapshots)
-        .where(
-          and(
-            eq(documentJsonSnapshots.tenantId, input.tenantId),
-            eq(documentJsonSnapshots.documentId, input.documentId),
-          ),
-        )
-        .for("update")
-        .limit(1);
-      if (!snapshot) return { status: "conflict" };
-
-      const [generation] = await tx
-        .select({
-          id: documentGenerations.id,
-          durableSeq: documentGenerations.durableSeq,
-          schemaVersion: documentGenerations.schemaVersion,
-          extensions: documentGenerations.extensions,
-        })
-        .from(documentGenerations)
-        .where(
-          and(
-            eq(documentGenerations.documentId, input.documentId),
-            eq(documentGenerations.status, "active"),
-          ),
-        )
-        .for("update")
-        .limit(1);
-      if (!generation) return { status: "conflict" };
-
-      const contentHash = hashStandardDocumentContent(input.content);
-      if (snapshot.snapshotRevision !== input.expectedSnapshotRevision) {
-        const isImmediateRetry =
-          snapshot.snapshotRevision === input.expectedSnapshotRevision + 1 &&
-          snapshot.contentHash === contentHash &&
-          hashStandardDocumentContent(snapshot.content) === snapshot.contentHash;
-        return isImmediateRetry
-          ? {
-              status: "updated",
-              snapshotRevision: snapshot.snapshotRevision,
-              schemaVersion: generation.schemaVersion,
-            }
-          : { status: "conflict" };
-      }
-      if (
-        generation.id !== input.expectedGenerationId ||
-        generation.durableSeq !== 0 ||
-        input.targetSchemaVersion < generation.schemaVersion ||
-        (input.targetSchemaVersion > generation.schemaVersion && !input.migrationReport)
-      ) {
-        return { status: "conflict" };
-      }
-
-      const referencedAssetIds = [...new Set(input.assetReferences.map(({ assetId }) => assetId))];
-      if (referencedAssetIds.length > 0) {
-        const readyAssets = await tx
-          .select({ id: assets.id, mediaType: assets.mediaType })
-          .from(assets)
-          .where(
-            and(
-              eq(assets.tenantId, input.tenantId),
-              eq(assets.documentId, input.documentId),
-              eq(assets.status, "ready"),
-              inArray(assets.id, referencedAssetIds),
-            ),
-          );
-        if (
-          !assetReferencesMatchReadyAssets(input.assetReferences, readyAssets) ||
-          readyAssets.length !== referencedAssetIds.length
-        ) {
-          return { status: "conflict" };
-        }
-      }
-
-      let generationId = generation.id;
-      if (input.targetSchemaVersion > generation.schemaVersion) {
-        generationId = await replaceStandardGeneration(tx, {
-          documentId: input.documentId,
-          previousGenerationId: generation.id,
-          schemaVersion: input.targetSchemaVersion,
-          extensions: generation.extensions,
-        });
-        await insertMigrationSnapshots(tx, {
-          tenantId: input.tenantId,
-          documentId: input.documentId,
-          ...input.migrationPersistence,
-        });
-        await insertDocumentAudit(tx, {
-          tenantId: input.tenantId,
-          actorIdentityId: input.identityId,
-          action: "document.schema-migrated",
-          resourceId: input.documentId,
-          generationId,
-          requestId: input.requestId,
-          details: {
-            sourceMode: "standard",
-            previousGenerationId: generation.id,
-            fromSchemaVersion: generation.schemaVersion,
-            toSchemaVersion: input.targetSchemaVersion,
-            migration: input.migrationReport,
-            migrationId: input.migrationPersistence?.migrationId,
-          },
-        });
-      }
-      const snapshotRevision = snapshot.snapshotRevision + 1;
-      const summary = summarizeDocumentContent(input.content);
-      await tx
-        .update(documentJsonSnapshots)
-        .set({
-          snapshotRevision,
-          content: input.content,
-          contentHash,
-          ...summary,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(documentJsonSnapshots.tenantId, input.tenantId),
-            eq(documentJsonSnapshots.documentId, input.documentId),
-          ),
-        );
-      await tx
-        .delete(documentJsonAssetReferences)
-        .where(
-          and(
-            eq(documentJsonAssetReferences.tenantId, input.tenantId),
-            eq(documentJsonAssetReferences.documentId, input.documentId),
-          ),
-        );
-      if (input.assetReferences.length > 0) {
-        await tx
-          .insert(documentJsonAssetReferences)
-          .values(
-            input.assetReferences.map(({ assetId, blockId }) => ({
-              tenantId: input.tenantId,
-              documentId: input.documentId,
-              assetId,
-              blockId,
-            })),
-          )
-          .onConflictDoNothing();
-      }
-      await tx
-        .update(documents)
-        .set({
-          updatedAt: new Date(),
-          ...(generationId !== generation.id
-            ? { metadataRevision: sql`${documents.metadataRevision} + 1` }
-            : {}),
-        })
-        .where(eq(documents.id, input.documentId));
-      await insertDocumentAudit(tx, {
-        tenantId: input.tenantId,
-        actorIdentityId: input.identityId,
-        action: "document.content-updated",
-        resourceId: input.documentId,
-        requestId: input.requestId,
-        details: {
-          snapshotRevision,
-          blockCount: summary.blockCount,
-          assetCount: summary.assetCount,
-        },
-      });
-      const [lastAutomaticVersion] = await tx
-        .select({
-          intervalElapsed: sql<boolean>`CURRENT_TIMESTAMP - ${documentVersions.createdAt} >= ${AUTOMATIC_VERSION_INTERVAL_MS} * INTERVAL '1 millisecond'`,
-        })
-        .from(documentVersions)
-        .innerJoin(
-          documentJsonVersionSnapshots,
-          eq(documentJsonVersionSnapshots.versionId, documentVersions.id),
-        )
-        .where(
-          and(
-            eq(documentVersions.tenantId, input.tenantId),
-            eq(documentVersions.documentId, input.documentId),
-            eq(documentVersions.kind, "automatic"),
-          ),
-        )
-        .orderBy(desc(documentVersions.createdAt), desc(documentVersions.id))
-        .limit(1);
-      if (!lastAutomaticVersion || lastAutomaticVersion.intervalElapsed) {
-        const versionId = `ver_${randomUUID()}`;
-        await tx.insert(documentVersions).values({
-          id: versionId,
-          tenantId: input.tenantId,
-          documentId: input.documentId,
-          generationId,
-          name: `自动版本 · 快照 · ${snapshotRevision}`,
-          kind: "automatic",
-          durableSeq: generation.durableSeq,
-          createdBy: input.identityId,
-        });
-        await tx.insert(documentJsonVersionSnapshots).values({
-          versionId,
-          tenantId: input.tenantId,
-          documentId: input.documentId,
-          snapshotRevision,
-          content: input.content,
-          contentHash,
-        });
-        await tx.execute(sql`
-          INSERT INTO document_json_version_asset_references
-            (version_id, tenant_id, document_id, asset_id, block_id)
-          SELECT ${versionId}, tenant_id, document_id, asset_id, block_id
-          FROM document_json_asset_references
-          WHERE tenant_id = ${input.tenantId} AND document_id = ${input.documentId}
-        `);
-        const expiredAutomaticVersions = await tx
-          .select({ id: documentVersions.id })
-          .from(documentVersions)
-          .where(
-            and(
-              eq(documentVersions.tenantId, input.tenantId),
-              eq(documentVersions.documentId, input.documentId),
-              eq(documentVersions.kind, "automatic"),
-            ),
-          )
-          .orderBy(desc(documentVersions.createdAt), desc(documentVersions.id))
-          .offset(MAX_AUTOMATIC_VERSIONS_PER_DOCUMENT);
-        if (expiredAutomaticVersions.length > 0) {
-          await tx.delete(documentVersions).where(
-            inArray(
-              documentVersions.id,
-              expiredAutomaticVersions.map(({ id }) => id),
-            ),
-          );
-        }
-      }
-      return { status: "updated", snapshotRevision, schemaVersion: input.targetSchemaVersion };
-    });
-  }
-
-  async enableCollaborationFromStandardSnapshot(input: {
-    tenantId: string;
-    documentId: string;
-    identityId: string;
-    expectedSnapshotRevision: number;
-    updateHash: string;
-    updateBytes: Uint8Array;
-    content: DocumentContent;
-    assetReferences: readonly DocumentAssetReference[];
-    requestId?: string;
-  }): Promise<
-    | { status: "not-found" | "not-writable" | "conflict" }
-    | { status: "enabled"; previousGenerationId: string; document: ActiveDocument }
-  > {
-    return this.db.transaction(async (tx) => {
-      const [document] = await tx
-        .select({
-          id: documents.id,
-          tenantId: documents.tenantId,
-          title: documents.title,
-          workspaceId: documents.workspaceId,
-          catalogId: documents.catalogId,
-          position: documents.position,
-          icon: documents.icon,
-          tags: documents.tags,
-          createdBy: documents.createdBy,
-          mode: documents.mode,
-          status: documents.status,
-          metadataRevision: documents.metadataRevision,
-          createdAt: documents.createdAt,
-          updatedAt: documents.updatedAt,
-        })
-        .from(documents)
-        .where(and(eq(documents.id, input.documentId), eq(documents.tenantId, input.tenantId)))
-        .for("update")
-        .limit(1);
-      if (!document || document.status !== "active") return { status: "not-found" };
-      if (document.mode !== "standard") return { status: "conflict" };
-      if (document.createdBy !== input.identityId) {
-        const [writeGrant] = await tx
-          .select({ action: documentAcl.action })
-          .from(documentAcl)
-          .where(
-            and(
-              eq(documentAcl.tenantId, input.tenantId),
-              eq(documentAcl.documentId, input.documentId),
-              eq(documentAcl.identityId, input.identityId),
-              eq(documentAcl.action, "write"),
-            ),
-          )
-          .limit(1);
-        if (!writeGrant) return { status: "not-writable" };
-      }
-
-      const [generation] = await tx
-        .select({
-          id: documentGenerations.id,
-          schemaVersion: documentGenerations.schemaVersion,
-          extensions: documentGenerations.extensions,
-          durableSeq: documentGenerations.durableSeq,
-        })
-        .from(documentGenerations)
-        .where(
-          and(
-            eq(documentGenerations.documentId, input.documentId),
-            eq(documentGenerations.status, "active"),
-          ),
-        )
-        .for("update")
-        .limit(1);
-      const [snapshot] = await tx
-        .select({ snapshotRevision: documentJsonSnapshots.snapshotRevision })
-        .from(documentJsonSnapshots)
-        .where(
-          and(
-            eq(documentJsonSnapshots.tenantId, input.tenantId),
-            eq(documentJsonSnapshots.documentId, input.documentId),
-          ),
-        )
-        .for("update")
-        .limit(1);
-      if (
-        !generation ||
-        generation.durableSeq !== 0 ||
-        !snapshot ||
-        snapshot.snapshotRevision !== input.expectedSnapshotRevision
-      ) {
-        return { status: "conflict" };
-      }
-
-      const referencedAssetIds = [...new Set(input.assetReferences.map(({ assetId }) => assetId))];
-      if (referencedAssetIds.length > 0) {
-        const readyAssets = await tx
-          .select({ id: assets.id, mediaType: assets.mediaType })
-          .from(assets)
-          .where(
-            and(
-              eq(assets.tenantId, input.tenantId),
-              eq(assets.documentId, input.documentId),
-              eq(assets.status, "ready"),
-              inArray(assets.id, referencedAssetIds),
-            ),
-          );
-        if (
-          !assetReferencesMatchReadyAssets(input.assetReferences, readyAssets) ||
-          readyAssets.length !== referencedAssetIds.length
-        ) {
-          return { status: "conflict" };
-        }
-      }
-
-      const nextGenerationId = `gen_${randomUUID()}`;
-      const durableSeq = 1;
-      const updatedAt = new Date();
-      await tx
-        .update(documentGenerations)
-        .set({ status: "retired" })
-        .where(eq(documentGenerations.id, generation.id));
-      await tx.insert(documentGenerations).values({
-        id: nextGenerationId,
-        documentId: input.documentId,
-        schemaVersion: generation.schemaVersion,
-        extensions: generation.extensions,
-        status: "active",
-        durableSeq,
-      });
-      await tx.insert(collaborationUpdates).values({
-        documentId: input.documentId,
-        generationId: nextGenerationId,
-        updateHash: input.updateHash,
-        sourceUpdateHash: input.updateHash,
-        updateBytes: Buffer.from(input.updateBytes),
-        durableSeq,
-        createdBy: input.identityId,
-      });
-      await insertProjectionOutbox(tx, {
-        tenantId: input.tenantId,
-        documentId: input.documentId,
-        generationId: nextGenerationId,
-        durableSeq,
-        updateHash: input.updateHash,
-        contentChanged: true,
-        content: input.content,
-      });
-      if (input.assetReferences.length > 0) {
-        await tx
-          .insert(assetReferences)
-          .values(
-            input.assetReferences.map(({ assetId, blockId }) => ({
-              tenantId: input.tenantId,
-              documentId: input.documentId,
-              generationId: nextGenerationId,
-              durableSeq,
-              assetId,
-              blockId,
-            })),
-          )
-          .onConflictDoNothing();
-      }
-      await tx
-        .delete(documentJsonSnapshots)
-        .where(
-          and(
-            eq(documentJsonSnapshots.tenantId, input.tenantId),
-            eq(documentJsonSnapshots.documentId, input.documentId),
-          ),
-        );
-      await tx
-        .delete(documentJsonAssetReferences)
-        .where(
-          and(
-            eq(documentJsonAssetReferences.tenantId, input.tenantId),
-            eq(documentJsonAssetReferences.documentId, input.documentId),
-          ),
-        );
-      await tx
-        .update(documents)
-        .set({ mode: "collaborative", updatedAt, metadataRevision: document.metadataRevision + 1 })
-        .where(eq(documents.id, input.documentId));
-      await insertDocumentAudit(tx, {
-        tenantId: input.tenantId,
-        actorIdentityId: input.identityId,
-        action: "document.collaboration-enabled",
-        resourceId: input.documentId,
-        generationId: nextGenerationId,
-        requestId: input.requestId,
-        details: { previousGenerationId: generation.id, durableSeq },
-      });
-
-      return {
-        status: "enabled",
-        previousGenerationId: generation.id,
-        document: {
-          id: document.id,
-          tenantId: document.tenantId,
-          title: document.title,
-          workspaceId: document.workspaceId,
-          catalogId: document.catalogId,
-          position: document.position,
-          icon: document.icon,
-          tags: document.tags,
-          createdBy: document.createdBy,
-          mode: "collaborative",
-          schemaVersion: generation.schemaVersion,
-          extensions: generation.extensions,
-          generationId: nextGenerationId,
-          durableSeq,
-          createdAt: document.createdAt,
-          updatedAt,
-          metadataRevision: document.metadataRevision + 1,
-        },
-      };
-    });
-  }
-
   async recordExport(input: {
     tenantId: string;
     documentId: string;
@@ -3421,7 +2180,6 @@ export class DocumentRepository {
     durableSeq: number;
     schemaVersion: number;
     blockCount: number;
-    snapshotRevision?: number;
     requestId?: string;
   }): Promise<"not-found" | "conflict" | "not-authorized" | "recorded"> {
     return this.db.transaction(async (tx) => {
@@ -3432,7 +2190,6 @@ export class DocumentRepository {
           generationId: documentGenerations.id,
           durableSeq: documentGenerations.durableSeq,
           schemaVersion: documentGenerations.schemaVersion,
-          mode: documents.mode,
         })
         .from(documents)
         .innerJoin(
@@ -3458,21 +2215,6 @@ export class DocumentRepository {
         document.schemaVersion !== input.schemaVersion
       ) {
         return "conflict";
-      }
-      if (input.snapshotRevision !== undefined) {
-        if (document.mode !== "standard") return "conflict";
-        const [snapshot] = await tx
-          .select({ snapshotRevision: documentJsonSnapshots.snapshotRevision })
-          .from(documentJsonSnapshots)
-          .where(
-            and(
-              eq(documentJsonSnapshots.tenantId, input.tenantId),
-              eq(documentJsonSnapshots.documentId, input.documentId),
-            ),
-          )
-          .for("update")
-          .limit(1);
-        if (snapshot?.snapshotRevision !== input.snapshotRevision) return "conflict";
       }
       if (document.createdBy !== input.identityId) {
         const grants = await tx
@@ -3722,6 +2464,9 @@ export class DocumentRepository {
     contentChanged: boolean;
     content: DocumentContent;
     assetReferences?: readonly DocumentAssetReference[];
+    expectedDurableSeq?: number;
+    guard?: (tx: DocumentWriteTransaction) => Promise<void>;
+    record?: (tx: DocumentWriteTransaction, durableSeq: number) => Promise<void>;
   }): Promise<{ updateHash: string; durableSeq: number; duplicate: boolean }> {
     const sourceUpdateHash = input.sourceUpdateHash ?? input.updateHash;
     return this.db.transaction(async (tx) => {
@@ -3785,6 +2530,15 @@ export class DocumentRepository {
         return { updateHash: sourceUpdateHash, durableSeq: existing.durableSeq, duplicate: true };
       }
 
+      // Text updates, structural commands and generation switches lock these same rows.
+      // Keep the conditional version check and application guard inside that boundary.
+      if (
+        input.expectedDurableSeq !== undefined &&
+        generation.durableSeq !== input.expectedDurableSeq
+      )
+        throw new DomainError("CONFLICT", "文档已更新，本次未写入。草稿已保留。");
+      await input.guard?.(tx);
+
       const durableSeq = generation.durableSeq + 1;
       if (!Number.isSafeInteger(durableSeq)) throw new Error("Document sequence limit reached");
       await tx.insert(collaborationUpdates).values({
@@ -3800,6 +2554,7 @@ export class DocumentRepository {
         .update(documentGenerations)
         .set({ durableSeq })
         .where(eq(documentGenerations.id, generation.id));
+      await input.record?.(tx, durableSeq);
 
       await insertProjectionOutbox(tx, {
         tenantId: input.tenantId,
@@ -4242,6 +2997,205 @@ export class DocumentRepository {
     return row ?? null;
   }
 
+  async switchActiveGeneration(input: {
+    tenantId: string;
+    documentId: string;
+    identityId: string;
+    expectedGenerationId: string;
+    expectedSchemaVersion: number;
+    expectedDurableSeq: number;
+    targetSchemaVersion: number;
+    extensions: Array<{ name: string; version: string; required: boolean }>;
+    updateHash: string;
+    updateBytes: Uint8Array;
+    content: DocumentContent;
+    migrationReport?: ContentMigrationReport;
+    migrationPersistence?: {
+      migrationId: string;
+      stepSnapshots: readonly ContentMigrationStepSnapshot[];
+    };
+    requestId?: string;
+  }): Promise<GenerationSwitchResult> {
+    return this.db.transaction(async (tx) => {
+      const [document] = await tx
+        .select({
+          id: documents.id,
+          tenantId: documents.tenantId,
+          title: documents.title,
+          workspaceId: documents.workspaceId,
+          catalogId: documents.catalogId,
+          position: documents.position,
+          icon: documents.icon,
+          tags: documents.tags,
+          createdBy: documents.createdBy,
+          status: documents.status,
+          metadataRevision: documents.metadataRevision,
+          createdAt: documents.createdAt,
+        })
+        .from(documents)
+        .where(and(eq(documents.id, input.documentId), eq(documents.tenantId, input.tenantId)))
+        .for("update")
+        .limit(1);
+      if (!document || document.status !== "active") return { status: "not-found" };
+      if (document.createdBy !== input.identityId) {
+        const [writeGrant] = await tx
+          .select({ action: documentAcl.action })
+          .from(documentAcl)
+          .where(
+            and(
+              eq(documentAcl.tenantId, input.tenantId),
+              eq(documentAcl.documentId, input.documentId),
+              eq(documentAcl.identityId, input.identityId),
+              eq(documentAcl.action, "write"),
+            ),
+          )
+          .limit(1);
+        if (!writeGrant) return { status: "not-found" };
+      }
+
+      const [generation] = await tx
+        .select({
+          id: documentGenerations.id,
+          schemaVersion: documentGenerations.schemaVersion,
+          extensions: documentGenerations.extensions,
+          durableSeq: documentGenerations.durableSeq,
+        })
+        .from(documentGenerations)
+        .where(
+          and(
+            eq(documentGenerations.documentId, input.documentId),
+            eq(documentGenerations.status, "active"),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (
+        !generation ||
+        generation.id !== input.expectedGenerationId ||
+        generation.schemaVersion !== input.expectedSchemaVersion ||
+        generation.durableSeq !== input.expectedDurableSeq ||
+        input.targetSchemaVersion < generation.schemaVersion
+      ) {
+        return { status: "conflict" };
+      }
+
+      const nextGenerationId = `gen_${randomUUID()}`;
+      const durableSeq = 1;
+      const updatedAt = new Date();
+      await tx
+        .update(documentGenerations)
+        .set({ status: "retired" })
+        .where(
+          and(
+            eq(documentGenerations.documentId, input.documentId),
+            eq(documentGenerations.id, generation.id),
+            eq(documentGenerations.status, "active"),
+          ),
+        );
+      await tx.insert(documentGenerations).values({
+        id: nextGenerationId,
+        documentId: input.documentId,
+        schemaVersion: input.targetSchemaVersion,
+        extensions: input.extensions,
+        durableSeq,
+        status: "active",
+      });
+      await tx.insert(collaborationUpdates).values({
+        documentId: input.documentId,
+        generationId: nextGenerationId,
+        updateHash: input.updateHash,
+        sourceUpdateHash: input.updateHash,
+        updateBytes: Buffer.from(input.updateBytes),
+        durableSeq,
+        createdBy: input.identityId,
+      });
+      await insertProjectionOutbox(tx, {
+        tenantId: input.tenantId,
+        documentId: input.documentId,
+        generationId: nextGenerationId,
+        durableSeq,
+        updateHash: input.updateHash,
+        contentChanged: true,
+        content: input.content,
+      });
+      await insertDocumentAudit(tx, {
+        tenantId: input.tenantId,
+        actorIdentityId: input.identityId,
+        action:
+          input.targetSchemaVersion === generation.schemaVersion
+            ? "document.block-ids-repaired"
+            : "document.schema-migrated",
+        resourceId: input.documentId,
+        generationId: nextGenerationId,
+        requestId: input.requestId,
+        details: {
+          previousGenerationId: generation.id,
+          fromSchemaVersion: generation.schemaVersion,
+          toSchemaVersion: input.targetSchemaVersion,
+          ...(input.migrationReport ? { migration: input.migrationReport } : {}),
+          ...(input.migrationPersistence
+            ? { migrationId: input.migrationPersistence.migrationId }
+            : {}),
+        },
+      });
+      await insertMigrationSnapshots(tx, {
+        tenantId: input.tenantId,
+        documentId: input.documentId,
+        ...input.migrationPersistence,
+      });
+      await tx
+        .update(documents)
+        .set({ updatedAt, metadataRevision: document.metadataRevision + 1 })
+        .where(eq(documents.id, input.documentId));
+
+      return {
+        status: input.targetSchemaVersion === generation.schemaVersion ? "repaired" : "migrated",
+        previousGenerationId: generation.id,
+        document: {
+          id: document.id,
+          tenantId: document.tenantId,
+          title: document.title,
+          workspaceId: document.workspaceId,
+          catalogId: document.catalogId,
+          position: document.position,
+          icon: document.icon,
+          tags: document.tags,
+          createdBy: document.createdBy,
+          schemaVersion: input.targetSchemaVersion,
+          extensions: input.extensions,
+          generationId: nextGenerationId,
+          durableSeq,
+          createdAt: document.createdAt,
+          updatedAt,
+          metadataRevision: document.metadataRevision + 1,
+        },
+      };
+    });
+  }
+
+  async findActiveForAction(
+    documentId: string,
+    tenantId: string,
+    identityId: string,
+    action: DocumentPermissionAction,
+  ): Promise<ActiveDocument | null> {
+    const row = await this.findActiveRow(documentId, tenantId);
+    if (!row) return null;
+    if (row.createdBy === identityId) return row;
+
+    const grants = await this.db
+      .select({ action: documentAcl.action })
+      .from(documentAcl)
+      .where(
+        and(
+          eq(documentAcl.tenantId, tenantId),
+          eq(documentAcl.documentId, documentId),
+          eq(documentAcl.identityId, identityId),
+        ),
+      );
+    return hasDocumentAction(new Set(grants.map((grant) => grant.action)), action) ? row : null;
+  }
+
   private async findActiveRow(
     documentId: string,
     tenantId: string,
@@ -4256,7 +3210,6 @@ export class DocumentRepository {
         position: documents.position,
         icon: documents.icon,
         tags: documents.tags,
-        mode: documents.mode,
         createdBy: documents.createdBy,
         schemaVersion: documentGenerations.schemaVersion,
         extensions: documentGenerations.extensions,
@@ -4282,6 +3235,6 @@ export class DocumentRepository {
         ),
       )
       .limit(1);
-    return row ? { ...row, mode: parseDocumentMode(row.mode) } : null;
+    return row ?? null;
   }
 }

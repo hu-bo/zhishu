@@ -1,7 +1,18 @@
 import { useRef, useState } from 'react';
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, ArrowRight, FolderKanban, LoaderCircle, Plus } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowRight,
+  FolderKanban,
+  LoaderCircle,
+  Plus,
+  Settings,
+  Users,
+} from 'lucide-react';
+import type { ListKnowledgeWorkspaces200Item } from '@/api/generated/models';
+import { WorkspaceSettingsDialog } from '@/features/knowledge/workspace-settings-dialog';
+import { WORKSPACE_KIND_LABELS, WORKSPACE_ROLE_LABELS } from '@/features/knowledge/workspace-roles';
 import { createKnowledgeWorkspace } from '@/api/generated/app-api';
 import { errorMessage } from '@/api/api-error';
 import { Button } from '@/components/ui/button';
@@ -32,11 +43,12 @@ function CreateWorkspaceDialog({
   const queryClient = useQueryClient();
   const { identityKey } = useKnowledgeWorkspace();
   const [name, setName] = useState('');
+  const [kind, setKind] = useState<'personal' | 'team'>('team');
   const [icon, setIcon] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const keyRef = useRef<string | null>(null);
+  const keyRef = useRef<{ input: string; key: string } | null>(null);
 
   const submit = async () => {
     const trimmed = name.trim();
@@ -48,11 +60,13 @@ function CreateWorkspaceDialog({
     setBusy(true);
     setError(null);
     try {
-      keyRef.current ??= crypto.randomUUID();
-      const created = await createKnowledgeWorkspace(
-        { name: trimmed, icon, description: description.trim() || undefined },
-        { headers: { 'Idempotency-Key': keyRef.current } },
-      );
+      const input = { name: trimmed, kind, icon, description: description.trim() || undefined };
+      const fingerprint = JSON.stringify(input);
+      if (keyRef.current?.input !== fingerprint)
+        keyRef.current = { input: fingerprint, key: crypto.randomUUID() };
+      const created = await createKnowledgeWorkspace(input, {
+        headers: { 'Idempotency-Key': keyRef.current.key },
+      });
       await queryClient.invalidateQueries({ queryKey: ['knowledge-workspaces', identityKey] });
       onClose();
       onCreated(created.id);
@@ -70,8 +84,11 @@ function CreateWorkspaceDialog({
         if (!open && !busy) onClose();
       }}
     >
-      <DialogContent showCloseButton={false}>
+      <DialogContent showCloseButton={false} className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <form
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && event.nativeEvent.isComposing) event.preventDefault();
+          }}
           onSubmit={(event) => {
             event.preventDefault();
             void submit();
@@ -79,9 +96,35 @@ function CreateWorkspaceDialog({
         >
           <DialogHeader>
             <DialogTitle>创建空间</DialogTitle>
-            <DialogDescription>空间是目录与文档的容器，创建后会自动生成根目录。</DialogDescription>
+            <DialogDescription>选择空间用途，创建后保留该类型。</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <fieldset disabled={busy} className="space-y-2">
+              <legend className="text-xs font-medium text-muted-foreground">空间类型</legend>
+              <div className="grid grid-cols-2 gap-3">
+                {(['personal', 'team'] as const).map((value) => (
+                  <label
+                    key={value}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg border bg-card p-3 text-sm has-checked:border-primary has-checked:bg-secondary"
+                  >
+                    <input
+                      type="radio"
+                      name="workspace-kind"
+                      value={value}
+                      checked={kind === value}
+                      onChange={() => setKind(value)}
+                      className="accent-primary"
+                    />
+                    {WORKSPACE_KIND_LABELS[value]}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs leading-5 text-muted-foreground">
+                {kind === 'personal'
+                  ? '由你本人管理；共享内容通过文档权限设置。'
+                  : '可添加成员，共同整理目录与知识。'}
+              </p>
+            </fieldset>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground" htmlFor="workspace-name">
                 空间名称
@@ -92,6 +135,7 @@ function CreateWorkspaceDialog({
                 maxLength={80}
                 placeholder="例如：产品团队知识库"
                 value={name}
+                disabled={busy}
                 onChange={(event) => setName(event.target.value)}
               />
             </div>
@@ -109,6 +153,7 @@ function CreateWorkspaceDialog({
                 rows={2}
                 placeholder="这个空间用来放什么内容？"
                 value={description}
+                disabled={busy}
                 onChange={(event) => setDescription(event.target.value)}
               />
             </div>
@@ -134,29 +179,38 @@ function CreateWorkspaceDialog({
 }
 
 function SpacesIndexPage() {
-  const { workspaces, loading, failed, refreshWorkspaces } = useKnowledgeWorkspace();
+  const { workspaces, enabled, loading, failed, refreshWorkspaces } = useKnowledgeWorkspace();
   const navigate = useNavigate({ from: '/spaces/' });
   const [createOpen, setCreateOpen] = useState(false);
+  const [managing, setManaging] = useState<{
+    workspace: ListKnowledgeWorkspaces200Item;
+    tab: 'settings' | 'members';
+  } | null>(null);
 
   const goSpace = (workspaceId: string) =>
     void navigate({ to: '/spaces/$workspaceId', params: { workspaceId } });
 
   return (
-    <div className="space-y-6">
+    <div className="zhishu-page space-y-8">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">空间</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            按团队或主题组织目录与文档；空间结构对租户内可见，权限仍由文档控制。
+          <p className="mb-2 text-xs font-medium tracking-wide text-muted-foreground">
+            把零散的想法，连成完整的知识
           </p>
+          <h1 className="zhishu-page-heading">知识空间</h1>
+          <p className="mt-2 text-[13px] text-muted-foreground">按主题整理，和团队一起积累。</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
+        <Button disabled={!enabled} onClick={() => setCreateOpen(true)}>
           <Plus size={15} aria-hidden="true" />
           新建空间
         </Button>
       </header>
 
-      {loading ? (
+      {!enabled ? (
+        <p className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">
+          登录后可创建空间、整理目录并管理成员。
+        </p>
+      ) : loading ? (
         <div
           role="status"
           className="flex min-h-48 items-center justify-center gap-2 text-sm text-muted-foreground"
@@ -193,17 +247,17 @@ function SpacesIndexPage() {
           </Button>
         </div>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <ul className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
           {workspaces.map((workspace) => (
-            <li key={workspace.id}>
+            <li key={workspace.id} className="zhishu-card group min-w-0 overflow-hidden">
               <Link
                 to="/spaces/$workspaceId"
                 params={{ workspaceId: workspace.id }}
-                className="group flex items-start gap-3 rounded-xl border border-border bg-card p-4 shadow-xs transition-all duration-150 hover:border-primary/40 hover:shadow-sm"
+                className="flex min-h-40 items-start gap-4 p-5 outline-none"
               >
                 <span
                   aria-hidden="true"
-                  className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-lg"
+                  className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background text-2xl"
                 >
                   {workspace.icon || <FolderKanban size={18} className="text-muted-foreground" />}
                 </span>
@@ -219,15 +273,40 @@ function SpacesIndexPage() {
                     />
                   </span>
                   {workspace.description && (
-                    <span className="mt-1 line-clamp-2 block text-xs text-muted-foreground">
+                    <span className="mt-2 line-clamp-2 text-[13px] leading-6 text-muted-foreground">
                       {workspace.description}
                     </span>
                   )}
-                  <span className="mt-2 block text-xs text-muted-foreground">
-                    {workspace.documentCount} 篇文档
+                  <span className="mt-4 block text-xs text-muted-foreground">
+                    {workspace.documentCount} 篇文档 <span className="mx-1 text-border">/</span>{' '}
+                    {workspace.memberCount} 位成员
                   </span>
                 </span>
               </Link>
+              <div className="flex items-center justify-end gap-1 border-t border-border/60 px-3 py-2">
+                <span className="mr-auto pl-2 text-[11px] text-muted-foreground">
+                  {WORKSPACE_KIND_LABELS[workspace.kind] ?? WORKSPACE_KIND_LABELS.unclassified} ·{' '}
+                  {WORKSPACE_ROLE_LABELS[workspace.role]}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setManaging({ workspace, tab: 'members' })}
+                >
+                  <Users size={14} />
+                  成员
+                </Button>
+                {workspace.canManage && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setManaging({ workspace, tab: 'settings' })}
+                  >
+                    <Settings size={14} />
+                    空间设置
+                  </Button>
+                )}
+              </div>
             </li>
           ))}
         </ul>
@@ -237,6 +316,16 @@ function SpacesIndexPage() {
         <CreateWorkspaceDialog
           onClose={() => setCreateOpen(false)}
           onCreated={(workspaceId) => goSpace(workspaceId)}
+        />
+      )}
+      {managing && (
+        <WorkspaceSettingsDialog
+          key={managing.workspace.id}
+          workspace={
+            workspaces.find((item) => item.id === managing.workspace.id) ?? managing.workspace
+          }
+          initialTab={managing.tab}
+          onClose={() => setManaging(null)}
         />
       )}
     </div>

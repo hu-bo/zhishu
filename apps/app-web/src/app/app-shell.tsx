@@ -1,19 +1,34 @@
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useBlocker, useRouterState } from '@tanstack/react-router';
 import {
+  Check,
+  ChevronDown,
   CircleUserRound,
   Download,
   FolderKanban,
+  Sparkles,
   Layers,
   LogIn,
   LogOut,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Sun,
+  Moon,
+  Monitor,
   X,
 } from 'lucide-react';
-import { getCurrentUser, mockLogin, mockLogout } from '@/api/generated/app-api';
+import { getCurrentUser, mockLogin, mockLogout, useListMockUsers } from '@/api/generated/app-api';
 import type { MockLogin200User } from '@/api/generated/models';
+import {
+  Menu as MenuRoot,
+  MenuContent,
+  MenuItem,
+  MenuLabel,
+  MenuSeparator,
+  MenuTrigger,
+} from '@/components/ui/menu';
+import { WORKSPACE_ROLE_LABELS } from '@/features/knowledge/workspace-roles';
 import {
   exportableUnconfirmedDrafts,
   getAccessToken,
@@ -22,13 +37,6 @@ import {
   discardUnconfirmedChanges,
 } from '@/api/transport';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -49,14 +57,15 @@ import {
   rememberAccount,
   useOfflineState,
 } from '@/features/offline/cache';
-import {
-  isCollaborationCheckpoint,
-  isStandardDraft,
-  recordsForIdentity,
-} from '@/features/offline/storage';
+import { isCollaborationCheckpoint, recordsForIdentity } from '@/features/offline/storage';
 import { downloadLocalDraft } from '@/features/offline/draft-download';
+import { useTheme } from '@/lib/theme';
 
-type ThemeMode = 'system' | 'light' | 'dark';
+const themeOptions = [
+  { value: 'light', label: '浅色外观', icon: Sun },
+  { value: 'dark', label: '深色外观', icon: Moon },
+  { value: 'system', label: '跟随系统', icon: Monitor },
+] as const;
 
 function readPreference<T extends string>(key: string, fallback: T, accepted: readonly T[]): T {
   try {
@@ -80,8 +89,8 @@ function navLinkClass(collapsed: boolean, active: boolean): string {
     collapsed ? 'mx-auto size-10 justify-center' : 'gap-3 px-3 py-2'
   } ${
     active
-      ? 'bg-secondary font-medium text-primary'
-      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+      ? 'bg-primary/8 font-medium text-primary'
+      : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
   }`;
 }
 
@@ -99,11 +108,11 @@ function WorkspaceNavigation({
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { workspaces } = useKnowledgeWorkspace();
   return (
-    <div className="flex h-full min-h-0 flex-col bg-card text-foreground">
+    <div className="zhishu-sidebar flex h-full min-h-0 w-full min-w-0 flex-col text-foreground">
       <div
-        className={`flex min-h-16 items-center border-b border-border/70 ${collapsed ? 'justify-center px-2' : 'gap-3 px-4'}`}
+        className={`flex min-h-20 items-center ${collapsed ? 'justify-center px-2' : 'gap-3 px-5'}`}
       >
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-base font-semibold text-primary-foreground">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-foreground text-base font-semibold text-background shadow-sm">
           知
         </span>
         {!collapsed && (
@@ -116,7 +125,9 @@ function WorkspaceNavigation({
             >
               知书
             </Link>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">文档与知识空间</p>
+            <p className="mt-0.5 truncate text-[11px] tracking-wide text-muted-foreground">
+              让知识生长
+            </p>
           </div>
         )}
         {mobile ? (
@@ -154,7 +165,10 @@ function WorkspaceNavigation({
           <PanelLeftOpen aria-hidden="true" />
         </Button>
       )}
-      <nav aria-label="主导航" className="flex flex-col gap-1 px-2 pt-3 sm:px-3">
+      <nav
+        aria-label="主导航"
+        className={`flex flex-col gap-1 pt-1 ${collapsed ? 'px-2' : 'px-2 sm:px-3'}`}
+      >
         <Link
           to="/documents"
           search={WORKBENCH_SEARCH}
@@ -164,7 +178,7 @@ function WorkspaceNavigation({
           className={navLinkClass(collapsed, pathname.startsWith('/documents'))}
         >
           <Layers size={17} aria-hidden="true" className="shrink-0" />
-          {!collapsed && <span className="truncate">文档工作台</span>}
+          {!collapsed && <span className="truncate">我的文档</span>}
         </Link>
         <Link
           to="/spaces"
@@ -174,17 +188,32 @@ function WorkspaceNavigation({
           className={navLinkClass(collapsed, pathname.startsWith('/spaces'))}
         >
           <FolderKanban size={17} aria-hidden="true" className="shrink-0" />
-          {!collapsed && <span className="truncate">空间与目录</span>}
+          {!collapsed && <span className="truncate">知识空间</span>}
+        </Link>
+      </nav>
+      <nav aria-label="创作导航" className={`mt-1 ${collapsed ? 'px-2' : 'px-2 sm:px-3'}`}>
+        <Link
+          to="/ai"
+          search={{}}
+          onClick={onNavigate}
+          title={collapsed ? 'AI 创作' : undefined}
+          aria-current={pathname === '/ai' ? 'page' : undefined}
+          className={navLinkClass(collapsed, pathname === '/ai')}
+        >
+          <Sparkles size={17} aria-hidden="true" className="shrink-0" />
+          {!collapsed && <span>AI 创作</span>}
         </Link>
       </nav>
       {!collapsed && workspaces.length > 0 && (
-        <div className="mt-4 flex min-h-0 flex-1 flex-col px-3 sm:px-4">
+        <div className="mt-8 flex min-h-0 flex-1 flex-col px-3 sm:px-4">
           <p className="px-2 pb-1.5 text-xs font-medium tracking-wide text-muted-foreground">
-            空间
+            我的空间
           </p>
           <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1 pb-2">
             {workspaces.map((workspace) => {
-              const active = pathname === `/spaces/${workspace.id}`;
+              const active =
+                pathname === `/spaces/${workspace.id}` ||
+                pathname.startsWith(`/spaces/${workspace.id}/`);
               return (
                 <Link
                   key={workspace.id}
@@ -194,8 +223,8 @@ function WorkspaceNavigation({
                   aria-current={active ? 'page' : undefined}
                   className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm transition-colors duration-150 ${
                     active
-                      ? 'bg-muted font-medium text-foreground'
-                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                      ? 'bg-secondary font-medium text-foreground'
+                      : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
                   }`}
                 >
                   <span
@@ -216,7 +245,7 @@ function WorkspaceNavigation({
       )}
       {collapsed && <div className="flex-1" />}
       {!collapsed && !mobile && (
-        <div className="border-t border-border/70 px-5 py-4 text-xs leading-5 text-muted-foreground">
+        <div className="mx-5 mb-4 border-t border-border/70 pt-4 text-[11px] leading-6 text-muted-foreground">
           <span className="block font-medium text-foreground">让想法有处安放。</span>
           写下、整理，再和团队一起完善。
         </div>
@@ -247,6 +276,84 @@ function downloadUnconfirmedDrafts(): number {
   return drafts.length;
 }
 
+// Dev-only identity switcher: lists the server's mock users so permissions can
+// be exercised across roles (admin / editor / viewer / non-member).
+function MockUserSwitcher({
+  user,
+  busy,
+  onLogin,
+  onSignOut,
+}: {
+  user: MockLogin200User;
+  busy: boolean;
+  onLogin: (userId: string) => void;
+  onSignOut: () => void;
+}) {
+  const { data, isPending, isError } = useListMockUsers({
+    query: { staleTime: Infinity, retry: false },
+  });
+  const mockUsers = data?.users ?? [];
+
+  // Without the user list (server unreachable) fall back to the compact
+  // identity + sign-out pair so leaving stays possible.
+  if (isError) {
+    return (
+      <>
+        <span className="hidden items-center gap-2 text-sm sm:flex">
+          <CircleUserRound size={17} className="text-primary" aria-hidden="true" />
+          {user.displayName}
+        </span>
+        <Button variant="ghost" size="sm" onClick={onSignOut} disabled={busy} aria-label="退出登录">
+          <LogOut aria-hidden="true" />
+          <span className="hidden sm:inline">退出</span>
+        </Button>
+      </>
+    );
+  }
+
+  return (
+    <MenuRoot>
+      <MenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5"
+            disabled={busy || isPending}
+            aria-label={busy ? '正在切换身份' : '切换 Mock 用户'}
+          >
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
+              {user.displayName.slice(0, 1)}
+            </span>
+            <span className="hidden max-w-28 truncate text-sm sm:inline">{user.displayName}</span>
+            <ChevronDown size={14} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+          </Button>
+        }
+      />
+      <MenuContent align="end" className="w-60">
+        <MenuLabel>切换 Mock 用户（调试身份）</MenuLabel>
+        {mockUsers.map((mockUser) => {
+          const current = mockUser.identityId === user.identityId;
+          return (
+            <MenuItem key={mockUser.identityId} onClick={() => onLogin(mockUser.identityId)}>
+              <span className="min-w-0 flex-1 truncate">{mockUser.displayName}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {mockUser.role ? WORKSPACE_ROLE_LABELS[mockUser.role] : '非成员'}
+              </span>
+              {current && <Check size={15} className="shrink-0 text-primary" aria-hidden="true" />}
+            </MenuItem>
+          );
+        })}
+        <MenuSeparator />
+        <MenuItem variant="destructive" onClick={onSignOut}>
+          <LogOut size={15} aria-hidden="true" />
+          退出登录
+        </MenuItem>
+      </MenuContent>
+    </MenuRoot>
+  );
+}
+
 export function AppShell() {
   const offline = useOfflineState();
   const queryClient = useQueryClient();
@@ -258,13 +365,19 @@ export function AppShell() {
       const inSpaceDetail = /^\/spaces\/[^/]+/.test(pathname);
       const doc = (search as { doc?: unknown }).doc;
       return {
-        section: pathname.startsWith('/spaces')
-          ? '空间'
-          : pathname.startsWith('/documents')
-            ? '文档工作台'
-            : '知书',
-        fullBleed: inSpaceDetail,
-        editing: inSpaceDetail && typeof doc === 'string' && doc.length > 0,
+        section:
+          pathname === '/ai'
+            ? 'AI 创作'
+            : pathname.startsWith('/spaces')
+              ? '空间'
+              : pathname.startsWith('/documents')
+                ? '文档工作台'
+                : '知书',
+        fullBleed: inSpaceDetail || pathname === '/ai',
+        editing:
+          inSpaceDetail &&
+          (/^\/spaces\/[^/]+\/doc\/[^/]+/.test(pathname) ||
+            (typeof doc === 'string' && doc.length > 0)),
       };
     },
   });
@@ -278,9 +391,7 @@ export function AppShell() {
       'true',
   );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() =>
-    readPreference<ThemeMode>('zhishu.theme', 'system', ['system', 'light', 'dark']),
-  );
+  const { theme: themeMode, setTheme: setThemeMode } = useTheme();
 
   const blocker = useBlocker({
     shouldBlockFn: () => hasUnconfirmedChanges(),
@@ -295,14 +406,7 @@ export function AppShell() {
       const entries = await recordsForIdentity(cacheIdentity(user));
       let count = 0;
       for (const { value } of entries) {
-        if (isStandardDraft(value)) {
-          downloadLocalDraft(value);
-          count += 1;
-        } else if (
-          isCollaborationCheckpoint(value) &&
-          value.content &&
-          value.pendingUpdates.length
-        ) {
+        if (isCollaborationCheckpoint(value) && value.content && value.pendingUpdates.length) {
           downloadLocalDraft({ ...value, content: value.content });
           count += 1;
         }
@@ -322,33 +426,28 @@ export function AppShell() {
   }, [sidebarExpanded]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem('zhishu.theme', themeMode);
-    } catch {
-      // The selected theme still applies for the current page session.
-    }
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const applyTheme = () => {
-      const isDark = themeMode === 'dark' || (themeMode === 'system' && media.matches);
-      document.documentElement.classList.toggle('dark', isDark);
-      document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
-    };
-    applyTheme();
-    if (themeMode !== 'system') return;
-    media.addEventListener('change', applyTheme);
-    return () => media.removeEventListener('change', applyTheme);
-  }, [themeMode]);
-
-  useEffect(() => {
     const cleanup = initializeOfflineState();
     let active = true;
     if (!getAccessToken()) {
-      if (!navigator.onLine)
+      if (!navigator.onLine) {
         void readOfflineAccount().then(async (account) => {
           if (!active || !account) return;
           await rememberAccount(account, false);
           if (active) setUser(account);
         });
+      } else if (import.meta.env.DEV) {
+        // Dev convenience: sign in as the default mock user without a button.
+        void mockLogin({})
+          .then(async (session) => {
+            if (!active) return;
+            await rememberAccount(session.user, true);
+            setAccessToken(session.accessToken);
+            if (active) setUser(session.user);
+          })
+          .catch(() => {
+            if (active) setAuthError('开发环境自动登录失败，请确认后端服务已启动后再试。');
+          });
+      }
       return () => {
         active = false;
         cleanup();
@@ -370,17 +469,16 @@ export function AppShell() {
     };
   }, []);
 
-  const signIn = async () => {
+  const signIn = async (userId?: string) => {
     setAuthBusyAction('login');
     setAuthError(null);
     setAuthFeedback(null);
     try {
-      const session = await mockLogin();
+      const session = await mockLogin(userId ? { userId } : {});
       if (user && cacheIdentity(user) !== cacheIdentity(session.user)) queryClient.clear();
       await rememberAccount(session.user, true);
       setAccessToken(session.accessToken);
       setUser(session.user);
-      setAuthFeedback(`已登录：${session.user.displayName}`);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['documents'] }),
         queryClient.invalidateQueries({ queryKey: ['document'] }),
@@ -454,16 +552,20 @@ export function AppShell() {
         </a>
         <aside
           aria-label="桌面导航"
-          className={`hidden shrink-0 border-r border-border/70 bg-card lg:flex ${sidebarExpanded ? 'w-72' : 'w-14'} transition-[width] duration-150 motion-reduce:transition-none`}
+          className={`zhishu-sidebar hidden shrink-0 border-r border-border/70 lg:flex ${sidebarExpanded && !shell.fullBleed ? 'w-72' : 'w-14'} transition-[width] duration-150 motion-reduce:transition-none`}
         >
           <WorkspaceNavigation
-            collapsed={!sidebarExpanded}
-            onToggleCollapsed={() => setSidebarExpanded((expanded) => !expanded)}
+            collapsed={!sidebarExpanded || shell.fullBleed}
+            onToggleCollapsed={
+              shell.fullBleed ? undefined : () => setSidebarExpanded((expanded) => !expanded)
+            }
           />
         </aside>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {!shell.editing && (
-            <header className="z-20 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-card/90 px-3 backdrop-blur sm:min-h-16 sm:px-5">
+          {
+            <header
+              className={`z-20 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-card/90 px-3 backdrop-blur sm:min-h-16 sm:px-5 ${shell.editing && user ? 'lg:hidden' : ''}`}
+            >
               <div className="flex min-w-0 items-center gap-2">
                 <Button
                   variant="ghost"
@@ -476,37 +578,60 @@ export function AppShell() {
                   <Menu aria-hidden="true" />
                 </Button>
                 <div className="flex min-w-0 items-center gap-3 text-xs text-muted-foreground">
-                  <span>知书</span>
-                  <span aria-hidden="true">/</span>
+                  <span className="hidden sm:inline">知书</span>
+                  <span aria-hidden="true" className="hidden sm:inline">
+                    /
+                  </span>
                   <span className="truncate font-medium text-foreground">{shell.section}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
                 <GlobalSearch />
-                <label className="sr-only" htmlFor="theme-mode">
-                  界面主题
-                </label>
-                <Select
-                  value={themeMode}
-                  onValueChange={(value) => {
-                    if (value) setThemeMode(value);
-                  }}
-                  items={{ system: '跟随系统', light: '亮色', dark: '暗色' }}
-                >
-                  <SelectTrigger
-                    id="theme-mode"
-                    aria-label="界面主题"
-                    className="h-9 min-w-24 text-xs"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="system">跟随系统</SelectItem>
-                    <SelectItem value="light">亮色</SelectItem>
-                    <SelectItem value="dark">暗色</SelectItem>
-                  </SelectContent>
-                </Select>
-                {user ? (
+                <MenuRoot>
+                  <MenuTrigger
+                    render={
+                      <Button variant="ghost" size="icon" aria-label="界面主题" title="切换外观">
+                        {themeMode === 'dark' ? (
+                          <Moon aria-hidden="true" />
+                        ) : themeMode === 'light' ? (
+                          <Sun aria-hidden="true" />
+                        ) : (
+                          <Monitor aria-hidden="true" />
+                        )}
+                      </Button>
+                    }
+                  />
+                  <MenuContent align="end">
+                    {themeOptions.map(({ value, label, icon: Icon }) => (
+                      <MenuItem key={value} onClick={() => setThemeMode(value)}>
+                        <Icon size={16} aria-hidden="true" />
+                        <span className="flex-1">{label}</span>
+                        {themeMode === value && (
+                          <Check size={14} aria-hidden="true" className="text-primary" />
+                        )}
+                      </MenuItem>
+                    ))}
+                  </MenuContent>
+                </MenuRoot>
+                {import.meta.env.DEV ? (
+                  user ? (
+                    <MockUserSwitcher
+                      user={user}
+                      busy={authBusyAction !== null}
+                      onLogin={(userId) => void signIn(userId)}
+                      onSignOut={() => void signOut()}
+                    />
+                  ) : (
+                    <Button
+                      size="sm"
+                      onClick={() => void signIn()}
+                      disabled={authBusyAction !== null}
+                    >
+                      <LogIn aria-hidden="true" />
+                      {authBusyAction === 'login' ? '正在连接…' : '重新登录'}
+                    </Button>
+                  )
+                ) : user ? (
                   <>
                     <span className="hidden items-center gap-2 text-sm sm:flex">
                       <CircleUserRound size={17} className="text-primary" aria-hidden="true" />
@@ -525,25 +650,16 @@ export function AppShell() {
                       </span>
                     </Button>
                   </>
-                ) : import.meta.env.DEV ? (
-                  <Button
-                    size="sm"
-                    onClick={() => void signIn()}
-                    disabled={authBusyAction !== null}
-                  >
-                    <LogIn aria-hidden="true" />
-                    {authBusyAction === 'login' ? '正在连接…' : '开发环境登录'}
-                  </Button>
                 ) : (
                   <span className="text-xs text-muted-foreground">请通过宿主完成身份认证</span>
                 )}
               </div>
             </header>
-          )}
+          }
           {user && (!offline.online || !offline.verified || offline.cached) && (
             <div
               role="status"
-              className="flex flex-wrap items-center gap-3 border-b bg-muted px-5 py-2 text-sm sm:px-9 lg:px-12"
+              className="flex flex-wrap items-center gap-3 border-b bg-secondary px-5 py-2 text-sm sm:px-9 lg:px-12"
             >
               <span className="relative flex size-2.5 shrink-0" aria-hidden="true">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning opacity-60" />
@@ -603,7 +719,7 @@ export function AppShell() {
             </main>
           ) : (
             <main id="main-content" className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-              <div className="mx-auto w-full max-w-[1600px] p-3 sm:p-5 lg:p-6">
+              <div className="w-full px-4 py-4 sm:px-6 sm:py-5">
                 <Outlet />
               </div>
             </main>
@@ -614,7 +730,7 @@ export function AppShell() {
         <DialogContent
           showCloseButton={false}
           aria-label="主导航"
-          className="fixed inset-y-0 left-0 z-50 m-0 h-dvh w-[min(18rem,calc(100vw-2rem))] max-w-none translate-x-0 translate-y-0 grid-rows-[auto_1fr] gap-0 overflow-hidden rounded-none border-r p-0 sm:max-w-none"
+          className="fixed inset-y-0 left-0 z-50 m-0 h-dvh max-h-none w-[min(18rem,calc(100vw-2rem))] max-w-none translate-x-0 translate-y-0 grid-rows-[auto_1fr] gap-0 overflow-hidden rounded-none border-r p-0 sm:max-w-none"
         >
           <DialogHeader className="sr-only">
             <DialogTitle>主导航</DialogTitle>

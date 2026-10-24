@@ -1,0 +1,4 @@
+ALTER TABLE "workspaces" ADD COLUMN "kind" text DEFAULT 'unclassified' NOT NULL;--> statement-breakpoint
+ALTER TABLE "workspaces" ADD COLUMN "personal_owner_id" text;--> statement-breakpoint
+ALTER TABLE "workspaces" ADD CONSTRAINT "workspaces_kind_check" CHECK ("workspaces"."kind" in ('personal', 'team', 'unclassified'));--> statement-breakpoint
+ALTER TABLE "workspaces" ADD CONSTRAINT "workspaces_personal_owner_check" CHECK (("workspaces"."kind" = 'personal' and "workspaces"."personal_owner_id" is not null and length(btrim("workspaces"."personal_owner_id")) > 0 and "workspaces"."personal_owner_id" = "workspaces"."created_by") or ("workspaces"."kind" <> 'personal' and "workspaces"."personal_owner_id" is null));

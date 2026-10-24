@@ -19,7 +19,10 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
     <HeroUITextArea
       ref={ref}
       data-slot="textarea"
-      className={cn('text-sm md:text-sm', className)}
+      className={cn(
+        'min-h-24 w-full min-w-0 resize-y rounded-lg border border-input bg-card px-3 py-2.5 text-sm leading-6 shadow-none placeholder:text-muted-foreground/70 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/10 disabled:opacity-50',
+        className,
+      )}
       {...props}
     />
   );

@@ -5,6 +5,9 @@ export type DomainErrorCode =
   | "UNAUTHENTICATED"
   | "SERVICE_UNAVAILABLE"
   | "RESOURCE_LIMIT"
+  | "AI_WRITE_PERSONAL_ONLY"
+  | "AI_ACCESS_REVOKED"
+  | "AI_HISTORY_UNAVAILABLE"
   | "IDEMPOTENCY_KEY_REUSED";
 
 export class DomainError extends Error {

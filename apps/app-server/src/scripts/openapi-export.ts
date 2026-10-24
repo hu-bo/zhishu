@@ -22,7 +22,7 @@ function findUnresolvedContractRef(value: unknown): string | undefined {
   }
   if (typeof value !== "object" || value === null) return undefined;
   for (const [key, child] of Object.entries(value)) {
-    if (key === "$ref" && typeof child === "string" && child.startsWith("Document")) return child;
+    if (key === "$ref" && typeof child === "string" && !child.startsWith("#/")) return child;
     const found = findUnresolvedContractRef(child);
     if (found) return found;
   }

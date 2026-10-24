@@ -97,9 +97,8 @@ export function GlobalSearch() {
     if (!item) return;
     setOpen(false);
     await navigate({
-      to: '/spaces/$workspaceId',
-      params: { workspaceId: item.workspaceId },
-      search: { doc: item.id },
+      to: '/spaces/$workspaceId/doc/$documentId',
+      params: { workspaceId: item.workspaceId, documentId: item.id },
     });
   };
   useEffect(() => {
@@ -112,12 +111,19 @@ export function GlobalSearch() {
       <Button
         variant="ghost"
         size="sm"
+        className="gap-2 border border-border/70 bg-background px-2.5 text-muted-foreground sm:w-56 sm:justify-start"
         aria-label="搜索知识库（Ctrl 或 Cmd + K）"
         disabled={!enabled}
         onClick={show}
       >
         <Search aria-hidden="true" />
-        <span className="hidden sm:inline">搜索</span>
+        <span className="hidden sm:inline">搜索文档与知识…</span>
+        <kbd className="ml-auto hidden rounded border border-border bg-card px-1.5 py-0.5 font-sans text-[10px] text-muted-foreground sm:inline">
+          {typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+            ? '⌘'
+            : 'Ctrl'}{' '}
+          K
+        </kbd>
       </Button>
       <Dialog
         open={open && enabled}
@@ -132,12 +138,13 @@ export function GlobalSearch() {
         <DialogContent className="max-h-[85dvh] sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>搜索知识库</DialogTitle>
-            <DialogDescription>
-              查找有权限的标题与已保存正文。协同内容的搜索索引可能稍有延迟。
-            </DialogDescription>
+            <DialogDescription>在你的知识空间中，找到需要的内容。</DialogDescription>
           </DialogHeader>
           <Input
             ref={inputRef}
+            autoFocus
+            placeholder="输入标题或正文关键词…"
+            className="h-12 bg-background text-base"
             aria-label="搜索标题与正文"
             role="combobox"
             aria-expanded={items.length > 0}
@@ -169,7 +176,10 @@ export function GlobalSearch() {
           />
           <div className="min-h-20 max-h-[50dvh] overflow-y-auto">
             {!input.trim() ? (
-              <p className="p-4 text-sm text-muted-foreground">输入标题或正文关键词。</p>
+              <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-muted-foreground">
+                <Search size={24} strokeWidth={1.5} aria-hidden="true" />
+                <p className="text-[13px]">从一个关键词开始，找回你的灵感。</p>
+              </div>
             ) : !current || results.isFetching ? (
               <p role="status" className="p-4 text-sm text-muted-foreground">
                 正在搜索…
@@ -182,8 +192,8 @@ export function GlobalSearch() {
                 </Button>
               </div>
             ) : !items.length ? (
-              <p role="status" className="p-4 text-sm text-muted-foreground">
-                没有找到匹配的文档。
+              <p role="status" className="py-12 text-center text-[13px] text-muted-foreground">
+                没有找到相关文档，试试其他关键词。
               </p>
             ) : null}
             <ul id={resultId} role="listbox" aria-label="搜索结果" className="space-y-1">
@@ -192,13 +202,14 @@ export function GlobalSearch() {
                   key={item.id}
                   id={`${resultId}-${index}`}
                   role="option"
+                  className="zhishu-search-result overflow-hidden rounded-xl transition-colors"
                   aria-selected={index === activeIndex}
                   onMouseMove={() => setSelected(index)}
                 >
                   <button
                     type="button"
                     tabIndex={-1}
-                    className={`w-full rounded-lg px-3 py-3 text-left ${index === activeIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'}`}
+                    className="w-full px-4 py-3.5 text-left text-foreground hover:bg-secondary/60"
                     onClick={() => void go(index)}
                   >
                     <span className="block truncate font-medium">
@@ -216,7 +227,7 @@ export function GlobalSearch() {
               ))}
             </ul>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="border-t border-border/70 pt-4 text-[11px] text-muted-foreground">
             ↑ ↓ 选择 · Enter 打开 · Escape 关闭
             {results.data?.hasMore ? ' · 还有更多结果，请缩小关键词范围' : ''}
           </p>

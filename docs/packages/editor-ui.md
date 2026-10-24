@@ -1,5 +1,7 @@
 # editor-ui 设计规划
 
+2026-10-22 新增 `EditorReplacementReview`，也可通过 `EditorShell replacementReview` 安装在正文下方。建议内容采用主题强调色，旧内容置灰划线，每处建议提供 ✓ / ×，分别接受/拒绝该块；底部提供修改计数、上一处/下一处、全部拒绝与全部替换，批量操作仅处理剩余建议。底栏采用 4px 容器与 3px 工具条上下 padding，按钮最小高 28px。preview、stale、busy、disabled、error、onAcceptBlock/onRejectBlock 与批量动作回调由宿主提供；过期或禁用时不能提交，忙碌时防重复操作。组件不修改正文或请求接口。桌面、390px 手机和亮暗主题已截图检查，预览期间保持原编辑器及协同会话挂载。
+
 代码块视图通过 `EditorProvider nodeViews.codeBlock` 可选安装 `EditorCodeBlockView`，提供暗色语言栏、复制反馈与节点级错误重试；视图外壳不进入文档 JSON，长代码只在代码块内横向滚动。core 通过 ProseMirror 装饰为 JavaScript/TypeScript、Python、SQL、Bash、JSON、Go 等语言着色；语言语法按实际代码块动态加载，未知语言保留纯文本。代码语言选择器继续复用文档节点的 `language` 属性，装饰和高亮缓存不写入正文。
 
 历史版本预览也通过 `nodeViews.codeBlock` 使用相同视图；只读状态禁用语言编辑，保留代码复制和反馈。

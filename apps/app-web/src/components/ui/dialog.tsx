@@ -39,7 +39,8 @@ interface DialogContextValue {
 const DialogContext = createContext<DialogContextValue>({});
 
 export interface DialogProps {
-  open: boolean;
+  open?: boolean;
+  isOpen?: boolean;
   onOpenChange: (open: boolean) => void;
   children?: ReactNode;
   /** Base UI Dialog equivalent: forwarded to React Aria's Modal. */
@@ -48,10 +49,10 @@ export interface DialogProps {
   finalFocus?: RefObject<HTMLElement | null>;
 }
 
-function Dialog({ open, onOpenChange, children, initialFocus, finalFocus }: DialogProps) {
+function Dialog({ open, isOpen, onOpenChange, children, initialFocus, finalFocus }: DialogProps) {
   return (
     <DialogContext.Provider value={{ initialFocus, finalFocus }}>
-      <Modal isOpen={open} onOpenChange={onOpenChange}>
+      <Modal isOpen={isOpen ?? open ?? false} onOpenChange={onOpenChange}>
         {children}
       </Modal>
     </DialogContext.Provider>
@@ -82,7 +83,9 @@ function DialogClose({
 }
 
 function DialogOverlay({ className }: { className?: string }) {
-  return <Modal.Backdrop variant="opaque" className={cn('bg-overlay/50', className)} />;
+  return (
+    <Modal.Backdrop variant="blur" className={cn('bg-backdrop backdrop-blur-sm', className)} />
+  );
 }
 
 export interface DialogContentProps {
@@ -95,20 +98,25 @@ export interface DialogContentProps {
 function DialogContent({ className, children, showCloseButton = true }: DialogContentProps) {
   const { initialFocus, finalFocus } = useContext(DialogContext);
   return (
-    <Modal.Backdrop variant="opaque" className="bg-overlay/50">
+    <Modal.Backdrop variant="blur" className="bg-backdrop backdrop-blur-sm">
       <Modal.Container
         size="md"
         placement="auto"
-        className="sm:max-w-xl"
+        className="w-full sm:w-full sm:max-w-none sm:p-6"
         // HeroUI's ModalContainer types omit React Aria's `initialFocus` /
         // `finalFocus` even though the container's underlying RAC Modal
         // accepts them at runtime. Pass them as part of `className`-style
         // props via a loose object cast so the type checker is happy.
         {...({ initialFocus, finalFocus } as object)}
       >
-        <Modal.Dialog className={cn('gap-4 p-4 sm:max-w-xl', className)}>
+        <Modal.Dialog className={cn('zhishu-dialog max-w-xl gap-5 p-5 sm:p-6', className)}>
           {children}
-          {showCloseButton && <ModalCloseTrigger aria-label="关闭" />}
+          {showCloseButton && (
+            <ModalCloseTrigger
+              aria-label="关闭"
+              className="bg-transparent text-muted-foreground hover:bg-secondary hover:text-foreground"
+            />
+          )}
         </Modal.Dialog>
       </Modal.Container>
     </Modal.Backdrop>
@@ -127,7 +135,11 @@ function DialogHeader({
   children?: ReactNode;
 }) {
   return (
-    <ModalHeader {...(props as object)} className={cn('flex flex-col gap-2', className)}>
+    <ModalHeader
+      {...(props as object)}
+      data-slot="dialog-header"
+      className={cn('flex flex-col gap-2 pr-7', className)}
+    >
       {children}
     </ModalHeader>
   );
@@ -145,8 +157,9 @@ function DialogFooter({
   return (
     <ModalFooter
       {...(props as object)}
+      data-slot="dialog-footer"
       className={cn(
-        '-mx-4 -mb-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end',
+        'm-0 flex flex-col-reverse gap-2 border-t border-border/70 bg-transparent px-0 pb-0 pt-5 sm:flex-row sm:justify-end',
         className,
       )}
     >
@@ -166,7 +179,7 @@ function DialogTitle({
   return (
     <ModalHeading
       {...(props as object)}
-      className={cn('text-base leading-none font-medium', className)}
+      className={cn('text-lg leading-7 font-semibold tracking-tight', className)}
     >
       {children}
     </ModalHeading>
@@ -182,7 +195,10 @@ function DialogDescription({
   children?: ReactNode;
 }) {
   return (
-    <Description {...(props as object)} className={cn('text-sm text-muted-foreground', className)}>
+    <Description
+      {...(props as object)}
+      className={cn('text-[13px] leading-6 text-muted-foreground', className)}
+    >
       {children}
     </Description>
   );

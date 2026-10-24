@@ -1,0 +1,40 @@
+{
+  "name": "@zhishu/rag",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@langchain/core": "1.2.14",
+    "@langchain/qdrant": "1.0.3",
+    "@langchain/textsplitters": "1.0.2",
+    "@qdrant/js-client-rest": "1.19.0",
+    "@zhishu/ai-contracts": "workspace:*",
+    "@zhishu/document-contracts": "workspace:*",
+    "csv-parse": "7.0.3",
+    "file-type": "21.3.4",
+    "hast-util-from-html": "2.0.3",
+    "hast-util-to-mdast": "10.1.2",
+    "mdast-util-from-markdown": "2.1.0",
+    "mdast-util-gfm": "3.1.0",
+    "mdast-util-to-markdown": "2.2.0",
+    "micromark-extension-gfm": "3.0.0"
+  },
+  "devDependencies": {
+    "@types/mdast": "4.0.4",
+    "@types/node": "^22.10.10"
+  }
+}

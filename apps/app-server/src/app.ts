@@ -18,6 +18,11 @@ import { registerErrorHandlers } from "./plugins/errors.js";
 import { registerOpenApi } from "./plugins/openapi.js";
 import type { CollaborationSessionRevoker } from "./modules/documents/document.service.js";
 import type { PrincipalAuthenticator } from "./modules/identity/identity.types.js";
+import type { CollaborationOwner } from "./modules/collaboration/owner.js";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { aiModule } from "./modules/ai/index.js";
+import { DomainError } from "./shared/domain-error.js";
+import type { LlmAdapter } from "@deepseek-ai/dsh-llm";
 
 export async function buildApp(
   config: AppConfig,
@@ -26,6 +31,9 @@ export async function buildApp(
     sessionRevoker?: CollaborationSessionRevoker;
     identityAuthenticator?: PrincipalAuthenticator;
     operationsMetrics?: OperationsMetricsType;
+    collaborationOwner?: CollaborationOwner;
+    aiModel?: BaseChatModel;
+    writingAdapter?: LlmAdapter;
   } = {},
 ) {
   const mockIdentityService =
@@ -92,6 +100,19 @@ export async function buildApp(
             config,
             options.sessionRevoker ?? { revokeDocumentSessions() {} },
             options.exportMode,
+          ),
+        );
+        const unavailable = async () => {
+          throw new DomainError("SERVICE_UNAVAILABLE", "协同服务尚未就绪");
+        };
+        await api.register((scope) =>
+          aiModule(
+            scope,
+            config,
+            options.collaborationOwner ?? { snapshot: unavailable, apply: unavailable },
+            options.exportMode,
+            options.aiModel,
+            options.writingAdapter,
           ),
         );
       },

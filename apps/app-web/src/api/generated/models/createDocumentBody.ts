@@ -4,7 +4,6 @@
  * Application API
  * OpenAPI spec version: 0.1.0
  */
-import type { CreateDocumentBodyMode } from './createDocumentBodyMode';
 
 export type CreateDocumentBody = {
   /**
@@ -12,7 +11,6 @@ export type CreateDocumentBody = {
      * @maxLength 200
      */
   title?: string;
-  mode?: CreateDocumentBodyMode;
   /** @pattern ^ws_[A-Za-z0-9_-]{1,64}$ */
   workspaceId?: string;
   /** @pattern ^cat_[A-Za-z0-9_-]{1,64}$ */

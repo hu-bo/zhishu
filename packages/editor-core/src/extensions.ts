@@ -19,13 +19,12 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { createBlockId, HIGHLIGHT_COLORS, TEXT_ALIGNMENTS } from "@zhishu/document-contracts";
 import { createBlockIndexExtension } from "./index-plugin.js";
 import type { EditorLimitExceededReason } from "./index-plugin.js";
+import { replacementPreviewExtension } from "./replacement-preview.js";
 import {
   createCalloutExtension,
   createDividerExtension,
   createStatusTagExtension,
 } from "./content-nodes.js";
-
-export const EDITOR_TASK_COMPLETED_EVENT = "zhishu-task-completed";
 
 const blockTypes = [
   "paragraph",
@@ -311,7 +310,7 @@ const taskItemBlock = Node.create({
         checkbox.setAttribute("aria-label", current.textContent.slice(0, 255) || "任务完成状态");
       };
       syncAttributes(node);
-      checkbox.addEventListener("change", (event) => {
+      checkbox.addEventListener("change", () => {
         if (!view.editable || typeof getPos !== "function") return;
         const position = getPos();
         if (typeof position !== "number") return;
@@ -322,15 +321,6 @@ const taskItemBlock = Node.create({
             .setNodeMarkup(position, undefined, { ...current.attrs, checked: checkbox.checked })
             .setMeta("zhishu-origin", "host-command"),
         );
-        const updated = view.state.doc.nodeAt(position);
-        if (
-          event.isTrusted &&
-          current.attrs.checked !== true &&
-          updated?.attrs.checked === true &&
-          updated.attrs.blockId === current.attrs.blockId
-        ) {
-          dom.dispatchEvent(new CustomEvent(EDITOR_TASK_COMPLETED_EVENT, { bubbles: true }));
-        }
       });
 
       return {
@@ -612,6 +602,7 @@ export function createBaseEditorExtensions(options: BaseEditorExtensionsOptions 
     : undefined;
 
   const extensions: Extensions = [
+    replacementPreviewExtension,
     StarterKit.configure({
       link,
       codeBlock: false,

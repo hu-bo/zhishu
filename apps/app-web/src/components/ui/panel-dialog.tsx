@@ -26,26 +26,26 @@ export function PanelDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Modal.Backdrop variant="opaque" className="bg-overlay/50">
+      <Modal.Backdrop variant="blur" className="bg-backdrop backdrop-blur-sm">
         <Modal.Container
-          placement="bottom"
+          placement="auto"
           size="lg"
           className={cn(
-            'sm:max-w-4xl',
+            'w-full sm:w-full sm:max-w-none sm:p-6',
             // On mobile, bottom-sheet: stretch full width.
-            'max-sm:!items-end max-sm:!justify-end',
+            'max-sm:!items-end max-sm:!justify-end max-sm:p-0',
           )}
         >
           <Modal.Dialog
             className={cn(
-              'gap-4 p-4 sm:max-w-4xl',
+              'zhishu-dialog max-w-2xl gap-6 p-5 sm:p-7',
               'max-sm:!rounded-b-none max-sm:!rounded-t-2xl max-sm:!translate-y-0',
               'max-sm:!top-auto max-sm:!bottom-0 max-sm:!left-0 max-sm:!max-h-[85dvh] max-sm:!w-full',
               'max-sm:!overflow-y-auto max-sm:!border max-sm:!border-b-0',
               'max-sm:!pb-[max(1rem,env(safe-area-inset-bottom))]',
             )}
           >
-            <DialogHeader>
+            <DialogHeader className="pr-0">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-2">
                   <DialogTitle>{title}</DialogTitle>
@@ -63,7 +63,7 @@ export function PanelDialog({
                 </Button>
               </div>
             </DialogHeader>
-            <ModalBody className="space-y-6">{children}</ModalBody>
+            <ModalBody className="min-w-0 space-y-6 p-0">{children}</ModalBody>
           </Modal.Dialog>
         </Modal.Container>
       </Modal.Backdrop>

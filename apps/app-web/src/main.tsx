@@ -1,22 +1,21 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { RouterProvider } from '@tanstack/react-router';
-import { AppProviders } from '@/app/providers';
-import { createQueryClient } from '@/app/query-client';
-import { createAppRouter } from '@/app/router';
+import { App } from './App';
 import '@/styles/globals.css';
 import '@zhishu/editor-ui/styles.css';
 import { installOfflineWorker } from '@/features/offline/install-worker';
+import { initializeTheme } from '@/lib/theme';
 
-const queryClient = createQueryClient();
-const router = createAppRouter(queryClient);
+initializeTheme();
 installOfflineWorker();
+
 const root = document.getElementById('root');
-if (!root) throw new Error('Application root is missing');
+if (!root) {
+  throw new Error('Application root is missing');
+}
+
 createRoot(root).render(
   <StrictMode>
-    <AppProviders queryClient={queryClient}>
-      <RouterProvider router={router} />
-    </AppProviders>
+    <App />
   </StrictMode>,
 );

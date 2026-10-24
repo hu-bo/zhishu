@@ -16,3 +16,28 @@ export const mockLoginResponseSchema = z.object({
   expiresAt: z.string().datetime(),
   user: principalSchema,
 });
+
+export const mockLoginBodySchema = z
+  .object({
+    /** Select which mock identity to log in as; defaults to the first user. */
+    userId: z.string().optional(),
+  })
+  .nullable()
+  .optional();
+
+export const mockMemberRoleSchema = z.enum(["admin", "editor", "viewer"]);
+
+export const mockPrincipalSummarySchema = z
+  .object({
+    identityId: z.string(),
+    username: z.string(),
+    displayName: z.string(),
+    email: z.string().email(),
+    /** Declared role on the default workspace; null means non-member. */
+    role: mockMemberRoleSchema.nullable(),
+  })
+  .readonly();
+
+export const mockUsersResponseSchema = z.object({
+  users: z.array(mockPrincipalSummarySchema),
+});

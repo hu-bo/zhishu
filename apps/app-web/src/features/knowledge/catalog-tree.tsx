@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronRight,
   FileText,
@@ -10,9 +10,19 @@ import {
   MoreHorizontal,
   Pencil,
   FolderInput,
+  LockKeyhole,
   Trash2,
 } from 'lucide-react';
-import { listCatalogChildren } from '@/api/generated/app-api';
+import { listCatalogChildren, moveCatalog, moveKnowledgeDocument } from '@/api/generated/app-api';
+import { errorMessage } from '@/api/api-error';
+import { invalidateSpaceData } from './space-data';
+import {
+  CatalogTreeTransferContext,
+  useCatalogDropTarget,
+  type CatalogDragItem,
+  type CatalogDropTarget,
+} from './catalog-tree-transfer';
+import { useKnowledgeWorkspace } from './workspace-context';
 import { Button } from '@/components/ui/button';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
 import type { CatalogAction } from './catalog-dialogs';
@@ -42,6 +52,7 @@ function useAutoScrollIntoView(active: boolean) {
 
 function CatalogRow({
   catalog,
+  parentCatalogId,
   depth,
   expanded,
   active,
@@ -57,6 +68,7 @@ function CatalogRow({
     canManage: boolean;
   };
   depth: number;
+  parentCatalogId: string;
   expanded: boolean;
   active: boolean;
   onToggle: () => void;
@@ -64,22 +76,27 @@ function CatalogRow({
   onAction: (action: CatalogAction) => void;
 }) {
   const ref = useAutoScrollIntoView(active);
+  const dropTarget = useCatalogDropTarget(
+    { catalogId: catalog.id, parentCatalogId, beforeCatalogId: catalog.id },
+    catalog.canManage ? { kind: 'catalog', id: catalog.id } : undefined,
+  );
   return (
     <div
       ref={ref}
-      className={`group/row flex items-center rounded-lg pr-1 transition-colors duration-150 ${
-        active ? 'bg-muted font-medium text-foreground' : 'hover:bg-muted/60'
+      {...dropTarget.props}
+      data-drop-target={dropTarget.hover || undefined}
+      className={`group/row flex items-center rounded-lg pr-1 transition-colors duration-150 ${dropTarget.hover ? 'ring-2 ring-primary bg-secondary' : ''} ${
+        active ? 'bg-secondary font-medium text-foreground' : 'hover:bg-secondary/60'
       }`}
       style={{ paddingLeft: depth * 14 }}
     >
       <button
         type="button"
-        tabIndex={-1}
         aria-label={expanded ? `收起 ${catalog.name}` : `展开 ${catalog.name}`}
         disabled={!catalog.hasChildren}
         onClick={onToggle}
         className={`flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-transform ${
-          catalog.hasChildren ? 'hover:bg-muted hover:text-foreground' : 'invisible'
+          catalog.hasChildren ? 'hover:bg-secondary hover:text-foreground' : 'invisible'
         }`}
       >
         <ChevronRight
@@ -166,6 +183,7 @@ function CatalogRow({
 
 function DocumentRow({
   document,
+  catalogId,
   depth,
   active,
   onOpenDocument,
@@ -176,21 +194,30 @@ function DocumentRow({
     title: string;
     icon: string | null;
     metadataRevision: number;
+    canWrite: boolean;
     canManage: boolean;
   };
   depth: number;
+  catalogId: string;
   active: boolean;
   onOpenDocument: () => void;
   onAction: (action: CatalogAction) => void;
 }) {
   const ref = useAutoScrollIntoView(active);
+  const dropTarget = useCatalogDropTarget(
+    { catalogId, beforeDocumentId: document.id },
+    document.canManage
+      ? { kind: 'document', id: document.id, metadataRevision: document.metadataRevision }
+      : undefined,
+  );
   return (
     <div
       ref={ref}
-      className={`group/row flex items-center rounded-lg pr-1 transition-colors duration-150 ${
+      {...dropTarget.props}
+      className={`group/row flex items-center rounded-lg pr-1 transition-colors duration-150 ${dropTarget.hover ? 'ring-2 ring-primary bg-secondary' : ''} ${
         active
           ? 'bg-secondary font-medium text-primary'
-          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+          : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
       }`}
       style={{ paddingLeft: depth * 14 + 24 }}
     >
@@ -198,12 +225,16 @@ function DocumentRow({
         type="button"
         onClick={onOpenDocument}
         aria-current={active ? 'page' : undefined}
+        aria-label={document.canWrite ? document.title : `${document.title}（只读）`}
         className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 text-left text-sm"
       >
         <span aria-hidden="true" className="shrink-0 text-xs leading-none">
           {document.icon || <FileText size={14} aria-hidden="true" />}
         </span>
         <span className="min-w-0 flex-1 truncate">{document.title}</span>
+        {!document.canWrite && (
+          <LockKeyhole size={13} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+        )}
       </button>
       {document.canManage && (
         <Menu>
@@ -293,6 +324,7 @@ function TreeBranch({
         <div key={catalog.id}>
           <CatalogRow
             catalog={catalog}
+            parentCatalogId={catalogId}
             depth={depth}
             expanded={expanded.has(catalog.id)}
             active={activeCatalogId === catalog.id}
@@ -321,6 +353,7 @@ function TreeBranch({
         <DocumentRow
           key={document.id}
           document={document}
+          catalogId={catalogId}
           depth={depth}
           active={activeDocumentId === document.id}
           onOpenDocument={() => onOpenDocument(document.id)}
@@ -347,6 +380,43 @@ export function CatalogTree({
   onOpenCatalog,
   onAction,
 }: CatalogTreeProps) {
+  const queryClient = useQueryClient();
+  const { workspaces } = useKnowledgeWorkspace();
+  const canOrganize =
+    workspaces.find((workspace) => workspace.id === workspaceId)?.canOrganize ?? false;
+  const [dragged, setDragged] = useState<CatalogDragItem | null>(null);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [feedback, setFeedback] = useState<{ error: boolean; message: string } | null>(null);
+  const drop = async (target: CatalogDropTarget) => {
+    if (!dragged || busyRef.current || !canOrganize) return;
+    busyRef.current = true;
+    setBusy(true);
+    setFeedback(null);
+    try {
+      if (dragged.kind === 'catalog')
+        await moveCatalog(dragged.id, {
+          parentId: target.catalogId,
+          beforeId: target.beforeCatalogId ?? null,
+        });
+      else
+        await moveKnowledgeDocument(dragged.id, {
+          workspaceId,
+          catalogId: target.catalogId,
+          beforeId: target.beforeDocumentId ?? null,
+          metadataRevision: dragged.metadataRevision,
+        });
+      invalidateSpaceData(queryClient, identityKey);
+      void queryClient.invalidateQueries({ queryKey: ['document', dragged.id] });
+      setFeedback({ error: false, message: '目录位置已保存。' });
+    } catch (cause) {
+      setFeedback({ error: true, message: errorMessage(cause) });
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+      setDragged(null);
+    }
+  };
   // Expansion is derived, never effect-synced: the user's own expansions plus
   // the forced locate path, minus explicit collapses. Collapses are scoped to
   // the expandKey generation they were made under, so navigating to another
@@ -384,20 +454,76 @@ export function CatalogTree({
   };
 
   return (
-    <nav aria-label="空间目录" className="px-2 py-2">
-      <TreeBranch
-        workspaceId={workspaceId}
-        catalogId={rootCatalogId}
-        depth={0}
-        identityKey={identityKey}
-        activeDocumentId={activeDocumentId}
-        activeCatalogId={activeCatalogId}
-        expanded={expanded}
-        toggle={toggle}
-        onOpenDocument={onOpenDocument}
-        onOpenCatalog={onOpenCatalog}
-        onAction={onAction}
-      />
-    </nav>
+    <CatalogTreeTransferContext.Provider
+      value={{
+        busy,
+        dragged: canOrganize ? dragged : null,
+        start: setDragged,
+        drop: (target) => void drop(target),
+      }}
+    >
+      <nav aria-label="空间目录" className="px-2 py-2" aria-busy={busy}>
+        <RootCatalogRow
+          rootCatalogId={rootCatalogId}
+          active={activeCatalogId === rootCatalogId && !activeDocumentId}
+          onOpen={() => onOpenCatalog(rootCatalogId)}
+        />
+        {feedback && (
+          <p
+            role={feedback.error ? 'alert' : 'status'}
+            className={`px-2 py-2 text-xs ${feedback.error ? 'text-destructive' : 'text-muted-foreground'}`}
+          >
+            {feedback.message}
+            {feedback.error && (
+              <button
+                type="button"
+                className="ml-2 underline"
+                onClick={() => invalidateSpaceData(queryClient, identityKey, workspaceId)}
+              >
+                刷新目录
+              </button>
+            )}
+          </p>
+        )}
+        <TreeBranch
+          workspaceId={workspaceId}
+          catalogId={rootCatalogId}
+          depth={0}
+          identityKey={identityKey}
+          activeDocumentId={activeDocumentId}
+          activeCatalogId={activeCatalogId}
+          expanded={expanded}
+          toggle={toggle}
+          onOpenDocument={onOpenDocument}
+          onOpenCatalog={onOpenCatalog}
+          onAction={onAction}
+        />
+      </nav>
+    </CatalogTreeTransferContext.Provider>
+  );
+}
+
+function RootCatalogRow({
+  rootCatalogId,
+  active,
+  onOpen,
+}: {
+  rootCatalogId: string;
+  active: boolean;
+  onOpen: () => void;
+}) {
+  const target = useCatalogDropTarget({ catalogId: rootCatalogId });
+  return (
+    <div {...target.props} className={target.hover ? 'rounded-lg ring-2 ring-primary' : ''}>
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-current={active ? 'page' : undefined}
+        className={`mb-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm ${active ? 'bg-secondary text-primary' : 'text-muted-foreground hover:bg-secondary'}`}
+      >
+        <Folder size={14} aria-hidden="true" />
+        空间根目录
+      </button>
+    </div>
   );
 }

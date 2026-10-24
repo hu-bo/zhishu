@@ -112,7 +112,6 @@ function DocumentsPage() {
   const [searchDraft, setSearchDraft] = useState(search.q ?? '');
   const [createOpen, setCreateOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
-  const [newMode, setNewMode] = useState<'collaborative' | 'standard'>('collaborative');
   const [actionError, setActionError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null);
@@ -159,21 +158,20 @@ function DocumentsPage() {
     setBusyId('create');
     const createInput = {
       title: newTitle.trim() || '未命名文档',
-      mode: newMode,
       ...(workspaces[0] ? { workspaceId: workspaces[0].id } : {}),
     };
     const fingerprint = JSON.stringify(createInput);
     const idempotencyKey = createRequestKeys.current.get(fingerprint) ?? crypto.randomUUID();
     createRequestKeys.current.set(fingerprint, idempotencyKey);
     try {
-      await createDocument(createInput, { headers: { 'Idempotency-Key': idempotencyKey } });
+      const created = await createDocument(createInput, {
+        headers: { 'Idempotency-Key': idempotencyKey },
+      });
       createRequestKeys.current.delete(fingerprint);
-      setCreateOpen(false);
-      setNewTitle('');
-      setNewMode('collaborative');
-      setSearchDraft('');
-      changeSearch({ view: 'mine', q: undefined, offset: 0 });
-      await refresh();
+      void navigate({
+        to: '/spaces/$workspaceId/doc/$documentId',
+        params: { workspaceId: created.workspaceId, documentId: created.id },
+      });
     } catch (error) {
       setActionError(errorMessage(error));
     } finally {
@@ -197,46 +195,43 @@ function DocumentsPage() {
   };
 
   return (
-    <div className="space-y-8">
-      <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-        <div>
-          <p className="text-sm font-medium text-primary">你的工作空间</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight">文档</h1>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-            集中查看最近打开和共享给你的内容。你可以从空白文档开始，也可以稍后整理收藏与归档。
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)} className="h-10 gap-2 px-4">
+    <div className="zhishu-page space-y-5">
+      <section className="flex items-center justify-between gap-4">
+        <h1 className="zhishu-page-heading">我的文档</h1>
+        <Button onClick={() => setCreateOpen(true)} className="h-10 gap-2 px-3 sm:px-4">
           <Plus aria-hidden="true" />
           新建文档
         </Button>
       </section>
 
-      <section className="rounded-2xl border bg-card p-3 shadow-sm shadow-foreground/[0.02] sm:p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <nav aria-label="文档视图" className="flex gap-1 overflow-x-auto pb-1">
+      <section className="space-y-4">
+        <div className="flex min-w-0 flex-col gap-4">
+          <nav
+            aria-label="文档视图"
+            className="flex gap-1 overflow-x-auto border-b border-border pb-2"
+          >
             {views.map(({ value, label, icon: Icon }) => (
               <button
                 key={value}
                 type="button"
                 onClick={() => changeSearch({ view: value, offset: 0 })}
                 aria-current={search.view === value ? 'page' : undefined}
-                className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring ${search.view === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+                className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-[13px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring ${search.view === value ? 'bg-primary/8 font-medium text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}
               >
                 <Icon size={15} aria-hidden="true" />
                 {label}
               </button>
             ))}
           </nav>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex flex-wrap items-center gap-2.5">
             <form
               onSubmit={submitSearch}
               role="search"
-              className="relative min-w-0 flex-1 sm:w-64 sm:flex-none"
+              className="relative min-w-0 basis-full sm:max-w-80 sm:basis-auto sm:flex-1"
             >
               <Search
                 size={16}
-                className="absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground"
+                className="pointer-events-none absolute top-1/2 left-3 z-10 -translate-y-1/2 text-muted-foreground"
                 aria-hidden="true"
               />
               <Input
@@ -247,8 +242,8 @@ function DocumentsPage() {
                 onChange={(event) => setSearchDraft(event.target.value)}
               />
             </form>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>排序</span>
+            <div className="ml-auto flex shrink-0 items-center gap-2 text-[13px] text-muted-foreground">
+              <span className="hidden whitespace-nowrap sm:inline">排序</span>
               <Select
                 value={search.sort}
                 onValueChange={(value) => {
@@ -298,7 +293,7 @@ function DocumentsPage() {
           </p>
         )}
 
-        <div className="mt-5 border-t">
+        <div>
           {!enabled ? (
             <p className="py-12 text-center text-sm text-muted-foreground">
               登录后查看你的文档与团队知识库。
@@ -351,33 +346,35 @@ function DocumentsPage() {
             <>
               <ul
                 aria-label={`${currentView.label}列表`}
-                className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3 pt-1"
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3"
               >
                 {documents.data.items.map((document) => (
                   <li
                     key={document.id}
                     aria-busy={busyId === document.id}
-                    className="group relative flex flex-col rounded-xl border bg-card p-4 shadow-xs transition-colors duration-150 hover:border-primary/40"
+                    className="zhishu-card group relative flex min-w-0 flex-col p-4"
                   >
                     <div className="flex items-start gap-3">
-                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-lg">
+                      <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background text-xl">
                         {document.icon ?? (
-                          <FileText size={18} className="text-primary" aria-hidden="true" />
+                          <FileText
+                            size={18}
+                            className="text-muted-foreground"
+                            aria-hidden="true"
+                          />
                         )}
                       </span>
                       <div className="min-w-0 flex-1">
                         <Link
-                          to="/spaces/$workspaceId"
-                          params={{ workspaceId: document.workspaceId }}
-                          search={{ doc: document.id }}
+                          to="/spaces/$workspaceId/doc/$documentId"
+                          params={{ workspaceId: document.workspaceId, documentId: document.id }}
                           title={document.title}
-                          className="block truncate text-sm font-medium outline-none transition-colors duration-150 hover:text-primary focus-visible:underline"
+                          className="line-clamp-2 text-sm font-semibold leading-6 outline-none transition-colors duration-150 hover:text-primary focus-visible:underline"
                         >
                           {document.title}
                         </Link>
                         <p className="mt-1 truncate text-xs text-muted-foreground">
-                          {document.workspaceName} · {document.createdBy} ·{' '}
-                          {document.mode === 'standard' ? '快照' : '协同'}
+                          {document.workspaceName}
                           {search.view === 'trash' && ' · 已移入回收站'}
                         </p>
                       </div>
@@ -389,10 +386,10 @@ function DocumentsPage() {
                         />
                       )}
                     </div>
-                    <p className="mt-3 line-clamp-2 min-h-10 text-xs leading-5 text-muted-foreground">
-                      {document.excerpt || '暂无内容摘要。'}
+                    <p className="mt-3 line-clamp-2 min-h-11 text-[13px] leading-[1.7] text-muted-foreground">
+                      {document.excerpt || '空白文档，等你写下第一个想法。'}
                     </p>
-                    <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3">
+                    <div className="mt-4 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
                       <span className="truncate text-xs text-muted-foreground">
                         {search.view === 'trash' ? '移入' : '更新'}于{' '}
                         {relativeTime(
@@ -507,7 +504,7 @@ function DocumentsPage() {
                   </li>
                 ))}
               </ul>
-              <div className="flex items-center justify-between border-t px-2 pt-4 text-sm text-muted-foreground sm:px-3">
+              <div className="mt-4 flex items-center justify-between border-t px-1 pt-3 text-xs text-muted-foreground">
                 <span>第 {page} 页</span>
                 <div className="flex gap-2">
                   <Button
@@ -539,9 +536,7 @@ function DocumentsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>新建文档</DialogTitle>
-            <DialogDescription>
-              普通快照显式保存；启动实时协同会话时会原子升级为协同模式。
-            </DialogDescription>
+            <DialogDescription>给想法起个名字。支持多人协作，内容会自动保存。</DialogDescription>
           </DialogHeader>
           <form onSubmit={submitCreate} className="space-y-4">
             <label className="block space-y-2 text-sm font-medium">
@@ -554,41 +549,6 @@ function DocumentsPage() {
                 onChange={(event) => setNewTitle(event.target.value)}
               />
             </label>
-            <fieldset className="space-y-2">
-              <legend className="text-sm font-medium">编辑模式</legend>
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3">
-                <input
-                  className="mt-1 accent-primary"
-                  type="radio"
-                  name="document-mode"
-                  value="collaborative"
-                  checked={newMode === 'collaborative'}
-                  onChange={() => setNewMode('collaborative')}
-                />
-                <span>
-                  <span className="block text-sm font-medium">实时协同</span>
-                  <span className="block text-xs text-muted-foreground">
-                    多人可同时编辑，变更由服务器自动持久化。
-                  </span>
-                </span>
-              </label>
-              <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3">
-                <input
-                  className="mt-1 accent-primary"
-                  type="radio"
-                  name="document-mode"
-                  value="standard"
-                  checked={newMode === 'standard'}
-                  onChange={() => setNewMode('standard')}
-                />
-                <span>
-                  <span className="block text-sm font-medium">普通快照</span>
-                  <span className="block text-xs text-muted-foreground">
-                    编辑后显式保存；并发修改会提示冲突，不建立实时协同连接。
-                  </span>
-                </span>
-              </label>
-            </fieldset>
             {actionError && (
               <p role="alert" className="text-sm text-destructive">
                 {actionError}

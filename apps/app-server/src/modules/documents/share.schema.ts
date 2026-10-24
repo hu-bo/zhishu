@@ -70,7 +70,6 @@ export const publicShareDetailSchema = z
         title: z.string(),
         icon: documentIconSchema,
         updatedAt: z.string().datetime(),
-        mode: z.enum(["standard", "collaborative"]),
         schemaVersion: z.number().int().positive(),
         extensions: z.array(extensionSchema),
         generationId: z.string().regex(/^gen_[A-Za-z0-9_-]{1,64}$/),

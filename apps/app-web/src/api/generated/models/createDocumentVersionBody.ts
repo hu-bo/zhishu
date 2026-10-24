@@ -6,7 +6,6 @@
  */
 
 export type CreateDocumentVersionBody = {
-  mode: 'collaborative';
   /**
      * @minLength 1
      * @maxLength 200
@@ -16,16 +15,4 @@ export type CreateDocumentVersionBody = {
   expectedGenerationId: string;
   /** @minimum 0 */
   expectedDurableSeq: number;
-} | {
-  mode: 'standard';
-  /**
-     * @minLength 1
-     * @maxLength 200
-     */
-  name: string;
-  /**
-     * @minimum 0
-     * @exclusiveMinimum
-     */
-  expectedSnapshotRevision: number;
 };

@@ -3,21 +3,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Search,
-  Filter,
   ArrowUpDown,
   Plus,
-  Trash2,
   FileText,
   Clock,
   Star,
   Archive,
   AlertTriangle,
-  FolderPlus,
-  Compass,
   AtSign,
+  ChevronRight,
+  Compass as CompassIcon,
+  Layers,
 } from 'lucide-react';
 import {
   WorkbenchView,
@@ -26,6 +25,7 @@ import {
   DocumentMetadata,
   Workspace,
   CurrentUser,
+  MentionNotification,
 } from '../../types/document';
 import { storageService } from '../../services/storage';
 import { DocumentCard } from './DocumentCard';
@@ -108,6 +108,44 @@ export const WorkbenchPage: React.FC<WorkbenchPageProps> = ({
     reloadDocuments();
   }, [currentView, searchQuery, sortField, sortDirection, selectedSpaceId, currentUser]);
 
+  // Build dashboard sections for the "与我相关" (relevant) view.
+  // Each section shows at most 10 items, sorted by `updatedAt` desc by default.
+  const dashboardSections = useMemo(() => {
+    if (currentView !== 'relevant') return null;
+
+    const all = storageService.getDocuments({ view: 'all', sort: 'updatedAt', direction: 'desc' });
+    const starred = storageService.getDocuments({
+      view: 'starred',
+      sort: 'updatedAt',
+      direction: 'desc',
+    });
+    const mine = storageService.getDocuments({
+      view: 'my',
+      sort: 'updatedAt',
+      direction: 'desc',
+    });
+
+    // @mentions: dedupe notifications by documentId, hydrate each doc from the full list.
+    const notifs: MentionNotification[] = storageService.getNotifications(currentUser.id);
+    const seenDocIds = new Set<string>();
+    const mentioned: DocumentMetadata[] = [];
+    for (const n of notifs) {
+      if (seenDocIds.has(n.documentId)) continue;
+      seenDocIds.add(n.documentId);
+      const doc = all.find((d) => d.id === n.documentId);
+      if (doc && !doc.isArchived && doc.deletedAt === null) {
+        mentioned.push(doc);
+      }
+    }
+
+    return {
+      recent: all.slice(0, 10),
+      starred: starred.slice(0, 10),
+      mine: mine.slice(0, 10),
+      mentioned: mentioned.slice(0, 10),
+    };
+  }, [currentView, currentUser, documents]);
+
   const handleToggleStar = (id: string) => {
     storageService.toggleStar(id);
     reloadDocuments();
@@ -146,12 +184,13 @@ export const WorkbenchPage: React.FC<WorkbenchPageProps> = ({
   const viewTitles: Record<WorkbenchView, { title: string; subtitle: string }> = {
     relevant: {
       title: '与我相关',
-      subtitle: '展示与我相关的所有文档（由我创建、我参与协作授权或在批注中 @提及我）',
+      subtitle: '聚合展示最近编辑、收藏、我创建与 @提及我的文档，每类最多 10 篇',
     },
     recent: { title: '最近使用', subtitle: '按最近访问与持久化排序的文档' },
     my: { title: '我的文档', subtitle: '当前用户负责创建与维护的文档集合' },
     all: { title: '全部文档', subtitle: '已授权可见的全部普通快照与协同文档' },
     starred: { title: '收藏夹', subtitle: '已加星标便于快速定位的重点文档' },
+    archived: { title: '已归档', subtitle: '归档文档默认只读，可在文档详情页恢复' },
     trash: { title: '回收站', subtitle: '临时移入回收站的草稿文档，保留恢复与所有者永久销毁入口' },
   };
 
@@ -173,7 +212,8 @@ export const WorkbenchPage: React.FC<WorkbenchPageProps> = ({
           </p>
         </div>
 
-        {/* Search & Sort Controls */}
+        {/* Search & Sort Controls (hidden in dashboard view) */}
+        {currentView !== 'relevant' && (
         <div className="flex items-center gap-2.5">
           {/* Search box */}
           <div className="relative">
@@ -208,6 +248,7 @@ export const WorkbenchPage: React.FC<WorkbenchPageProps> = ({
             <ArrowUpDown className="w-4 h-4" />
           </button>
         </div>
+        )}
       </div>
 
       {/* Trash Policy Notice */}
@@ -220,8 +261,19 @@ export const WorkbenchPage: React.FC<WorkbenchPageProps> = ({
         </div>
       )}
 
-      {/* Documents Grid / Empty State */}
-      {documents.length === 0 ? (
+      {/* Dashboard (与我相关) / Documents Grid / Empty State */}
+      {currentView === 'relevant' && dashboardSections ? (
+        <DashboardView
+          sections={dashboardSections}
+          onOpen={onOpenDocument}
+          onToggleStar={handleToggleStar}
+          onToggleArchive={handleToggleArchive}
+          onMoveToTrash={handleMoveToTrash}
+          onMoveDocument={(docToMove) => setMovingDoc(docToMove)}
+          onSeeMore={(view) => onViewChange(view)}
+          onCreate={onOpenCreate}
+        />
+      ) : documents.length === 0 ? (
         <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 space-y-3">
           <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto">
             <FileText className="w-6 h-6" />
@@ -233,8 +285,6 @@ export const WorkbenchPage: React.FC<WorkbenchPageProps> = ({
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {currentView === 'trash'
                 ? '回收站目前是空的，删除的文档将临时存放于此。'
-                : currentView === 'relevant'
-                ? '暂无与您相关的文档。您可以创建新文档，或等待团队成员在批注中 @提及您。'
                 : '您可以立即创建实时协同文档或普通快照文档开启创作。'}
             </p>
           </div>
@@ -308,5 +358,192 @@ export const WorkbenchPage: React.FC<WorkbenchPageProps> = ({
         onCancel={() => setPendingDeleteId(null)}
       />
     </div>
+  );
+};
+
+// --- Dashboard ("与我相关") ---
+// A comprehensive dashboard replacing the list+pagination for the relevant view.
+// Each section shows up to 10 documents; "更多" jumps to the dedicated list page
+// (which keeps search/sort/pagination behavior unchanged).
+
+type DashboardSections = {
+  recent: DocumentMetadata[];
+  starred: DocumentMetadata[];
+  mine: DocumentMetadata[];
+  mentioned: DocumentMetadata[];
+};
+
+interface DashboardViewProps {
+  sections: DashboardSections;
+  onOpen: (id: string) => void;
+  onToggleStar: (id: string) => void;
+  onToggleArchive: (id: string) => void;
+  onMoveToTrash: (id: string) => void;
+  onMoveDocument: (doc: DocumentMetadata) => void;
+  onSeeMore: (view: WorkbenchView) => void;
+  onCreate: () => void;
+}
+
+const DASHBOARD_PAGE_SIZE = 10;
+
+const DashboardView: React.FC<DashboardViewProps> = ({
+  sections,
+  onOpen,
+  onToggleStar,
+  onToggleArchive,
+  onMoveToTrash,
+  onMoveDocument,
+  onSeeMore,
+  onCreate,
+}) => {
+  const allEmpty =
+    sections.recent.length === 0 &&
+    sections.starred.length === 0 &&
+    sections.mine.length === 0 &&
+    sections.mentioned.length === 0;
+
+  const renderCard = (doc: DocumentMetadata) => (
+    <DocumentCard
+      key={doc.id}
+      document={doc}
+      onOpen={onOpen}
+      onToggleStar={onToggleStar}
+      onToggleArchive={onToggleArchive}
+      onMoveToTrash={onMoveToTrash}
+      onRestoreFromTrash={() => {}}
+      onRequestPermanentDelete={() => {}}
+      onMoveDocument={onMoveDocument}
+    />
+  );
+
+  if (allEmpty) {
+    return (
+      <div className="p-12 text-center bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 space-y-3">
+        <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto">
+          <CompassIcon className="w-6 h-6" />
+        </div>
+        <div className="space-y-1">
+          <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+            这里还没有与您相关的内容
+          </h4>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            创建一篇文档开始协作，或等待团队成员在批注中 @提及您。
+          </p>
+        </div>
+        <button
+          onClick={onCreate}
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg shadow-xs transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          <span>新建知书文档</span>
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-7">
+      <DashboardSection
+        icon={<Clock className="w-4 h-4 text-indigo-500" />}
+        title="最近编辑"
+        subtitle="按更新时间倒序展示最新 10 篇"
+        count={sections.recent.length}
+        docs={sections.recent}
+        emptyText="最近还没有编辑过的文档。"
+        onSeeMore={() => onSeeMore('recent')}
+        renderCard={renderCard}
+      />
+
+      <DashboardSection
+        icon={<Star className="w-4 h-4 text-amber-500" />}
+        title="我收藏的"
+        subtitle="加星标的重点文档，最多展示 10 篇"
+        count={sections.starred.length}
+        docs={sections.starred}
+        emptyText="还没有收藏的文档，可点击卡片右上角的星标添加。"
+        onSeeMore={() => onSeeMore('starred')}
+        renderCard={renderCard}
+      />
+
+      <DashboardSection
+        icon={<Layers className="w-4 h-4 text-emerald-500" />}
+        title="我创建的"
+        subtitle="由当前用户负责创建与维护"
+        count={sections.mine.length}
+        docs={sections.mine}
+        emptyText="您还没有创建任何文档。"
+        onSeeMore={() => onSeeMore('my')}
+        renderCard={renderCard}
+      />
+
+      <DashboardSection
+        icon={<AtSign className="w-4 h-4 text-violet-500" />}
+        title="@提及我的"
+        subtitle="团队成员在批注中 @提到了您，去看看回复他们"
+        count={sections.mentioned.length}
+        docs={sections.mentioned}
+        emptyText="近期还没有人 @提及您。"
+        onSeeMore={() => onSeeMore('all')}
+        renderCard={renderCard}
+      />
+    </div>
+  );
+};
+
+interface DashboardSectionProps {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  count: number;
+  docs: DocumentMetadata[];
+  emptyText: string;
+  onSeeMore: () => void;
+  renderCard: (doc: DocumentMetadata) => React.ReactNode;
+}
+
+const DashboardSection: React.FC<DashboardSectionProps> = ({
+  icon,
+  title,
+  subtitle,
+  count,
+  docs,
+  emptyText,
+  onSeeMore,
+  renderCard,
+}) => {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+            {icon}
+            <span>{title}</span>
+            <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">
+              · {count}
+            </span>
+          </h3>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>
+        </div>
+        {count > 0 && (
+          <button
+            type="button"
+            onClick={onSeeMore}
+            className="shrink-0 text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5"
+          >
+            更多 <ChevronRight className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+
+      {docs.length === 0 ? (
+        <div className="p-4 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/40 text-xs text-slate-500 dark:text-slate-400">
+          {emptyText}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {docs.slice(0, DASHBOARD_PAGE_SIZE).map(renderCard)}
+        </div>
+      )}
+    </section>
   );
 };

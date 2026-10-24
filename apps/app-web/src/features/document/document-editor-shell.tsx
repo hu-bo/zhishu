@@ -1,8 +1,17 @@
-import { useState, type ReactNode } from 'react';
-import { EditorShell } from '@zhishu/editor-ui';
+import { useEffect, type ReactNode } from 'react';
+import {
+  EditorCollaborationIndicator,
+  EditorShell,
+  type EditorReplacementReviewProps,
+} from '@zhishu/editor-ui';
+import {
+  useEditorCollaborationPresences,
+  useEditorCollaborationStatus,
+  type EditorCollaborationPresence,
+} from '@zhishu/editor-react';
 
 /**
- * Editor chrome shared by the standard and collaborative editors.
+ * Editor chrome shared by the collaborative editors.
  * The outline uses EditorShell's built-in floating toggle; document metadata
  * and technical details live in dialogs owned by the document pane, so the
  * shell itself renders a single clean editing surface.
@@ -10,25 +19,36 @@ import { EditorShell } from '@zhishu/editor-ui';
 export function DocumentEditorShell({
   ariaLabel,
   editingControls,
+  className,
   footerSlot,
+  onCollaborationPresenceChange,
+  replacementReview,
 }: {
   ariaLabel: string;
   editingControls: boolean;
+  className?: string;
   footerSlot?: ReactNode;
+  onCollaborationPresenceChange?: (participants: readonly EditorCollaborationPresence[]) => void;
+  replacementReview?: EditorReplacementReviewProps;
 }) {
-  const [celebration, setCelebration] = useState(() => {
-    try {
-      return localStorage.getItem('zhishu.task-celebration') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const collaborationStatus = useEditorCollaborationStatus();
+  const collaborationPresences = useEditorCollaborationPresences();
+
+  useEffect(() => {
+    onCollaborationPresenceChange?.(collaborationPresences);
+  }, [collaborationPresences, onCollaborationPresenceChange]);
+  useEffect(() => () => onCollaborationPresenceChange?.([]), [onCollaborationPresenceChange]);
+
   return (
     <EditorShell
       ariaLabel={ariaLabel}
       surfaceLabel="文档正文"
+      className={['zhishu-ui-document-editor', className].filter(Boolean).join(' ')}
       editingControls={editingControls}
-      taskCelebration={celebration}
+      replacementReview={replacementReview}
+      showHeader={false}
+      collaborationIndicator={false}
+      collaborationParticipantsCount={false}
       outline
       outlinePlacement="end"
       outlineLabel="正文大纲"
@@ -42,29 +62,10 @@ export function DocumentEditorShell({
       slashMenu
       selectionMenu
       linkEditor
-      footerSlot={
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {footerSlot}
-          {editingControls && (
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={celebration}
-                onChange={(event) => {
-                  const enabled = event.target.checked;
-                  setCelebration(enabled);
-                  try {
-                    localStorage.setItem('zhishu.task-celebration', String(enabled));
-                  } catch {
-                    /* Preference applies for this session. */
-                  }
-                }}
-              />
-              任务完成动效
-            </label>
-          )}
-        </div>
+      footerTrailingSlot={
+        collaborationStatus ? <EditorCollaborationIndicator status={collaborationStatus} /> : null
       }
+      footerSlot={footerSlot}
     />
   );
 }

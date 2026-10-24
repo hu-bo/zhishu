@@ -5,7 +5,6 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ListDocumentVersions200ItemKind } from './listDocumentVersions200ItemKind';
-import type { ListDocumentVersions200ItemSourceMode } from './listDocumentVersions200ItemSourceMode';
 
 export type ListDocumentVersions200Item = {
   /** @pattern ^ver_[A-Za-z0-9_-]{1,64}$ */
@@ -14,12 +13,6 @@ export type ListDocumentVersions200Item = {
   documentId: string;
   /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
   generationId: string;
-  sourceMode: ListDocumentVersions200ItemSourceMode;
-  /**
-     * @minimum 0
-     * @exclusiveMinimum
-     */
-  snapshotRevision: number | null;
   name: string;
   kind: ListDocumentVersions200ItemKind;
   /** @minimum 0 */

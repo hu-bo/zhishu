@@ -11,11 +11,13 @@
 import { Route as rootRouteImport } from './routes/__root';
 import { Route as AppRouteImport } from './routes/_app';
 import { Route as AppIndexRouteImport } from './routes/_app/index';
+import { Route as AppAiRouteImport } from './routes/_app/ai';
 import { Route as ShareShareIdRouteImport } from './routes/share/$shareId';
 import { Route as AppDocumentsIndexRouteImport } from './routes/_app/documents/index';
 import { Route as AppDocumentsDocumentIdRouteImport } from './routes/_app/documents/$documentId';
 import { Route as AppSpacesIndexRouteImport } from './routes/_app/spaces/index';
 import { Route as AppSpacesWorkspaceIdRouteImport } from './routes/_app/spaces/$workspaceId';
+import { Route as AppSpacesWorkspaceIdDocDocumentIdRouteImport } from './routes/_app/spaces/$workspaceId.doc.$documentId';
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -24,6 +26,11 @@ const AppRoute = AppRouteImport.update({
 const AppIndexRoute = AppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AppRoute,
+} as any);
+const AppAiRoute = AppAiRouteImport.update({
+  id: '/ai',
+  path: '/ai',
   getParentRoute: () => AppRoute,
 } as any);
 const ShareShareIdRoute = ShareShareIdRouteImport.update({
@@ -51,59 +58,77 @@ const AppSpacesWorkspaceIdRoute = AppSpacesWorkspaceIdRouteImport.update({
   path: '/spaces/$workspaceId',
   getParentRoute: () => AppRoute,
 } as any);
+const AppSpacesWorkspaceIdDocDocumentIdRoute =
+  AppSpacesWorkspaceIdDocDocumentIdRouteImport.update({
+    id: '/doc/$documentId',
+    path: '/doc/$documentId',
+    getParentRoute: () => AppSpacesWorkspaceIdRoute,
+  } as any);
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute;
+  '/ai': typeof AppAiRoute;
   '/share/$shareId': typeof ShareShareIdRoute;
   '/documents/$documentId': typeof AppDocumentsDocumentIdRoute;
-  '/spaces/$workspaceId': typeof AppSpacesWorkspaceIdRoute;
+  '/spaces/$workspaceId': typeof AppSpacesWorkspaceIdRouteWithChildren;
   '/documents/': typeof AppDocumentsIndexRoute;
   '/spaces/': typeof AppSpacesIndexRoute;
+  '/spaces/$workspaceId/doc/$documentId': typeof AppSpacesWorkspaceIdDocDocumentIdRoute;
 }
 export interface FileRoutesByTo {
+  '/ai': typeof AppAiRoute;
   '/share/$shareId': typeof ShareShareIdRoute;
   '/': typeof AppIndexRoute;
   '/documents/$documentId': typeof AppDocumentsDocumentIdRoute;
-  '/spaces/$workspaceId': typeof AppSpacesWorkspaceIdRoute;
+  '/spaces/$workspaceId': typeof AppSpacesWorkspaceIdRouteWithChildren;
   '/documents': typeof AppDocumentsIndexRoute;
   '/spaces': typeof AppSpacesIndexRoute;
+  '/spaces/$workspaceId/doc/$documentId': typeof AppSpacesWorkspaceIdDocDocumentIdRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   '/_app': typeof AppRouteWithChildren;
+  '/_app/ai': typeof AppAiRoute;
   '/share/$shareId': typeof ShareShareIdRoute;
   '/_app/': typeof AppIndexRoute;
   '/_app/documents/$documentId': typeof AppDocumentsDocumentIdRoute;
-  '/_app/spaces/$workspaceId': typeof AppSpacesWorkspaceIdRoute;
+  '/_app/spaces/$workspaceId': typeof AppSpacesWorkspaceIdRouteWithChildren;
   '/_app/documents/': typeof AppDocumentsIndexRoute;
   '/_app/spaces/': typeof AppSpacesIndexRoute;
+  '/_app/spaces/$workspaceId/doc/$documentId': typeof AppSpacesWorkspaceIdDocDocumentIdRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
     | '/'
+    | '/ai'
     | '/share/$shareId'
     | '/documents/$documentId'
     | '/spaces/$workspaceId'
     | '/documents/'
-    | '/spaces/';
+    | '/spaces/'
+    | '/spaces/$workspaceId/doc/$documentId';
   fileRoutesByTo: FileRoutesByTo;
   to:
+    | '/ai'
     | '/share/$shareId'
     | '/'
     | '/documents/$documentId'
     | '/spaces/$workspaceId'
     | '/documents'
-    | '/spaces';
+    | '/spaces'
+    | '/spaces/$workspaceId/doc/$documentId';
   id:
     | '__root__'
     | '/_app'
+    | '/_app/ai'
     | '/share/$shareId'
     | '/_app/'
     | '/_app/documents/$documentId'
     | '/_app/spaces/$workspaceId'
     | '/_app/documents/'
-    | '/_app/spaces/';
+    | '/_app/spaces/'
+    | '/_app/spaces/$workspaceId/doc/$documentId';
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
@@ -125,6 +150,13 @@ declare module '@tanstack/react-router' {
       path: '/';
       fullPath: '/';
       preLoaderRoute: typeof AppIndexRouteImport;
+      parentRoute: typeof AppRoute;
+    };
+    '/_app/ai': {
+      id: '/_app/ai';
+      path: '/ai';
+      fullPath: '/ai';
+      preLoaderRoute: typeof AppAiRouteImport;
       parentRoute: typeof AppRoute;
     };
     '/share/$shareId': {
@@ -162,21 +194,42 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSpacesWorkspaceIdRouteImport;
       parentRoute: typeof AppRoute;
     };
+    '/_app/spaces/$workspaceId/doc/$documentId': {
+      id: '/_app/spaces/$workspaceId/doc/$documentId';
+      path: '/doc/$documentId';
+      fullPath: '/spaces/$workspaceId/doc/$documentId';
+      preLoaderRoute: typeof AppSpacesWorkspaceIdDocDocumentIdRouteImport;
+      parentRoute: typeof AppSpacesWorkspaceIdRoute;
+    };
   }
 }
 
+interface AppSpacesWorkspaceIdRouteChildren {
+  AppSpacesWorkspaceIdDocDocumentIdRoute: typeof AppSpacesWorkspaceIdDocDocumentIdRoute;
+}
+
+const AppSpacesWorkspaceIdRouteChildren: AppSpacesWorkspaceIdRouteChildren = {
+  AppSpacesWorkspaceIdDocDocumentIdRoute:
+    AppSpacesWorkspaceIdDocDocumentIdRoute,
+};
+
+const AppSpacesWorkspaceIdRouteWithChildren =
+  AppSpacesWorkspaceIdRoute._addFileChildren(AppSpacesWorkspaceIdRouteChildren);
+
 interface AppRouteChildren {
+  AppAiRoute: typeof AppAiRoute;
   AppIndexRoute: typeof AppIndexRoute;
   AppDocumentsDocumentIdRoute: typeof AppDocumentsDocumentIdRoute;
-  AppSpacesWorkspaceIdRoute: typeof AppSpacesWorkspaceIdRoute;
+  AppSpacesWorkspaceIdRoute: typeof AppSpacesWorkspaceIdRouteWithChildren;
   AppDocumentsIndexRoute: typeof AppDocumentsIndexRoute;
   AppSpacesIndexRoute: typeof AppSpacesIndexRoute;
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAiRoute: AppAiRoute,
   AppIndexRoute: AppIndexRoute,
   AppDocumentsDocumentIdRoute: AppDocumentsDocumentIdRoute,
-  AppSpacesWorkspaceIdRoute: AppSpacesWorkspaceIdRoute,
+  AppSpacesWorkspaceIdRoute: AppSpacesWorkspaceIdRouteWithChildren,
   AppDocumentsIndexRoute: AppDocumentsIndexRoute,
   AppSpacesIndexRoute: AppSpacesIndexRoute,
 };

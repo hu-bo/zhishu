@@ -9,11 +9,12 @@ import {
   joinShare,
 } from '@/api/generated/app-api';
 import type { GetPublicShare200 } from '@/api/generated/models';
-import { errorMessage } from '@/api/api-error';
+import { ApiError, errorMessage } from '@/api/api-error';
 import { getAccessToken, subscribeAccessToken } from '@/api/transport';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { DocumentReadonlyView } from '@/features/document/document-readonly-view';
 import type { EditorHostServices } from '@zhishu/editor-react';
+import { useTheme } from '@/lib/theme';
 
 export const Route = createFileRoute('/share/$shareId')({
   component: PublicSharePage,
@@ -55,8 +56,8 @@ function InactiveShareCard({ share }: { share: GetPublicShare200 }) {
   const card = stateCards[share.state === 'active' ? 'unknown' : share.state];
   const Icon = card.icon;
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-muted/30 p-6">
-      <div className="w-full max-w-md rounded-2xl border border-dashed bg-card p-8 text-center shadow-xs">
+    <div className="flex min-h-dvh items-center justify-center bg-secondary/30 p-6">
+      <div className="w-full max-w-md rounded-2xl border bg-card p-8 text-center shadow-[var(--surface-shadow)]">
         <span className="mx-auto flex size-14 items-center justify-center rounded-full bg-secondary">
           <Icon size={26} className="text-muted-foreground" aria-hidden="true" />
         </span>
@@ -71,6 +72,7 @@ function InactiveShareCard({ share }: { share: GetPublicShare200 }) {
 }
 
 function PublicSharePage() {
+  useTheme();
   const { shareId } = Route.useParams();
   const navigate = useNavigate();
 
@@ -113,9 +115,8 @@ function PublicSharePage() {
     try {
       const result = await joinShare(shareId);
       await navigate({
-        to: '/spaces/$workspaceId',
-        params: { workspaceId: result.workspaceId },
-        search: { doc: result.documentId },
+        to: '/spaces/$workspaceId/doc/$documentId',
+        params: { workspaceId: result.workspaceId, documentId: result.documentId },
       });
     } catch (cause) {
       setJoinError(errorMessage(cause));
@@ -136,11 +137,15 @@ function PublicSharePage() {
 
   if (detail.isError || !detail.data) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-muted/30 p-6">
+      <div className="flex min-h-dvh items-center justify-center bg-secondary/30 p-6">
         <div role="alert" className="w-full max-w-md rounded-2xl border bg-card p-8 text-center">
           <h1 className="text-lg font-semibold">无法打开分享链接</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            {detail.isError ? errorMessage(detail.error) : '分享信息不可用。'}
+            {detail.error instanceof ApiError && detail.error.status === 400
+              ? '分享链接格式不正确，请检查链接是否完整。'
+              : detail.isError
+                ? errorMessage(detail.error)
+                : '分享信息不可用。'}
           </p>
           <Link to="/" className={`${buttonVariants({ variant: 'outline' })} mt-6`}>
             回到知书首页
@@ -157,14 +162,17 @@ function PublicSharePage() {
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
-      <header className="z-20 flex h-14 shrink-0 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur">
-        <span
-          className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground"
-          aria-hidden="true"
+      <header className="z-20 flex h-16 shrink-0 items-center gap-3 border-b border-border/70 bg-card/95 px-4 backdrop-blur sm:px-6">
+        <Link
+          to="/"
+          className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-foreground text-sm font-semibold text-background"
+          aria-label="返回知书"
         >
           知
-        </span>
-        <p className="truncate text-sm font-semibold">共享文档</p>
+        </Link>
+        <p className="truncate text-sm font-semibold">
+          知书 <span className="mx-2 font-normal text-border">/</span> 共享文档
+        </p>
         <span
           className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium ${
             active.permission === 'edit'
@@ -201,7 +209,7 @@ function PublicSharePage() {
               </span>
             )}
             <div className="min-w-0">
-              <h1 className="text-xl font-semibold tracking-tight break-words">
+              <h1 className="text-2xl font-semibold tracking-tight break-words sm:text-3xl">
                 {document?.title ?? '共享文档'}
               </h1>
               <p className="mt-1 text-xs text-muted-foreground">

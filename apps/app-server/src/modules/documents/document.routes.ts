@@ -27,7 +27,6 @@ import {
   importDocumentResultSchema,
   setDocumentAclBodySchema,
   updateDocumentBodySchema,
-  putDocumentContentBodySchema,
   restoreDocumentVersionBodySchema,
 } from "./document.schema.js";
 
@@ -183,36 +182,6 @@ export async function documentRoutes(
       if (!request.principal)
         throw new DomainError("UNAUTHENTICATED", "Authentication is required");
       return service.listAcl(request.principal, request.params.documentId);
-    },
-  );
-  typed.put(
-    "/:documentId/content",
-    {
-      bodyLimit: 2_200_000,
-      schema: {
-        operationId: "putDocumentContent",
-        tags: ["documents"],
-        security: bearerSecurity,
-        params: documentParamsSchema,
-        body: putDocumentContentBodySchema,
-        response: {
-          200: documentContentSchema,
-          400: errorResponseSchema,
-          401: errorResponseSchema,
-          404: errorResponseSchema,
-          409: errorResponseSchema,
-        },
-      },
-    },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.putContent(
-        request.principal,
-        request.params.documentId,
-        request.body,
-        request.id,
-      );
     },
   );
   typed.post(
@@ -700,7 +669,6 @@ export async function documentRoutes(
             request.principal,
             request.params.documentId,
             request.body,
-            request.id,
           ),
         );
     },

@@ -146,7 +146,10 @@ export default function App() {
               : currentView === 'all'
               ? '全部文档'
               : currentView === 'starred'
-              ? '收藏夹'
+                ? '收藏夹'
+                : currentView === 'trash'
+                  ? '回收站'
+                  : undefined
             : undefined
         }
         isSidebarCollapsed={isSidebarCollapsed}

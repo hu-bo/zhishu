@@ -5,8 +5,8 @@
 
 /*
  * HeroUI v3 brings its own semantic variable palette via `@heroui/styles`. We
- * override the default theme to fit 知书's Indigo-on-Slate visual identity
- * (see AGENTS.md) while keeping every existing utility (`bg-background`,
+ * override the default theme with neutral surfaces and a restrained indigo
+ * accent while keeping every existing utility (`bg-background`,
  * `text-foreground`, `bg-primary`, `border-border`, …) resolvable.
  *
  * The `--zhishu-ui-*` layer is consumed by `packages/editor-ui/styles.css` and
@@ -15,7 +15,9 @@
  * design tokens.
  */
 @theme inline {
-  --font-sans: 'Inter', 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  --font-sans:
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
   --font-mono:
     'JetBrains Mono', 'Cascadia Code', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
@@ -31,7 +33,7 @@
   --color-primary-foreground: var(--accent-foreground);
   --color-secondary: var(--surface-secondary);
   --color-secondary-foreground: var(--surface-secondary-foreground);
-  --color-muted: var(--surface-tertiary);
+  --color-muted: var(--muted);
   --color-muted-foreground: var(--muted);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
@@ -48,36 +50,36 @@
   --color-danger: var(--danger);
   --color-danger-foreground: var(--danger-foreground);
 
-  /* Override radius scale with 知书's softer 12px default (see AGENTS.md). */
+  /* Controls, cards and dialogs use a shared radius scale. */
   --radius-xs: 0.25rem;
   --radius-sm: 0.375rem;
   --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
-  --radius-2xl: 1.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.125rem;
 }
 
-/* Light theme: Slate 50 canvas, white surface, Indigo 600 accent. */
+/* Light theme: neutral canvas and paper with a restrained indigo accent. */
 :root {
   color-scheme: light;
-  --background: oklch(0.984 0.003 247.86); /* slate-50 #f8fafc */
-  --foreground: oklch(0.279 0.041 260.1); /* slate-900 #0f172a */
+  --background: oklch(0.983 0.002 265);
+  --foreground: oklch(0.245 0.012 265);
   --surface: oklch(1 0 0); /* white */
-  --surface-foreground: oklch(0.279 0.041 260.1);
-  --surface-secondary: oklch(0.968 0.007 264.5); /* slate-100 #f1f5f9 */
-  --surface-secondary-foreground: oklch(0.279 0.041 260.1);
-  --surface-tertiary: oklch(0.968 0.007 264.5);
-  --surface-tertiary-foreground: oklch(0.279 0.041 260.1);
+  --surface-foreground: var(--foreground);
+  --surface-secondary: oklch(0.963 0.003 265);
+  --surface-secondary-foreground: var(--foreground);
+  --surface-tertiary: oklch(0.952 0.004 265);
+  --surface-tertiary-foreground: var(--foreground);
   --overlay: oklch(1 0 0);
-  --overlay-foreground: oklch(0.279 0.041 260.1);
+  --overlay-foreground: var(--foreground);
 
-  --accent: oklch(0.511 0.262 276.97); /* indigo-600 #6366f1 */
+  --accent: oklch(0.53 0.17 279);
   --accent-foreground: oklch(0.984 0.003 247.86);
 
-  --default: oklch(0.968 0.007 264.5);
-  --default-foreground: oklch(0.279 0.041 260.1);
+  --default: var(--surface-secondary);
+  --default-foreground: var(--foreground);
 
-  --muted: oklch(0.554 0.046 257.52); /* slate-600 #475569 */
+  --muted: oklch(0.52 0.012 265);
   --danger: oklch(0.508 0.169 18.39); /* rose-700 */
   --danger-foreground: oklch(0.984 0.003 247.86);
   --success: oklch(0.508 0.118 165.51); /* emerald-700 */
@@ -86,15 +88,15 @@
   --warning-foreground: oklch(0.984 0.003 247.86);
 
   --field-background: oklch(1 0 0);
-  --field-foreground: oklch(0.279 0.041 260.1);
-  --field-placeholder: oklch(0.554 0.046 257.52);
-  --field-border: oklch(0.928 0.006 264.53);
+  --field-foreground: var(--foreground);
+  --field-placeholder: oklch(0.6 0.01 265);
+  --field-border: var(--border);
 
   --segment: oklch(0.968 0.007 264.5);
   --segment-foreground: oklch(0.279 0.041 260.1);
 
-  --border: oklch(0.928 0.006 264.53); /* slate-200 #e2e8f0 */
-  --separator: oklch(0.928 0.006 264.53);
+  --border: oklch(0.922 0.004 265);
+  --separator: var(--border);
   --focus: var(--accent);
   --link: var(--accent);
 
@@ -102,11 +104,11 @@
 
   /* HeroUI v3 expects these calculated tokens; we expose them so derived
      soft/hover variants follow the same accent ramp. */
-  --surface-hover: color-mix(in oklab, var(--surface) 92%, var(--foreground) 8%);
+  --surface-hover: color-mix(in oklab, var(--surface) 96%, var(--foreground) 4%);
   --accent-hover: color-mix(in oklab, var(--accent) 92%, oklch(0 0 0) 8%);
-  --accent-soft: color-mix(in oklab, var(--accent) 12%, var(--surface));
+  --accent-soft: color-mix(in oklab, var(--accent) 8%, var(--surface));
   --accent-soft-foreground: var(--accent);
-  --accent-soft-hover: color-mix(in oklab, var(--accent) 18%, var(--surface));
+  --accent-soft-hover: color-mix(in oklab, var(--accent) 12%, var(--surface));
   --default-hover: color-mix(in oklab, var(--default) 88%, var(--foreground) 12%);
   --default-soft: color-mix(in oklab, var(--default) 60%, var(--surface));
   --default-soft-foreground: var(--foreground);
@@ -133,7 +135,7 @@
   --background-inverse: var(--foreground);
 
   --surface-shadow: 0 10px 32px -24px rgb(15 23 42 / 24%);
-  --overlay-shadow: 0 16px 40px -20px rgb(15 23 42 / 32%);
+  --overlay-shadow: 0 12px 40px -12px rgb(24 27 39 / 18%), 0 2px 8px rgb(24 27 39 / 4%);
   --field-shadow: 0 1px 0 0 rgb(15 23 42 / 4%);
 
   --field-focus: var(--field-background);
@@ -142,25 +144,27 @@
 
   /* 知书 → editor-ui bridge (consumed by `packages/editor-ui/styles.css`). */
   --zhishu-ui-surface: var(--surface);
+  --zhishu-ui-font-sans: var(--font-sans);
+  --zhishu-ui-font-mono: var(--font-mono);
   --zhishu-ui-canvas: var(--background);
   --zhishu-ui-text: var(--foreground);
   --zhishu-ui-muted: var(--muted);
   --zhishu-ui-border: var(--border);
   --zhishu-ui-border-subtle: color-mix(in oklab, var(--border) 56%, var(--surface));
   --zhishu-ui-accent: var(--accent);
-  --zhishu-ui-accent-soft: color-mix(in oklab, var(--accent) 12%, var(--surface));
+  --zhishu-ui-accent-soft: var(--accent-soft);
   --zhishu-ui-hover: var(--surface-hover);
   --zhishu-ui-focus: var(--focus);
   --zhishu-ui-danger: var(--danger);
   --zhishu-ui-success: var(--success);
   --zhishu-ui-warning: var(--warning);
   --zhishu-ui-shadow: 0 10px 32px -24px rgb(15 23 42 / 24%);
-  --zhishu-ui-floating-shadow: 0 16px 40px -20px rgb(15 23 42 / 32%);
+  --zhishu-ui-floating-shadow: var(--overlay-shadow);
   --zhishu-ui-radius: 0.75rem;
   --zhishu-ui-radius-compact: 0.4375rem;
   --zhishu-ui-radius-control: 0.5625rem;
   --zhishu-ui-radius-floating: 0.6875rem;
-  --zhishu-ui-control-height: 44px;
+  --zhishu-ui-control-height: 36px;
   --zhishu-ui-outline-width: 288px;
   --zhishu-ui-code-background: #0f172a;
   --zhishu-ui-code-header: #1e293b;
@@ -178,46 +182,46 @@
   --zhishu-ui-selection-border: #334155;
 }
 
-/* Dark theme: Slate 950 canvas, slate-900 surface, indigo-400 accent. */
+/* Dark theme preserves the same hierarchy with charcoal surfaces. */
 .dark {
   color-scheme: dark;
-  --background: oklch(0.13 0.027 261.34); /* slate-950 #020617 */
-  --foreground: oklch(0.967 0.003 264.37); /* slate-100 #f1f5f9 */
-  --surface: oklch(0.205 0.04 257.04); /* slate-900 #0f172a */
+  --background: oklch(0.17 0.008 265);
+  --foreground: oklch(0.93 0.005 265);
+  --surface: oklch(0.205 0.009 265);
   --surface-foreground: oklch(0.967 0.003 264.37);
-  --surface-secondary: oklch(0.257 0.027 261.34); /* slate-800 #1e293b */
+  --surface-secondary: oklch(0.255 0.01 265);
   --surface-secondary-foreground: oklch(0.967 0.003 264.37);
-  --surface-tertiary: oklch(0.279 0.039 260.05);
+  --surface-tertiary: oklch(0.28 0.01 265);
   --surface-tertiary-foreground: oklch(0.967 0.003 264.37);
-  --overlay: oklch(0.205 0.04 257.04);
+  --overlay: var(--surface);
   --overlay-foreground: oklch(0.967 0.003 264.37);
 
-  --accent: oklch(0.682 0.157 274.05); /* indigo-400 #818cf8 */
-  --accent-foreground: oklch(0.205 0.04 257.04);
+  --accent: oklch(0.74 0.13 280);
+  --accent-foreground: oklch(0.18 0.025 280);
 
-  --default: oklch(0.257 0.027 261.34);
+  --default: var(--surface-secondary);
   --default-foreground: oklch(0.967 0.003 264.37);
 
-  --muted: oklch(0.705 0.04 256.79); /* slate-400 #94a3b8 */
+  --muted: oklch(0.7 0.012 265);
   --danger: oklch(0.668 0.184 22.99); /* rose-400 #fb7185 */
   --danger-foreground: oklch(0.13 0.027 261.34);
-  --success: oklch(0.764 0.16 335.414); /* emerald-400 */
+  --success: oklch(0.74 0.13 165);
   --success-foreground: oklch(0.13 0.027 261.34);
   --warning: oklch(0.79 0.16 76.5); /* amber-400 */
   --warning-foreground: oklch(0.13 0.027 261.34);
 
-  --field-background: oklch(0.257 0.027 261.34);
+  --field-background: var(--surface);
   --field-foreground: oklch(0.967 0.003 264.37);
-  --field-placeholder: oklch(0.705 0.04 256.79);
-  --field-border: oklch(0.372 0.039 257.04); /* slate-700 #334155 */
+  --field-placeholder: var(--muted);
+  --field-border: var(--border);
 
   --segment: oklch(0.279 0.039 260.05);
   --segment-foreground: oklch(0.967 0.003 264.37);
 
-  --border: oklch(0.257 0.027 261.34); /* slate-800 #1e293b */
-  --separator: oklch(0.279 0.039 260.05);
+  --border: oklch(0.31 0.01 265);
+  --separator: var(--border);
   --focus: var(--accent);
-  --link: var(--foreground);
+  --link: var(--accent);
 
   --backdrop: rgb(0 0 0 / 60%);
 
@@ -260,7 +264,7 @@
   --field-border-focus: var(--accent);
 
   --zhishu-ui-shadow: 0 12px 36px -24px rgb(0 0 0 / 48%);
-  --zhishu-ui-floating-shadow: 0 18px 44px -20px rgb(0 0 0 / 70%);
+  --zhishu-ui-floating-shadow: var(--overlay-shadow);
 }
 
 @layer base {
@@ -268,7 +272,9 @@
     @apply border-border;
   }
   body {
-    @apply m-0 bg-background font-sans text-foreground antialiased;
+    @apply m-0 bg-background font-sans text-sm text-foreground antialiased;
+    line-height: 1.6;
+    text-rendering: optimizeLegibility;
   }
   button,
   a,
@@ -283,15 +289,117 @@
   ::selection {
     background: color-mix(in oklab, var(--accent) 24%, transparent);
   }
+  :where(button, a, summary, select):focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
+  }
+  :where(input, textarea)::placeholder {
+    opacity: 1;
+  }
+}
+
+@layer components {
+  .button {
+    border-radius: 0.625rem;
+    font-weight: 500;
+    transition-duration: 150ms;
+  }
+  .button--primary {
+    box-shadow:
+      0 1px 2px rgb(24 27 39 / 8%),
+      inset 0 1px 0 rgb(255 255 255 / 10%);
+  }
+  .zhishu-menu-item > [data-slot='label'] {
+    width: 100%;
+    min-width: 0;
+    color: inherit;
+  }
+  .zhishu-dialog {
+    width: 100%;
+    max-height: min(88dvh, 880px);
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 1.25rem;
+    background: var(--overlay);
+    box-shadow: var(--overlay-shadow);
+    scrollbar-gutter: stable;
+  }
+  .zhishu-dialog .modal__body {
+    color: var(--foreground);
+  }
+  .zhishu-dialog form > [data-slot='dialog-header'] {
+    margin-bottom: 1.5rem;
+  }
+  .zhishu-dialog form > [data-slot='dialog-footer'] {
+    margin-top: 1.5rem;
+  }
+  .zhishu-dialog label:has(> [data-slot='input'], > [data-slot='textarea']) {
+    display: grid;
+    gap: 0.5rem;
+  }
+  .zhishu-dialog :where(select:not(.select__trigger)) {
+    min-height: 2.5rem;
+    border-radius: 0.625rem;
+    border-color: var(--border);
+    background-color: var(--field-background);
+  }
+  .zhishu-dialog :where(input[type='checkbox']) {
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--accent);
+  }
+  .zhishu-sidebar {
+    background: color-mix(in oklab, var(--surface) 55%, var(--background));
+  }
+  .zhishu-page {
+    width: 100%;
+  }
+  .zhishu-page-heading {
+    font-size: clamp(1.625rem, 2.5vw, 2rem);
+    font-weight: 650;
+    line-height: 1.3;
+    letter-spacing: -0.035em;
+  }
+  .zhishu-card {
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    background: var(--surface);
+    box-shadow: 0 2px 3px -2px rgb(24 27 39 / 6%);
+    transition:
+      border-color 160ms,
+      box-shadow 160ms,
+      transform 160ms;
+  }
+  .zhishu-card:hover {
+    border-color: color-mix(in oklab, var(--accent) 28%, var(--border));
+    box-shadow: 0 6px 18px -10px rgb(24 27 39 / 18%);
+  }
+  .zhishu-card:focus-within {
+    border-color: var(--accent);
+  }
+  .zhishu-segmented {
+    display: flex;
+    width: fit-content;
+    max-width: 100%;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border-radius: 0.75rem;
+    background: var(--surface-secondary);
+  }
+  .zhishu-search-result[aria-selected='true'] {
+    background: var(--accent-soft);
+    box-shadow: inset 3px 0 var(--accent);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

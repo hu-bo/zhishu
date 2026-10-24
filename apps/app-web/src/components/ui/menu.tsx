@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { isValidElement, useId } from 'react';
+import { useId } from 'react';
 import { Dropdown, Label, Separator } from '@heroui/react';
 import { cn } from '@/lib/cn';
 
@@ -27,12 +27,7 @@ function Menu({
   children: ReactNode;
   onOpenChange?: (open: boolean) => void;
 }) {
-  // HeroUI's Dropdown supports controlled `isOpen` / `onOpenChange` on its
-  // root, but feature layers track open state outside the menu so we render
-  // children unconditionally. The `onOpenChange` prop is preserved for
-  // backwards compatibility with Base UI–style call sites.
-  void onOpenChange;
-  return <Dropdown>{children}</Dropdown>;
+  return <Dropdown onOpenChange={onOpenChange}>{children}</Dropdown>;
 }
 
 interface MenuTriggerProps {
@@ -46,13 +41,10 @@ function MenuTrigger({ children, render }: MenuTriggerProps) {
   if (!trigger) {
     throw new Error('MenuTrigger requires either `children` or `render`.');
   }
-  // HeroUI's `Dropdown.Trigger` is a context provider that accepts a single
-  // pressable element as a child. Pass the element through unchanged.
-  return <Dropdown.Trigger>{trigger}</Dropdown.Trigger>;
+  // The supplied Button is already a React Aria trigger. Dropdown.Trigger
+  // also renders a button, so wrapping it would create nested buttons.
+  return <>{trigger}</>;
 }
-
-// Re-export for backwards compatibility with TypeScript code that imports it.
-void isValidElement;
 
 function MenuContent({
   className,
@@ -72,10 +64,13 @@ function MenuContent({
   const fallbackPlacement =
     align === 'end' ? 'bottom end' : align === 'center' ? 'bottom' : 'bottom start';
   return (
-    <Dropdown.Popover placement={placement ?? fallbackPlacement} className="z-50">
+    <Dropdown.Popover
+      placement={placement ?? fallbackPlacement}
+      className="z-50 max-w-[calc(100vw-1.5rem)] rounded-xl border border-border bg-popover p-1.5 shadow-[var(--overlay-shadow)]"
+    >
       <Dropdown.Menu
         className={cn(
-          'min-w-44 rounded-xl border border-border bg-popover p-1 text-sm text-popover-foreground shadow-lg outline-none',
+          'min-w-48 rounded-lg bg-transparent p-0 text-sm text-popover-foreground shadow-none outline-none',
           className,
         )}
       >
@@ -89,6 +84,7 @@ interface MenuItemProps {
   className?: string;
   variant?: 'default' | 'destructive';
   onClick?: () => void;
+  onAction?: () => void;
   children?: ReactNode;
   /** Disable the item; defaults to false. */
   isDisabled?: boolean;
@@ -98,6 +94,7 @@ function MenuItem({
   className,
   variant = 'default',
   onClick,
+  onAction,
   children,
   isDisabled,
 }: MenuItemProps) {
@@ -108,17 +105,19 @@ function MenuItem({
       id={id}
       variant={variant === 'destructive' ? 'danger' : 'default'}
       isDisabled={isDisabled}
-      onAction={onClick}
+      onAction={onAction ?? onClick}
       className={cn(
-        'flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm outline-none',
-        'data-[highlighted]:bg-muted data-[highlighted]:text-foreground',
+        'zhishu-menu-item flex min-h-9 w-full cursor-pointer items-center rounded-lg px-2.5 py-2 text-[13px] outline-none',
+        'data-[focused]:bg-secondary data-[focused]:text-foreground',
         variant === 'destructive' &&
           'text-danger data-[highlighted]:bg-danger-soft data-[highlighted]:text-danger-soft-foreground',
         'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
         className,
       )}
     >
-      <Label>{children}</Label>
+      <Label className="flex items-center gap-2.5 text-[13px] font-normal text-inherit [&>svg]:size-4 [&>svg]:shrink-0">
+        {children}
+      </Label>
     </Dropdown.Item>
   );
 }

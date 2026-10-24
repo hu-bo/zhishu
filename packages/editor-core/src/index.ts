@@ -1,4 +1,9 @@
-export { createBaseEditorExtensions, EDITOR_TASK_COMPLETED_EVENT } from "./extensions.js";
+export { createBaseEditorExtensions } from "./extensions.js";
+export { setReplacementPreview, scrollToReplacementPreview } from "./replacement-preview.js";
+export type {
+  EditorReplacementPreviewData,
+  EditorReplacementPreviewActions,
+} from "./replacement-preview.js";
 export type { BaseEditorExtensionsOptions, EditorPlaceholderOptions } from "./extensions.js";
 export { createEditor, EditorController, editorOperationMeta, editorOriginMeta } from "./editor.js";
 export type {

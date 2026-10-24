@@ -4,6 +4,7 @@ import { useEditorInstance } from "@zhishu/editor-react";
 import { useEditorSelector } from "@zhishu/editor-react";
 import type { EditorAIAction, EditorHostServices, EditorTextSelection } from "@zhishu/editor-react";
 import { EditorIcon, type EditorIconName } from "./editor-icon.js";
+import { EditorLinkEditor, type EditorLinkEditorMessages } from "./editor-link-editor.js";
 
 export interface EditorToolbarMessages {
   label: string;
@@ -118,6 +119,8 @@ export interface EditorToolbarProps {
   className?: string;
   onOpenCommandMenu?: (selection: { from: number; to: number } | null) => void;
   outlineToggle?: ReactNode;
+  linkEditorOpenRequest?: number;
+  linkEditorMessages?: Partial<EditorLinkEditorMessages>;
 }
 
 function ToolbarDropdown({
@@ -223,6 +226,8 @@ export function EditorToolbar({
   className,
   onOpenCommandMenu,
   outlineToggle,
+  linkEditorOpenRequest,
+  linkEditorMessages,
 }: EditorToolbarProps) {
   const { controller, hostServices, collaboration, collaborationStatus } = useEditorInstance();
   const isEditable = useEditorSelector((state) => state.isEditable);
@@ -870,6 +875,9 @@ export function EditorToolbar({
           )}
         </div>
       </ToolbarDropdown>
+      {linkEditorOpenRequest !== undefined && (
+        <EditorLinkEditor messages={linkEditorMessages} openRequest={linkEditorOpenRequest} />
+      )}
       {insertionActions.length > 0 && (
         <ToolbarDropdown label={labels.insertGroup} icon="more" className="is-insert-menu">
           <div
@@ -881,64 +889,50 @@ export function EditorToolbar({
           </div>
         </ToolbarDropdown>
       )}
-      <button
-        type="button"
-        className="zhishu-ui-toolbar-button zhishu-ui-toolbar-labeled-button"
-        data-action="comments"
-        disabled={!hostServices.openComments}
-        aria-label={labels.comments}
-        aria-description={!hostServices.openComments ? labels.commentsUnavailable : undefined}
-        title={hostServices.openComments ? labels.comments : labels.commentsUnavailable}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() =>
-          hostServices.openComments &&
-          runHostAction(
-            () => hostServices.openComments?.(currentSelection()),
-            labels.commentsUnavailable,
-          )
-        }
-      >
-        <EditorIcon name="comment" />
-        <span>{labels.comments}</span>
-      </button>
-      <ToolbarDropdown label={labels.aiCreate} icon="sparkles" className="is-ai-menu">
-        {hostServices.requestAIAction ? (
-          <div className="zhishu-ui-toolbar-menu-section" role="group" aria-label={labels.aiCreate}>
-            {(
-              [
-                ["continue", labels.aiContinue],
-                ["polish", labels.aiPolish],
-                ["summarize", labels.aiSummarize],
-                ["expand", labels.aiExpand],
-                ["translate", labels.aiTranslate],
-              ] as const
-            ).map(([action, label]) => (
-              <button
-                key={action}
-                type="button"
-                className="zhishu-ui-toolbar-button zhishu-ui-toolbar-menu-item"
-                data-menu-action=""
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() =>
-                  runHostAction(
-                    () =>
-                      hostServices.requestAIAction?.({
-                        action: action as EditorAIAction,
-                        selection: currentSelection(),
-                      }),
-                    labels.aiUnavailable,
-                  )
-                }
-              >
-                <EditorIcon name="sparkles" />
-                <span>{label}</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="zhishu-ui-toolbar-menu-note">{labels.aiUnavailable}</p>
-        )}
-      </ToolbarDropdown>
+      {hostServices.requestAIAction && (
+        <ToolbarDropdown label={labels.aiCreate} icon="sparkles" className="is-ai-menu">
+          {hostServices.requestAIAction ? (
+            <div
+              className="zhishu-ui-toolbar-menu-section"
+              role="group"
+              aria-label={labels.aiCreate}
+            >
+              {(
+                [
+                  ["continue", labels.aiContinue],
+                  ["polish", labels.aiPolish],
+                  ["summarize", labels.aiSummarize],
+                  ["expand", labels.aiExpand],
+                  ["translate", labels.aiTranslate],
+                ] as const
+              ).map(([action, label]) => (
+                <button
+                  key={action}
+                  type="button"
+                  className="zhishu-ui-toolbar-button zhishu-ui-toolbar-menu-item"
+                  data-menu-action=""
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() =>
+                    runHostAction(
+                      () =>
+                        hostServices.requestAIAction?.({
+                          action: action as EditorAIAction,
+                          selection: currentSelection(),
+                        }),
+                      labels.aiUnavailable,
+                    )
+                  }
+                >
+                  <EditorIcon name="sparkles" />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="zhishu-ui-toolbar-menu-note">{labels.aiUnavailable}</p>
+          )}
+        </ToolbarDropdown>
+      )}
       {recoveryActions.length > 0 && (
         <div
           className="zhishu-ui-toolbar-group zhishu-ui-toolbar-recovery"
@@ -977,10 +971,24 @@ export function EditorToolbar({
           {uploadError}
         </span>
       )}
-      {!isEditable && readOnlyReason && (
-        <span className="zhishu-ui-readonly" role="status">
-          {labels.readOnlyReason}：{readOnlyReason}
-        </span>
+      {hostServices.openComments && (
+        <button
+          type="button"
+          className="zhishu-ui-toolbar-button zhishu-ui-toolbar-labeled-button"
+          data-action="comments"
+          aria-label={labels.comments}
+          title={labels.comments}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() =>
+            runHostAction(
+              () => hostServices.openComments?.(currentSelection()),
+              labels.commentsUnavailable,
+            )
+          }
+        >
+          <EditorIcon name="comment" />
+          <span>{labels.comments}</span>
+        </button>
       )}
     </div>
   );

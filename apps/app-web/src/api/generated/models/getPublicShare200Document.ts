@@ -5,7 +5,6 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { GetPublicShare200DocumentExtensionsItem } from './getPublicShare200DocumentExtensionsItem';
-import type { GetPublicShare200DocumentMode } from './getPublicShare200DocumentMode';
 
 export type GetPublicShare200Document = {
   /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
@@ -14,7 +13,6 @@ export type GetPublicShare200Document = {
   /** @maxLength 32 */
   icon: string | null;
   updatedAt: string;
-  mode: GetPublicShare200DocumentMode;
   /**
      * @minimum 0
      * @exclusiveMinimum

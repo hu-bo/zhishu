@@ -1,0 +1,31 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f1f5f9;
+}
+main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  padding: 24px;
+  height: 100dvh;
+  box-sizing: border-box;
+}
+main > section {
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  overflow: hidden;
+}
+h2 {
+  font-size: 16px;
+  padding: 0 16px;
+}
+@media (max-width: 700px) {
+  main {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  main > section {
+    height: 70dvh;
+  }
+}

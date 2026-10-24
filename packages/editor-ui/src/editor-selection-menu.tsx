@@ -15,6 +15,7 @@ import {
   useEditorStructureAction,
 } from "@zhishu/editor-react";
 import { EditorStructureFeedback } from "./editor-structure-feedback.js";
+import { EditorIcon, type EditorIconName } from "./editor-icon.js";
 
 export interface EditorSelectionMenuMessages {
   label: string;
@@ -48,6 +49,15 @@ interface MenuPosition {
   x: number;
   y: number;
   placement: "above" | "below";
+}
+
+interface SelectionMenuAction {
+  id: string;
+  icon: EditorIconName;
+  label: string;
+  pressed?: boolean | "mixed";
+  disabled?: boolean;
+  run: () => void;
 }
 
 export interface EditorSelectionMenuProps {
@@ -216,33 +226,38 @@ export function EditorSelectionMenu({ messages, className, onOpenLink }: EditorS
     top: `${position.y}px`,
     transform: position.placement === "above" ? "translate(-50%, -100%)" : "translate(-50%, 0)",
   };
-  const actions = [
+  const actions: SelectionMenuAction[] = [
     {
       id: "bold",
+      icon: "bold",
       label: labels.bold,
       pressed: formatting.bold,
       run: () => controller.toggleBold(),
     },
     {
       id: "italic",
+      icon: "italic",
       label: labels.italic,
       pressed: formatting.italic,
       run: () => controller.toggleItalic(),
     },
     {
       id: "strike",
+      icon: "strike",
       label: labels.strike,
       pressed: formatting.strike,
       run: () => controller.toggleStrike(),
     },
     {
       id: "underline",
+      icon: "underline",
       label: labels.underline,
       pressed: formatting.underline,
       run: () => controller.toggleUnderline(),
     },
     {
       id: "highlight",
+      icon: "highlight",
       label: labels.highlight,
       pressed: formatting.highlight,
       run: () => {
@@ -252,18 +267,23 @@ export function EditorSelectionMenu({ messages, className, onOpenLink }: EditorS
     },
     {
       id: "clear-formatting",
+      icon: "clear-format",
       label: labels.clearFormatting,
       run: () => controller.clearFormatting(),
     },
-    ...(onOpenLink ? [{ id: "link", label: labels.link, run: onOpenLink }] : []),
+    ...(onOpenLink
+      ? [{ id: "link", icon: "link" as const, label: labels.link, run: onOpenLink }]
+      : []),
     {
       id: "code",
+      icon: "code",
       label: labels.code,
       pressed: formatting.code,
       run: () => controller.toggleCode(),
     },
     {
       id: "callout",
+      icon: "alert",
       label: labels.callout,
       disabled: !calloutAction.allowed || calloutAction.busy || calloutAction.canRetry,
       run: () =>
@@ -290,13 +310,14 @@ export function EditorSelectionMenu({ messages, className, onOpenLink }: EditorS
           key={action.id}
           type="button"
           aria-label={action.label}
+          title={action.label}
           aria-pressed={action.pressed === "mixed" ? "mixed" : action.pressed}
           disabled={!isEditable || action.disabled}
           tabIndex={index === 0 ? 0 : -1}
           onMouseDown={(event) => event.preventDefault()}
           onClick={action.run}
         >
-          {action.label}
+          <EditorIcon name={action.icon} />
         </button>
       ))}
     </div>

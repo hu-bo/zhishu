@@ -26,7 +26,16 @@ import { cn } from '@/lib/cn';
  *   - `Button` already has `data-slot="button"` baked in via HeroUI.
  */
 
-export type ButtonVariant = 'default' | 'outline' | 'secondary' | 'ghost' | 'destructive' | 'link';
+export type ButtonVariant =
+  | 'default'
+  | 'primary'
+  | 'outline'
+  | 'secondary'
+  | 'tertiary'
+  | 'ghost'
+  | 'danger'
+  | 'destructive'
+  | 'link';
 
 export type ButtonSize =
   'default' | 'xs' | 'sm' | 'lg' | 'icon' | 'icon-xs' | 'icon-sm' | 'icon-lg';
@@ -44,12 +53,16 @@ export interface ButtonProps extends Omit<
   variant?: ButtonVariant;
   size?: ButtonSize;
   children?: ReactNode;
+  startContent?: ReactNode;
+  endContent?: ReactNode;
   /** Base UI / native button alias for `isDisabled`. */
   disabled?: boolean;
   /** Native HTML tooltip. */
   title?: string;
   /** Base UI / native click handler (forwarded to HeroUI's `onPress`). */
   onClick?: (event: unknown) => void;
+  /** HeroUI v3 press handler. */
+  onPress?: HeroUIButtonProps['onPress'];
 }
 
 function mapVariant(variant: ButtonVariant): HeroUIButtonProps['variant'] {
@@ -58,6 +71,12 @@ function mapVariant(variant: ButtonVariant): HeroUIButtonProps['variant'] {
       return 'outline';
     case 'secondary':
       return 'secondary';
+    case 'primary':
+      return 'primary';
+    case 'tertiary':
+      return 'tertiary';
+    case 'danger':
+      return 'danger';
     case 'ghost':
       return 'ghost';
     case 'destructive':
@@ -97,6 +116,17 @@ function resolveSize(size: ButtonSize): {
 
 const linkClass = 'text-accent underline-offset-4 hover:underline';
 
+const sizeClasses: Record<ButtonSize, string> = {
+  default: 'h-10 px-4 text-sm',
+  xs: 'h-7 px-2 text-xs',
+  sm: 'h-9 px-3 text-[13px]',
+  lg: 'h-11 px-5 text-sm',
+  icon: 'size-9 p-0',
+  'icon-xs': 'size-7 p-0',
+  'icon-sm': 'size-8 p-0',
+  'icon-lg': 'size-11 p-0',
+};
+
 // Re-export the HeroUI tailwind-variants helper so call sites that previously
 // used the CVA-based `buttonVariants({ variant: 'outline' })` (for applying
 // button styling to non-button elements like `<Link>`) keep compiling.
@@ -107,9 +137,12 @@ export function Button({
   size = 'default',
   className,
   onClick,
+  onPress,
   disabled,
   isDisabled,
   title,
+  startContent,
+  endContent,
   children,
   ...rest
 }: ButtonProps) {
@@ -126,9 +159,28 @@ export function Button({
     isIconOnly,
     isDisabled: disabled ?? isDisabled,
     title,
-    className: cn(variant === 'link' && linkClass, className),
-    onPress: onClick as HeroUIButtonProps['onPress'],
+    className: cn(
+      'shrink-0 gap-2 rounded-lg [&_svg]:size-4 [&_svg]:shrink-0',
+      sizeClasses[size],
+      variant === 'link' && linkClass,
+      className,
+    ),
+    onPress: (onPress ?? onClick) as HeroUIButtonProps['onPress'],
     ...rest,
   };
-  return <HeroUIButton {...(buttonProps as unknown as HeroUIButtonProps)}>{children}</HeroUIButton>;
+  return (
+    <HeroUIButton {...(buttonProps as unknown as HeroUIButtonProps)}>
+      {startContent && (
+        <span aria-hidden="true" className="shrink-0 [&_svg]:size-4">
+          {startContent}
+        </span>
+      )}
+      {children}
+      {endContent && (
+        <span aria-hidden="true" className="shrink-0 [&_svg]:size-4">
+          {endContent}
+        </span>
+      )}
+    </HeroUIButton>
+  );
 }

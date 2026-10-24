@@ -5,7 +5,6 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ListDocuments200ItemsItemExtensionsItem } from './listDocuments200ItemsItemExtensionsItem';
-import type { ListDocuments200ItemsItemMode } from './listDocuments200ItemsItemMode';
 import type { ListDocuments200ItemsItemTagsItem } from './listDocuments200ItemsItemTagsItem';
 
 export type ListDocuments200ItemsItem = {
@@ -23,7 +22,6 @@ export type ListDocuments200ItemsItem = {
   /** @maxItems 12 */
   tags: ListDocuments200ItemsItemTagsItem[];
   createdBy: string;
-  mode: ListDocuments200ItemsItemMode;
   /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
   generationId: string;
   /**
@@ -44,11 +42,6 @@ export type ListDocuments200ItemsItem = {
   canManage: boolean;
   isFavorite: boolean;
   deletedAt: string | null;
-  /**
-     * @minimum 0
-     * @exclusiveMinimum
-     */
-  snapshotRevision: number | null;
   workspaceName: string;
   excerpt: string;
 };

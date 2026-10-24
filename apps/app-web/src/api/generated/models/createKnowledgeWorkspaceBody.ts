@@ -4,6 +4,7 @@
  * Application API
  * OpenAPI spec version: 0.1.0
  */
+import type { CreateKnowledgeWorkspaceBodyKind } from './createKnowledgeWorkspaceBodyKind';
 
 export type CreateKnowledgeWorkspaceBody = {
   /**
@@ -15,4 +16,5 @@ export type CreateKnowledgeWorkspaceBody = {
   icon?: string | null;
   /** @maxLength 200 */
   description?: string;
+  kind?: CreateKnowledgeWorkspaceBodyKind;
 };

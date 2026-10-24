@@ -12,26 +12,28 @@ export const Route = createFileRoute('/_app/documents/$documentId')({
 
 /**
  * Legacy document URL → space locator shim. The editor lives at
- * `/spaces/$workspaceId?doc=…`; this route resolves the document's home
- * catalog and redirects. The access token lives in memory, so the lookup
- * runs in the component rather than `beforeLoad`.
+ * Legacy document URL → canonical space document route. The access token lives
+ * in memory, so the lookup runs in the component rather than `beforeLoad`.
  */
 function DocumentLocator() {
   const { documentId } = Route.useParams();
-  const { identityKey } = useKnowledgeWorkspace();
+  const { identityKey, enabled } = useKnowledgeWorkspace();
   const locate = useQuery({
     queryKey: ['document-locate', identityKey, documentId],
     queryFn: ({ signal }) => locateDocument(documentId, { signal }),
     staleTime: 30_000,
+    enabled,
     retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
   });
+
+  if (!enabled)
+    return <p className="p-8 text-center text-sm text-muted-foreground">请登录后打开文档。</p>;
 
   if (locate.data) {
     return (
       <Navigate
-        to="/spaces/$workspaceId"
-        params={{ workspaceId: locate.data.workspaceId }}
-        search={{ doc: documentId }}
+        to="/spaces/$workspaceId/doc/$documentId"
+        params={{ workspaceId: locate.data.workspaceId, documentId }}
         replace
       />
     );

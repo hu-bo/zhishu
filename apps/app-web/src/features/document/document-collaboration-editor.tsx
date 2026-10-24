@@ -6,13 +6,15 @@ import {
   createDocumentDraftExport,
   registerUnconfirmedChangeProbe,
   subscribeAccessToken,
+  hasUnconfirmedChanges,
 } from '@/api/transport';
 import {
   EditorProvider,
   useEditorCollaborationStatus,
   useEditorInstance,
+  type EditorCollaborationPresence,
 } from '@zhishu/editor-react';
-import { defaultEditorNodeViews } from '@zhishu/editor-ui';
+import { defaultEditorNodeViews, type EditorReplacementReviewProps } from '@zhishu/editor-ui';
 import { HocuspocusCollaborationSession } from '@zhishu/editor-collaboration/hocuspocus';
 import type { CollaborationSessionInfo } from '@zhishu/editor-collaboration';
 import { CURRENT_DOCUMENT_SCHEMA_VERSION } from '@zhishu/document-contracts';
@@ -182,14 +184,22 @@ export function DocumentCollaborationEditor({
   document,
   viewMode,
   onStatusChange,
+  onReadOnlyReasonChange,
+  onCollaborationPresenceChange,
   versionsOpen,
   onVersionsOpenChange,
+  onDocumentInput,
+  replacementReview,
 }: {
   document: GetDocument200;
   viewMode: 'edit' | 'read';
   onStatusChange?: (snapshot: DocumentCollaborationSnapshot | null) => void;
+  onReadOnlyReasonChange?: (reason: string | null) => void;
+  onCollaborationPresenceChange?: (participants: readonly EditorCollaborationPresence[]) => void;
   versionsOpen: boolean;
   onVersionsOpenChange: (open: boolean) => void;
+  onDocumentInput?: () => void;
+  replacementReview?: EditorReplacementReviewProps;
 }) {
   const offline = useOfflineState();
   const identity = offline.identity;
@@ -209,6 +219,21 @@ export function DocumentCollaborationEditor({
   const currentSession = activeSession?.key === sessionKey ? activeSession : null;
   const currentFailure = failure?.key === sessionKey ? failure : null;
   const sessionEligible = offline.verified && (offline.online || currentSession !== null);
+  const readOnlyReason =
+    (!offline.online || !offline.verified) &&
+    !currentSession &&
+    Boolean(cachedCheckpoint?.value.content)
+      ? '本机缓存只读，联网并登录后校验权限。'
+      : currentSession?.info.readOnly
+        ? '当前协同会话仅允许查看。'
+        : viewMode === 'read'
+          ? '当前为阅读模式。'
+          : null;
+
+  useEffect(() => {
+    onReadOnlyReasonChange?.(readOnlyReason);
+  }, [onReadOnlyReasonChange, readOnlyReason]);
+  useEffect(() => () => onReadOnlyReasonChange?.(null), [onReadOnlyReasonChange]);
   useEffect(() => {
     let active = true;
     if (identity)
@@ -237,6 +262,7 @@ export function DocumentCollaborationEditor({
     let active = true;
     let yDocument: Y.Doc | undefined;
     let collaboration: HocuspocusCollaborationSession | undefined;
+    let releaseStatus: (() => void) | undefined;
     const abortController = new AbortController();
     const sessionBody = {
       schemaVersion: CURRENT_DOCUMENT_SCHEMA_VERSION,
@@ -261,23 +287,25 @@ export function DocumentCollaborationEditor({
             document: yDocument,
             session: info,
             refreshSession: () => requestSession(),
-            onPersisted: (receipt) => {
-              latestDurableSeq = Math.max(latestDurableSeq, receipt.durableSeq);
-              setActiveSession((current) => {
-                if (current?.key !== sessionKey) return current;
-                return {
-                  ...current,
-                  info: { ...current.info, durableSeq: latestDurableSeq },
-                };
-              });
-              onStatusChange?.({
-                documentId: document.id,
-                generationId: info.generationId,
-                schemaVersion: info.schemaVersion,
-                extensions: info.extensions,
-                durableSeq: latestDurableSeq,
-              });
-            },
+          });
+          // Server-owned changes also advance the durable version, without a local pending update.
+          releaseStatus = collaboration.subscribe((status) => {
+            if (!active || status.durableSeq <= latestDurableSeq) return;
+            latestDurableSeq = status.durableSeq;
+            setActiveSession((current) => {
+              if (current?.key !== sessionKey) return current;
+              return {
+                ...current,
+                info: { ...current.info, durableSeq: latestDurableSeq },
+              };
+            });
+            onStatusChange?.({
+              documentId: document.id,
+              generationId: info.generationId,
+              schemaVersion: info.schemaVersion,
+              extensions: info.extensions,
+              durableSeq: latestDurableSeq,
+            });
           });
           await collaboration.waitUntilSynced();
           if (!active) return;
@@ -333,6 +361,7 @@ export function DocumentCollaborationEditor({
     }, 50);
 
     return () => {
+      releaseStatus?.();
       active = false;
       clearTimeout(startTimer);
       abortController.abort();
@@ -391,26 +420,28 @@ export function DocumentCollaborationEditor({
         editable={false}
         readOnlyReason="本机缓存，联网并登录后校验权限。"
       >
-        <CachedDraftProbe cached={cachedCheckpoint} identity={identity} />
-        <DocumentEditorShell
-          ariaLabel="离线文档缓存"
-          editingControls={false}
-          footerSlot={
-            <p role="status">
-              本机缓存只读。
-              {value.pendingUpdates.length
-                ? '包含尚未确认的协同草稿，联网后会核对版本。'
-                : '联网后重新校验权限和内容。'}
-              <button
-                type="button"
-                className="ml-3 underline"
-                onClick={() => downloadLocalDraft({ ...value, content: value.content! })}
-              >
-                导出本机内容
-              </button>
-            </p>
-          }
-        />
+        <div className="flex h-full min-h-0 flex-col">
+          <CachedDraftProbe cached={cachedCheckpoint} identity={identity} />
+          <DocumentEditorShell
+            ariaLabel="离线文档缓存"
+            editingControls={false}
+            footerSlot={
+              <p role="status">
+                本机缓存只读。
+                {value.pendingUpdates.length
+                  ? '包含尚未确认的协同草稿，联网后会核对版本。'
+                  : '联网后重新校验权限和内容。'}
+                <button
+                  type="button"
+                  className="ml-3 underline"
+                  onClick={() => downloadLocalDraft({ ...value, content: value.content! })}
+                >
+                  导出本机内容
+                </button>
+              </p>
+            }
+          />
+        </div>
       </EditorProvider>
     );
   }
@@ -424,7 +455,7 @@ export function DocumentCollaborationEditor({
         </p>
         <button
           type="button"
-          className="mt-4 rounded-lg border px-4 py-2 text-sm font-medium outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+          className="mt-4 rounded-lg border px-4 py-2 text-sm font-medium outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => setAttempt((value) => value + 1)}
         >
           重试连接
@@ -453,6 +484,9 @@ export function DocumentCollaborationEditor({
       collaboration={currentSession.session}
       hostServices={editorHostServices}
       editable={!currentSession.info.readOnly && viewMode === 'edit'}
+      onUpdate={() => {
+        if (hasUnconfirmedChanges()) onDocumentInput?.();
+      }}
       readOnlyReason={
         currentSession.info.readOnly
           ? '你有权查看这篇文档，但没有编辑权限。'
@@ -461,55 +495,59 @@ export function DocumentCollaborationEditor({
             : undefined
       }
     >
-      {recoveryConflict?.value.content && (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted p-3 text-sm"
-        >
-          <span>本机协同草稿的权限或结构版本已变化，未自动合并。请导出草稿后核对内容。</span>
-          <button
-            type="button"
-            className="underline"
-            onClick={() =>
-              downloadLocalDraft({
-                ...recoveryConflict.value,
-                content: recoveryConflict.value.content!,
-              })
-            }
+      <div className="flex h-full min-h-0 flex-col">
+        {recoveryConflict?.value.content && (
+          <div
+            role="alert"
+            className="flex shrink-0 flex-wrap items-center gap-3 rounded-xl border bg-secondary p-3 text-sm"
           >
-            导出本机草稿
-          </button>
-          <button
-            type="button"
-            className="underline"
-            onClick={() => {
-              if (identity)
-                void deleteRecord(identity, 'collaboration', recoveryConflict.key)
-                  .then(() => setRecoveryConflict(null))
-                  .catch(() => undefined);
-            }}
-          >
-            放弃这份本机草稿
-          </button>
-        </div>
-      )}
-      <UnconfirmedChangesProbe
-        sessionKey={sessionKey}
-        document={document}
-        session={currentSession.session}
-        sessionInfo={currentSession.info}
-        checkpointKey={currentSession.checkpointKey}
-        recovery={recoveryConflict}
-      />
-      <DocumentEditorShell
-        ariaLabel="文档协同编辑器"
-        editingControls={!currentSession.info.readOnly && viewMode === 'edit'}
-      />
+            <span>本机协同草稿的权限或结构版本已变化，未自动合并。请导出草稿后核对内容。</span>
+            <button
+              type="button"
+              className="underline"
+              onClick={() =>
+                downloadLocalDraft({
+                  ...recoveryConflict.value,
+                  content: recoveryConflict.value.content!,
+                })
+              }
+            >
+              导出本机草稿
+            </button>
+            <button
+              type="button"
+              className="underline"
+              onClick={() => {
+                if (identity)
+                  void deleteRecord(identity, 'collaboration', recoveryConflict.key)
+                    .then(() => setRecoveryConflict(null))
+                    .catch(() => undefined);
+              }}
+            >
+              放弃这份本机草稿
+            </button>
+          </div>
+        )}
+        <UnconfirmedChangesProbe
+          sessionKey={sessionKey}
+          document={document}
+          session={currentSession.session}
+          sessionInfo={currentSession.info}
+          checkpointKey={currentSession.checkpointKey}
+          recovery={recoveryConflict}
+        />
+        <DocumentEditorShell
+          ariaLabel="文档协同编辑器"
+          editingControls={!currentSession.info.readOnly && viewMode === 'edit'}
+          replacementReview={replacementReview}
+          onCollaborationPresenceChange={onCollaborationPresenceChange}
+        />
+      </div>
       <PanelDialog
         open={versionsOpen}
         onOpenChange={onVersionsOpenChange}
         title="版本历史"
-        description="查看已保存的版本、比较差异，或创建新的协同文档代次。"
+        description="回顾每一次重要修改，比较差异，找回需要的内容。"
       >
         <DocumentVersionsPanel
           document={document}

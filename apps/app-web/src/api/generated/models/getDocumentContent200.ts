@@ -6,12 +6,10 @@
  */
 import type { DocumentContent } from './documentContent';
 import type { GetDocumentContent200ExtensionsItem } from './getDocumentContent200ExtensionsItem';
-import type { GetDocumentContent200Mode } from './getDocumentContent200Mode';
 
 export type GetDocumentContent200 = {
   /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
   documentId: string;
-  mode: GetDocumentContent200Mode;
   readOnly: boolean;
   /**
      * @minimum 0

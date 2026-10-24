@@ -1,4 +1,5 @@
 node_modules/
 dist/
+.playwright-cli/
 src/api/generated/
 src/routeTree.gen.ts

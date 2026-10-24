@@ -46,7 +46,6 @@ export const catalogIdSchema = z.string().regex(/^cat_[A-Za-z0-9_-]{1,64}$/);
 export const createDocumentBodySchema = z
   .object({
     title: z.string().trim().min(1).max(200).default("未命名文档"),
-    mode: z.enum(["standard", "collaborative"]).default("collaborative"),
     workspaceId: z
       .string()
       .regex(/^ws_[A-Za-z0-9_-]{1,64}$/)
@@ -94,7 +93,6 @@ export const documentSchema = z
     icon: documentIconSchema,
     tags: documentTagsSchema,
     createdBy: z.string(),
-    mode: z.enum(["standard", "collaborative"]),
     generationId: z.string().regex(/^gen_[A-Za-z0-9_-]{1,64}$/),
     schemaVersion: z.number().int().positive(),
     extensions: z.array(extensionSchema),
@@ -109,7 +107,6 @@ export const documentSchema = z
 export const documentContentSchema = z
   .object({
     documentId: z.string().regex(/^doc_[A-Za-z0-9_-]{1,64}$/),
-    mode: z.enum(["standard", "collaborative"]),
     readOnly: z.boolean(),
     schemaVersion: z.number().int().positive(),
     extensions: z.array(extensionSchema),
@@ -123,18 +120,10 @@ export const documentContentSchema = z
   })
   .strict();
 
-export const putDocumentContentBodySchema = z
-  .object({
-    expectedSnapshotRevision: z.number().int().positive(),
-    content: z.unknown(),
-  })
-  .strict();
-
 export const documentListItemSchema = documentSchema.extend({
   isFavorite: z.boolean(),
   canManage: z.boolean(),
   deletedAt: z.string().datetime().nullable(),
-  snapshotRevision: z.number().int().positive().nullable(),
   workspaceName: z.string(),
   excerpt: z.string(),
 });
@@ -156,47 +145,26 @@ export const documentVersionParamsSchema = documentParamsSchema.extend({
   versionId: versionIdSchema,
 });
 
-export const createDocumentVersionBodySchema = z.discriminatedUnion("mode", [
-  z
-    .object({
-      mode: z.literal("collaborative"),
-      name: z.string().trim().min(1).max(200),
-      expectedGenerationId: z.string().regex(/^gen_[A-Za-z0-9_-]{1,64}$/),
-      expectedDurableSeq: z.number().int().nonnegative(),
-    })
-    .strict(),
-  z
-    .object({
-      mode: z.literal("standard"),
-      name: z.string().trim().min(1).max(200),
-      expectedSnapshotRevision: z.number().int().positive(),
-    })
-    .strict(),
-]);
+export const createDocumentVersionBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    expectedGenerationId: z.string().regex(/^gen_[A-Za-z0-9_-]{1,64}$/),
+    expectedDurableSeq: z.number().int().nonnegative(),
+  })
+  .strict();
 
-export const restoreDocumentVersionBodySchema = z.discriminatedUnion("mode", [
-  z
-    .object({
-      mode: z.literal("collaborative"),
-      expectedGenerationId: z.string().regex(/^gen_[A-Za-z0-9_-]{1,64}$/),
-      expectedDurableSeq: z.number().int().nonnegative(),
-    })
-    .strict(),
-  z
-    .object({
-      mode: z.literal("standard"),
-      expectedSnapshotRevision: z.number().int().positive(),
-    })
-    .strict(),
-]);
+export const restoreDocumentVersionBodySchema = z
+  .object({
+    expectedGenerationId: z.string().regex(/^gen_[A-Za-z0-9_-]{1,64}$/),
+    expectedDurableSeq: z.number().int().nonnegative(),
+  })
+  .strict();
 
 export const documentVersionSchema = z
   .object({
     id: versionIdSchema,
     documentId: z.string().regex(/^doc_[A-Za-z0-9_-]{1,64}$/),
     generationId: z.string().regex(/^gen_[A-Za-z0-9_-]{1,64}$/),
-    sourceMode: z.enum(["standard", "collaborative"]),
-    snapshotRevision: z.number().int().positive().nullable(),
     name: z.string(),
     kind: z.enum(["named", "automatic"]),
     durableSeq: z.number().int().nonnegative(),
@@ -211,10 +179,8 @@ export const documentVersionContentSchema = z
   .object({
     documentId: z.string().regex(/^doc_[A-Za-z0-9_-]{1,64}$/),
     generationId: z.string().regex(/^gen_[A-Za-z0-9_-]{1,64}$/),
-    sourceMode: z.enum(["standard", "collaborative"]),
     schemaVersion: z.number().int().positive(),
     durableSeq: z.number().int().nonnegative(),
-    snapshotRevision: z.number().int().positive().nullable(),
     content: z.unknown(),
   })
   .strict();
@@ -331,7 +297,6 @@ export const errorResponseSchema = z.object({
 export type CreateDocumentInput = z.infer<typeof createDocumentBodySchema>;
 export type CopyDocumentInput = z.infer<typeof copyDocumentBodySchema>;
 export type ImportDocumentInput = z.infer<typeof importDocumentBodySchema>;
-export type PutDocumentContentInput = z.infer<typeof putDocumentContentBodySchema>;
 export type CreateDocumentVersionInput = z.infer<typeof createDocumentVersionBodySchema>;
 export type RestoreDocumentVersionInput = z.infer<typeof restoreDocumentVersionBodySchema>;
 export type UpdateDocumentInput = z.infer<typeof updateDocumentBodySchema>;

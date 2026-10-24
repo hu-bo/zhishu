@@ -1,3 +1,128 @@
+.zhishu-ui-shell .zhishu-replacement-old {
+  color: var(--zhishu-editor-muted);
+  opacity: 0.62;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  background: color-mix(in srgb, var(--zhishu-editor-muted) 6%, transparent);
+  border-radius: 4px;
+}
+.zhishu-ui-shell .zhishu-replacement-old::before {
+  content: none !important;
+}
+.zhishu-replacement-new {
+  position: relative;
+  margin-block: 12px;
+  padding: 12px 16px 36px;
+  border-left: 3px solid var(--zhishu-editor-accent);
+  border-radius: 3px 10px 10px 3px;
+  background: var(--zhishu-editor-accent-soft);
+  color: var(--zhishu-editor-accent);
+  overflow-wrap: anywhere;
+}
+.zhishu-replacement-actions {
+  position: absolute;
+  right: 8px;
+  bottom: 5px;
+  display: flex;
+  padding: 1px 3px;
+  border-radius: 999px;
+  background: var(--zhishu-editor-selection-surface);
+  color: var(--zhishu-editor-selection-text);
+}
+.zhishu-replacement-actions button {
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.zhishu-replacement-actions button:hover {
+  background: rgb(255 255 255 / 14%);
+}
+.zhishu-replacement-actions button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+.zhishu-replacement-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.zhishu-replacement-new > :last-child {
+  margin-bottom: 0;
+}
+.zhishu-replacement-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+.zhishu-ui-replacement-review {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  text-align: center;
+}
+.zhishu-ui-replacement-review__bar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 14px;
+  background: var(--zhishu-editor-selection-surface);
+  color: var(--zhishu-editor-selection-text);
+  box-shadow: var(--zhishu-editor-floating-shadow);
+  font-size: 12px;
+}
+.zhishu-ui-replacement-review__bar svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+.zhishu-ui-replacement-review__bar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 32px;
+  min-height: 28px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.zhishu-ui-replacement-review__bar button:hover {
+  background: rgb(255 255 255 / 12%);
+}
+.zhishu-ui-replacement-review__bar button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.zhishu-ui-replacement-review__bar button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.zhishu-ui-replacement-review__bar .zhishu-ui-replacement-review__accept {
+  background: var(--zhishu-editor-accent);
+  color: white;
+}
+.zhishu-ui-replacement-review__hint {
+  margin: 3px 0 0;
+  font-size: 11px;
+  color: var(--zhishu-editor-muted);
+}
+
 .zhishu-ui-shell,
 .zhishu-ui-theme {
   --zhishu-editor-surface: var(--zhishu-ui-surface, var(--card, #fff));
@@ -30,6 +155,14 @@
   --zhishu-editor-radius-floating: var(--zhishu-ui-radius-floating, 11px);
   --zhishu-editor-control-height: var(--zhishu-ui-control-height, 44px);
   --zhishu-editor-outline-width: var(--zhishu-ui-outline-width, 220px);
+  --zhishu-editor-font-mono: var(
+    --zhishu-ui-font-mono,
+    ui-monospace,
+    "SFMono-Regular",
+    Menlo,
+    Consolas,
+    monospace
+  );
   --zhishu-editor-code-background: var(--zhishu-ui-code-background, #0f172a);
   --zhishu-editor-code-header: var(--zhishu-ui-code-header, #1e293b);
   --zhishu-editor-code-border: var(--zhishu-ui-code-border, #334155);
@@ -45,6 +178,7 @@
 
 .zhishu-ui-shell {
   display: flex;
+  container: zhishu-editor / inline-size;
   box-sizing: border-box;
   min-height: 440px;
   min-width: 0;
@@ -55,6 +189,15 @@
   background: var(--zhishu-editor-surface);
   color: var(--zhishu-editor-text);
   box-shadow: var(--zhishu-editor-shadow);
+  font-family: var(
+    --zhishu-ui-font-sans,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif
+  );
 }
 
 .zhishu-ui-shell [data-type="taskItem"] {
@@ -63,6 +206,14 @@
   gap: 0.5rem;
   min-width: 0;
   margin-block: 0.25rem;
+}
+
+.zhishu-ui-shell [data-type="taskItem"] > [data-task-content] > :first-child {
+  margin-top: 0;
+}
+
+.zhishu-ui-shell [data-type="taskItem"] > [data-task-content] > :last-child {
+  margin-bottom: 0;
 }
 
 .zhishu-ui-shell [data-type="taskItem"] > [data-task-content] {
@@ -83,7 +234,7 @@
   flex: 0 0 auto;
   width: 1rem;
   height: 1rem;
-  margin: 0.15rem 0 0;
+  margin: 0.375rem 0 0;
   accent-color: var(--zhishu-editor-accent);
   cursor: pointer;
 }
@@ -300,6 +451,11 @@
   font:
     400 0.76rem/1.5 system-ui,
     sans-serif;
+}
+
+.zhishu-ui-footer .zhishu-collaboration-status-details {
+  top: auto;
+  bottom: calc(100% + 6px);
 }
 
 .zhishu-collaboration-status-details dl {
@@ -575,13 +731,13 @@
 
 .zhishu-ui-selection-menu {
   position: fixed;
-  z-index: 1000;
+  z-index: 1004;
   box-sizing: border-box;
   max-width: calc(100vw - 16px);
   overflow-x: auto;
   display: flex;
-  gap: 4px;
-  padding: 5px;
+  gap: 2px;
+  padding: 4px;
   border: 1px solid var(--zhishu-editor-selection-border);
   border-radius: var(--zhishu-editor-radius-control);
   background: var(--zhishu-editor-selection-surface);
@@ -591,8 +747,13 @@
 }
 
 .zhishu-ui-selection-menu button {
-  min-height: 44px;
-  padding: 0 12px;
+  display: inline-flex;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 1px solid transparent;
   border-radius: var(--zhishu-editor-radius-compact);
   background: transparent;
@@ -600,6 +761,28 @@
   font: inherit;
   white-space: nowrap;
   cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+}
+
+.zhishu-ui-selection-menu button svg {
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+
+.zhishu-ui-selection-menu button:where(:not(:disabled):hover) {
+  background: color-mix(
+    in srgb,
+    var(--zhishu-editor-selection-text) 10%,
+    var(--zhishu-editor-selection-surface)
+  );
+}
+
+.zhishu-ui-selection-menu button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .zhishu-ui-selection-menu button[aria-pressed="true"],
@@ -1214,7 +1397,53 @@
 
 /* Compact document editor surface */
 
+.zhishu-ui-document-editor {
+  min-height: 0;
+  flex: 1 1 auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.zhishu-ui-document-editor .zhishu-ui-body {
+  min-height: 0;
+}
+
+.zhishu-ui-document-editor .zhishu-ui-surface {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.zhishu-ui-document-editor .zhishu-ui-toolbar-row,
+.zhishu-ui-document-editor .zhishu-ui-footer {
+  flex: 0 0 auto;
+}
+
+.zhishu-ui-document-editor .zhishu-ui-footer {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-height: 0;
+  padding: 4px 10px;
+}
+
+.zhishu-ui-document-editor .zhishu-ui-stats-footer {
+  min-height: 30px;
+  flex: 1 1 100%;
+  width: 100%;
+}
+
+.zhishu-ui-document-editor .zhishu-ui-footer > .zhishu-ui-savebar {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .zhishu-ui-header {
+  display: flex;
+  align-items: center;
   min-height: 54px;
   flex-wrap: wrap;
   gap: 10px;
@@ -1280,7 +1509,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 9px 14px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--zhishu-editor-border);
   background: var(--zhishu-editor-surface);
 }
@@ -1375,13 +1604,14 @@
 }
 
 .zhishu-ui-toolbar {
+  display: flex;
   min-height: 34px;
   min-width: 0;
   max-width: 100%;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 0;
+  gap: 4px 2px;
   padding: 0;
   border: 0;
 }
@@ -1611,6 +1841,10 @@
   border-left: 1px solid var(--zhishu-editor-border);
 }
 
+.zhishu-ui-toolbar [data-action="comments"] {
+  margin-left: auto;
+}
+
 .zhishu-ui-toolbar button.zhishu-ui-toolbar-button {
   display: inline-flex;
   min-width: 34px;
@@ -1833,7 +2067,7 @@
   box-sizing: border-box;
   flex: 0 0 var(--zhishu-editor-outline-width);
   overflow: auto;
-  padding: 20px 12px;
+  padding: 28px 16px;
   border-right: 1px solid var(--zhishu-editor-border);
   background: var(--zhishu-editor-surface);
 }
@@ -1936,11 +2170,11 @@
   max-width: var(--zhishu-ui-content-max-width, 896px);
   min-height: 360px;
   margin: 0 auto;
-  padding: 30px clamp(22px, 5vw, 68px) 56px;
+  padding: 44px clamp(24px, 5vw, 64px) 72px;
   background: var(--zhishu-editor-surface);
   color: var(--zhishu-editor-text);
   font-size: 16px;
-  line-height: 1.75;
+  line-height: 1.85;
   overflow-wrap: anywhere;
 }
 
@@ -1974,7 +2208,7 @@
   color: var(--zhishu-editor-text);
   font-weight: 650;
   line-height: 1.35;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
 }
 
 .zhishu-ui-surface .ProseMirror h1 {
@@ -2237,11 +2471,16 @@
 }
 
 .zhishu-ui-keyboard-help summary {
+  display: flex;
+  align-items: center;
   min-height: 32px;
   padding: 6px 8px;
   border-radius: var(--zhishu-editor-radius-control);
   cursor: pointer;
   list-style: none;
+  color: var(--zhishu-editor-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 
 .zhishu-ui-keyboard-help summary::-webkit-details-marker {
@@ -2277,6 +2516,13 @@
   background: var(--zhishu-editor-surface);
   box-shadow: var(--zhishu-editor-shadow);
   color: var(--zhishu-editor-text);
+}
+
+.zhishu-ui-footer-tools {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
 }
 
 .zhishu-ui-keyboard-help-popover p {
@@ -2446,6 +2692,24 @@
     flex-wrap: wrap;
   }
 
+  .zhishu-ui-toolbar-formatting {
+    display: contents;
+  }
+
+  .zhishu-ui-toolbar-menu:not(.is-block-menu) > summary > span,
+  .zhishu-ui-toolbar-menu:not(.is-block-menu) > summary > .zhishu-ui-toolbar-menu-chevron {
+    display: none;
+  }
+
+  .zhishu-ui-toolbar-menu:not(.is-block-menu) > summary {
+    min-width: 34px;
+    padding-inline: 8px;
+  }
+
+  .zhishu-ui-toolbar-row > .zhishu-ui-find-toggle {
+    align-self: flex-start;
+  }
+
   .zhishu-ui-find-panel {
     flex: 1 1 210px;
     max-width: 100%;
@@ -2514,13 +2778,13 @@
     align-items: flex-start;
   }
 
-  .zhishu-collaboration-indicator {
+  .zhishu-ui-header > .zhishu-collaboration-indicator {
     flex-basis: 100%;
     order: 3;
     gap: 2px 10px;
   }
 
-  .zhishu-ui-collaboration-status {
+  .zhishu-ui-header > .zhishu-ui-collaboration-status {
     margin-left: 0;
   }
 
@@ -2651,6 +2915,15 @@
   transform: translateX(8px);
 }
 
+@container zhishu-editor (min-width: 960px) {
+  .zhishu-ui-outline.is-floating:not(.is-collapsed) {
+    position: static;
+    width: var(--zhishu-editor-outline-width);
+    flex: 0 0 var(--zhishu-editor-outline-width);
+    box-shadow: none;
+  }
+}
+
 .zhishu-ui-toolbar .zhishu-ui-outline-toggle {
   display: inline-flex;
   min-width: 34px;
@@ -2700,38 +2973,5 @@
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
-  }
-}
-.zhishu-task-celebration {
-  position: fixed;
-  width: 1px;
-  height: 1px;
-  pointer-events: none;
-  z-index: 30;
-}
-.zhishu-task-celebration i {
-  position: absolute;
-  width: 4px;
-  height: 4px;
-  border-radius: 1px;
-  background: var(--zhishu-editor-accent);
-  animation: zhishu-task-burst 600ms ease-out forwards;
-}
-.zhishu-task-celebration i:nth-child(even) {
-  background: var(--zhishu-editor-success);
-}
-@keyframes zhishu-task-burst {
-  from {
-    opacity: 1;
-    transform: translate(0, 0) scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: translate(var(--zhishu-task-dx), var(--zhishu-task-dy)) scale(0.3) rotate(100deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .zhishu-task-celebration {
-    display: none;
   }
 }

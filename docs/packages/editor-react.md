@@ -1,5 +1,7 @@
 # editor-react 设计规划
 
+2026-10-22 新增 `useEditorReplacementPreview(preview, onInvalidated, actions?)`，封装 core 装饰的安装、卸载与实例订阅，返回 count、index 和循环 navigate。原文不匹配或收到正文变更时调用最新的失效回调，清理监听并移除装饰；切换预览、Provider 或卸载不重建编辑器。段落接受/拒绝使用最新回调，disabled 更新同步到装饰按钮；提交、权限与版本冲突由宿主处理，Hook 不调用 AI 或协同服务。
+
 状态：M1 基础实现中，M2 React NodeView 已完成基础能力。对应 `packages/editor-react`；[返回文档地图](../README.md)。依赖 [editor-core](editor-core.md) 与 React，复用内容合约。
 
 ## 1. 产品职责

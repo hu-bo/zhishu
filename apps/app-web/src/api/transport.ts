@@ -12,6 +12,7 @@ import {
 } from '@/features/offline/cache';
 
 let accessToken: string | undefined;
+export const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 const accessTokenListeners = new Set<(token: string | undefined) => void>();
 type UnconfirmedChangeRegistration = {
   hasChanges: () => boolean;
@@ -107,7 +108,7 @@ const messages: Record<string, string> = {
 };
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const base = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
+  const base = apiBaseUrl;
   let response: Response;
   const identity = currentCacheIdentity();
   const cacheScope = responseCacheScope(path, options);

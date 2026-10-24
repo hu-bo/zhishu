@@ -196,8 +196,11 @@ export function DocumentTransferActions({
       await queryClient.invalidateQueries({ queryKey: ['documents'] });
       setPendingLossConfirmation(null);
       await navigate({
-        to: '/documents/$documentId',
-        params: { documentId: result.document.id },
+        to: '/spaces/$workspaceId/doc/$documentId',
+        params: {
+          workspaceId: result.document.workspaceId,
+          documentId: result.document.id,
+        },
       });
       if (conversionLosses.length > 0)
         setNotice(`导入完成；格式损失：${conversionLosses.join('；')}`);
@@ -294,8 +297,11 @@ export function DocumentTransferActions({
   };
 
   return (
-    <section className="flex flex-col gap-3 rounded-xl border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex flex-wrap gap-2">
+    <section aria-label="文档导入与导出" className="space-y-4">
+      <p className="text-[13px] leading-6 text-muted-foreground">
+        导出已保存的内容，或将本地文件导入为一篇新文档。
+      </p>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 [&>button]:h-12 [&>button]:w-full [&>button]:justify-start">
         <Button variant="outline" disabled={busy !== null} onClick={() => void exportFile('json')}>
           {busy === 'export' ? (
             <LoaderCircle className="animate-spin" aria-hidden="true" />
@@ -370,7 +376,7 @@ export function DocumentTransferActions({
         onConfirm={confirmLoss}
       >
         {pendingLossConfirmation && (
-          <ul className="max-h-48 list-disc space-y-1 overflow-y-auto rounded-lg border bg-muted/30 px-8 py-3 text-sm text-muted-foreground">
+          <ul className="max-h-48 list-disc space-y-1 overflow-y-auto rounded-lg border bg-secondary/30 px-8 py-3 text-sm text-muted-foreground">
             {pendingLossConfirmation.losses.map((loss, index) => (
               <li key={`${index}:${loss}`}>{loss}</li>
             ))}

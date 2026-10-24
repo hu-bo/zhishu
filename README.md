@@ -1,8 +1,8 @@
 # 知书
 
-在线文档编辑与团队知识库，使用 pnpm workspace、React 19、Tiptap、Fastify、Zod 和 Drizzle/PostgreSQL。普通文档显式保存，协同文档依据服务端持久化回执确认保存。
+在线文档编辑与团队知识库，使用 pnpm workspace、React 19、Tiptap、Fastify、Zod 和 Drizzle/PostgreSQL。所有文档基于实时协同编辑，依据服务端持久化回执确认为已保存。
 
-当前内容格式为 Schema v5，支持五主题提示块、五状态标签和带标签分隔线。普通草稿与协同未确认更新保存到按身份隔离的 IndexedDB；生产页面可离线刷新，联网登录后校验权限和版本再恢复，冲突草稿保留导出。
+当前内容格式为 Schema v5，支持五主题提示块、五状态标签和带标签分隔线。协同未确认更新保存到按身份隔离的 IndexedDB；生产页面可离线刷新，联网登录后校验权限和版本再恢复，冲突草稿保留导出。
 
 ## Structure
 
@@ -35,6 +35,16 @@ pnpm dev
 API 默认地址为 http://localhost:3000，liveness 为 `/health/live`，readiness 为 `/health/ready`，Swagger UI 为 `/documentation`。
 正常启动先确认数据库可用；migration 单独执行。
 `/api/projects/` 提供 list/create，`/api/projects/:id` 提供 get/patch/delete；文档 API 提供创建、授权元数据读取和 owner-managed ACL。list 支持 limit（默认 20，最大 100）。API 需要 Bearer token；mock 登录方式见下文。运行 `pnpm build && pnpm start` 启动 `apps/app-server/dist/src/server.js`。
+
+## AI 创作
+
+`/ai` 提供讨论、所选资料写作/研究、手动接受与自动写入。两种写入均只支持本人的个人空间，使用现有协同会话和持久化确认。服务端配置 `AI_MODEL`、`AI_API_KEY`，兼容服务可另设 `AI_BASE_URL`；模型须支持工具调用。密钥仅填写本机根目录 `.env`，不提交仓库。未配置时显示未启用，仍可人工编辑。
+
+首次启用先执行 `pnpm db:migrate`，再运行 `pnpm --filter @react-fastify-template/app-server ai:setup`，显式建立官方 checkpoint 四表；普通启动不自动迁移。`pnpm test:ai` 验证共享协议和运行时。应用集成测试为 `pnpm --filter @react-fastify-template/app-server smoke:ai`：使用确定性模型和真实 PostgreSQL/HTTP/SSE/WebSocket，不调用外部模型。默认创建并删除 `zhishu_ai_test_*` 临时库，需要 CREATEDB；也可由管理员预建并通过 `AI_TEST_DATABASE_URL` 指向可丢弃的同名前缀测试库。**该测试结束会删除整个测试库**，不得指向业务库。
+
+支持 `AI_API_FORMAT=openai|anthropic`，不填时 `/anthropic` 结尾地址自动使用 Anthropic，其余使用 OpenAI。Anthropic 兼容模型可配置 `AI_THINKING=adaptive|disabled`、`AI_REASONING_EFFORT=low|medium|high|max`；MiniMax-M3.1-Flash 必须使用 adaptive，当前本机采用 low。模型/协议/推理配置改变后不能恢复旧模型的任务，须重新生成。已用 MiniMax-M3.1-Flash 验证真实 Chat、写作、研究引用及两种写入模式；模型输出质量与费用仍需持续评测。
+
+首期资料显式选择最多 4 篇，每篇读取最多 8 个切片，证据总量 32KB；长文请拆分或缩小范围。全库 Qdrant 检索仍待接入。
 
 ## Mock Authentication
 

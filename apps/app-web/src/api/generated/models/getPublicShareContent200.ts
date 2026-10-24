@@ -5,12 +5,10 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { GetPublicShareContent200ExtensionsItem } from './getPublicShareContent200ExtensionsItem';
-import type { GetPublicShareContent200Mode } from './getPublicShareContent200Mode';
 
 export type GetPublicShareContent200 = {
   /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
   documentId: string;
-  mode: GetPublicShareContent200Mode;
   readOnly: boolean;
   /**
      * @minimum 0

@@ -27,6 +27,10 @@ import type { CollaborationSessionInfo } from '@zhishu/editor-collaboration';
 type PreviewBlock = { id: string; type: string; text: string; index: number };
 type PreviewCapture = { versionId: string; content: unknown };
 
+function versionLabel(version: ListDocumentVersions200Item): string {
+  return version.kind === 'automatic' ? '自动保存' : version.name;
+}
+
 function HistoricalDocumentPreview({
   content,
   instanceKey,
@@ -153,20 +157,10 @@ export function DocumentVersionsPanel({
   document,
   session,
   sessionKey,
-  standardSnapshot,
-  standardBusy = false,
-  standardDirty = false,
-  onRestoreBusyChange,
-  onVersionRestored,
 }: {
   document: GetDocument200;
   session?: CollaborationSessionInfo;
   sessionKey: string;
-  standardSnapshot?: GetDocumentContent200;
-  standardBusy?: boolean;
-  standardDirty?: boolean;
-  onRestoreBusyChange?: (busy: boolean) => void;
-  onVersionRestored?: () => void | Promise<void>;
 }) {
   const queryClient = useQueryClient();
   const { controller } = useEditorInstance();
@@ -194,18 +188,15 @@ export function DocumentVersionsPanel({
     enabled: selectedVersionId !== null,
   });
   const hasUnconfirmedChanges =
-    standardDirty ||
     status?.persistence === 'pending' ||
     status?.persistence === 'failed' ||
     (status?.pendingUpdateCount ?? 0) > 0;
-  const isStandard = standardSnapshot !== undefined;
-  const canWrite = isStandard ? !standardSnapshot.readOnly : Boolean(session && !session.readOnly);
-  const canSnapshot = isStandard
-    ? canWrite && !hasUnconfirmedChanges && !standardBusy
-    : canWrite &&
-      status?.connection === 'connected' &&
-      status.sync === 'current' &&
-      !hasUnconfirmedChanges;
+  const canWrite = Boolean(session && !session.readOnly);
+  const canSnapshot =
+    canWrite &&
+    status?.connection === 'connected' &&
+    status.sync === 'current' &&
+    !hasUnconfirmedChanges;
 
   const previewValidation = useMemo(() => {
     if (!preview.data?.content) return null;
@@ -241,18 +232,9 @@ export function DocumentVersionsPanel({
     setFeedback(null);
     try {
       const created = await createDocumentVersion(document.id, {
-        ...(isStandard
-          ? {
-              mode: 'standard' as const,
-              name,
-              expectedSnapshotRevision: standardSnapshot.snapshotRevision,
-            }
-          : {
-              mode: 'collaborative' as const,
-              name,
-              expectedGenerationId: session!.generationId,
-              expectedDurableSeq: session!.durableSeq,
-            }),
+        name,
+        expectedGenerationId: session!.generationId,
+        expectedDurableSeq: session!.durableSeq,
       });
       await queryClient.invalidateQueries({ queryKey: versionQueryKey });
       setVersionName('');
@@ -275,31 +257,21 @@ export function DocumentVersionsPanel({
     if (!canSnapshot || working) return false;
     setWorking(version.id);
     setFeedback(null);
-    if (isStandard) onRestoreBusyChange?.(true);
     try {
       const restored = await restoreDocumentVersion(document.id, version.id, {
-        ...(isStandard
-          ? {
-              mode: 'standard' as const,
-              expectedSnapshotRevision: standardSnapshot.snapshotRevision,
-            }
-          : {
-              mode: 'collaborative' as const,
-              expectedGenerationId: session!.generationId,
-              expectedDurableSeq: session!.durableSeq,
-            }),
+        expectedGenerationId: session!.generationId,
+        expectedDurableSeq: session!.durableSeq,
       });
       queryClient.setQueryData(['document', document.id], restored);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['documents'] }),
         queryClient.invalidateQueries({ queryKey: versionQueryKey }),
       ]);
-      if (isStandard) await onVersionRestored?.();
       setSelectedVersionId(null);
       setCapture(null);
       setFeedback({
         kind: 'status',
-        message: `已恢复“${version.name}”，当前代次已更新。`,
+        message: `已恢复“${versionLabel(version)}”。`,
       });
       setRestoreCandidate(null);
       return true;
@@ -307,23 +279,18 @@ export function DocumentVersionsPanel({
       setFeedback({ kind: 'error', message: errorMessage(error) });
       return false;
     } finally {
-      if (isStandard) onRestoreBusyChange?.(false);
       setWorking(null);
     }
   };
 
   return (
-    <section className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm shadow-foreground/[0.02] sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">版本历史</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            版本固定到已保存的正文位置；协同模式恢复会创建新的文档代次。
-          </p>
-        </div>
+    <section className="space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs leading-5 text-muted-foreground">自动保存与手动命名的历史记录</p>
         <Button
           type="button"
           variant="outline"
+          size="sm"
           disabled={versions.isFetching}
           onClick={() => void versions.refetch()}
         >
@@ -358,12 +325,8 @@ export function DocumentVersionsPanel({
       {canWrite && !canSnapshot && (
         <p className="text-sm text-muted-foreground" role="status">
           {hasUnconfirmedChanges
-            ? isStandard
-              ? '普通正文有未保存修改；保存后才能创建或恢复版本。'
-              : '正文仍有未确认更新；收到持久化回执后才能保存或恢复版本。'
-            : isStandard
-              ? '当前快照只读或正在更新；完成后可保存或恢复版本。'
-              : '等待协同连接与同步完成后，可保存或恢复版本。'}
+            ? '正在保存最新修改，完成后即可保存或恢复版本。'
+            : '等待协同连接与同步完成后，可保存或恢复版本。'}
         </p>
       )}
 
@@ -389,13 +352,10 @@ export function DocumentVersionsPanel({
                   <span className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-normal text-muted-foreground">
                     {version.kind === 'automatic' ? '自动版本' : '命名版本'}
                   </span>
-                  <span className="truncate">{version.name}</span>
+                  <span className="truncate">{versionLabel(version)}</span>
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {formatDate(version.createdAt)} · 作者 ID {version.createdBy} ·{' '}
-                  {version.sourceMode === 'standard'
-                    ? `快照修订 ${version.snapshotRevision}`
-                    : `持久化序号 ${version.durableSeq}`}
+                  {formatDate(version.createdAt)}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -428,7 +388,10 @@ export function DocumentVersionsPanel({
       )}
 
       {selectedVersionId && (
-        <section className="space-y-3 rounded-xl border bg-muted/30 p-4" aria-label="历史版本预览">
+        <section
+          className="space-y-3 rounded-xl border bg-secondary/30 p-4"
+          aria-label="历史版本预览"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-medium">
               {versions.data?.find((version) => version.id === selectedVersionId)?.name ?? '版本'}
@@ -475,7 +438,7 @@ export function DocumentVersionsPanel({
             </p>
           ) : !previewValidation?.success ? (
             <p className="text-sm text-destructive" role="alert">
-              历史正文无法通过当前编辑器 Schema 校验，暂不能预览。
+              这个版本的内容格式暂不兼容，无法预览。
             </p>
           ) : !currentValidation?.success ? (
             <p className="text-sm text-destructive" role="alert">
@@ -557,9 +520,7 @@ export function DocumentVersionsPanel({
         title="恢复历史版本？"
         description={
           restoreCandidate
-            ? isStandard
-              ? `恢复到“${restoreCandidate.name}”会替换当前普通快照正文并增加修订号。`
-              : `恢复到“${restoreCandidate.name}”将创建新的文档代次，并替换当前正文。`
+            ? `恢复到“${versionLabel(restoreCandidate)}”将替换当前正文，请先确认最新内容已保存。`
             : ''
         }
         confirmLabel="恢复此版本"

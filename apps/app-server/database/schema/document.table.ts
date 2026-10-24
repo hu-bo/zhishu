@@ -28,12 +28,45 @@ export const workspaces = pgTable(
     tenantId: text("tenant_id").notNull(),
     id: text("id").notNull(),
     name: text("name").notNull(),
+    kind: text("kind")
+      .$type<"personal" | "team" | "unclassified">()
+      .notNull()
+      .default("unclassified"),
+    personalOwnerId: text("personal_owner_id"),
     icon: text("icon"),
     description: text("description").notNull().default(""),
     createdBy: text("created_by").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [primaryKey({ columns: [table.tenantId, table.id] })],
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.id] }),
+    check("workspaces_kind_check", sql`${table.kind} in ('personal', 'team', 'unclassified')`),
+    check(
+      "workspaces_personal_owner_check",
+      sql`(${table.kind} = 'personal' and ${table.personalOwnerId} is not null and length(btrim(${table.personalOwnerId})) > 0 and ${table.personalOwnerId} = ${table.createdBy}) or (${table.kind} <> 'personal' and ${table.personalOwnerId} is null)`,
+    ),
+  ],
+);
+
+export const workspaceMembers = pgTable(
+  "workspace_members",
+  {
+    tenantId: text("tenant_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    identityId: text("identity_id").notNull(),
+    displayName: text("display_name").notNull(),
+    role: text("role").$type<"admin" | "editor" | "viewer">().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.tenantId, table.workspaceId, table.identityId] }),
+    foreignKey({
+      columns: [table.tenantId, table.workspaceId],
+      foreignColumns: [workspaces.tenantId, workspaces.id],
+      name: "workspace_members_workspace_fk",
+    }).onDelete("cascade"),
+    check("workspace_members_role_check", sql`${table.role} in ('admin', 'editor', 'viewer')`),
+  ],
 );
 
 // Directory tree of a workspace. Every workspace owns exactly one root node (parentId = null,
@@ -114,7 +147,6 @@ export const documents = pgTable(
     icon: text("icon"),
     tags: jsonb("tags").$type<DocumentTag[]>().notNull().default([]),
     createdBy: text("created_by").notNull(),
-    mode: text("mode").notNull().default("collaborative"),
     status: text("status").notNull().default("active"),
     metadataRevision: integer("metadata_revision").notNull().default(1),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
@@ -142,38 +174,9 @@ export const documents = pgTable(
       table.id,
     ),
     check("documents_status_check", sql`${table.status} in ('active', 'archived', 'trashed')`),
-    check("documents_mode_check", sql`${table.mode} in ('standard', 'collaborative')`),
     check("documents_metadata_revision_check", sql`${table.metadataRevision} > 0`),
     uniqueIndex("documents_tenant_id_id_uq").on(table.tenantId, table.id),
     index("documents_tenant_created_idx").on(table.tenantId, table.createdAt, table.id),
-  ],
-);
-
-export const documentJsonSnapshots = pgTable(
-  "document_json_snapshots",
-  {
-    tenantId: text("tenant_id").notNull(),
-    documentId: text("document_id").notNull(),
-    snapshotRevision: integer("snapshot_revision").notNull().default(1),
-    content: jsonb("content").$type<DocumentContent>().notNull(),
-    contentHash: text("content_hash").notNull(),
-    blockCount: integer("block_count").notNull(),
-    textLength: integer("text_length").notNull(),
-    assetCount: integer("asset_count").notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.tenantId, table.documentId] }),
-    foreignKey({
-      columns: [table.tenantId, table.documentId],
-      foreignColumns: [documents.tenantId, documents.id],
-      name: "document_json_snapshots_tenant_document_fk",
-    }).onDelete("cascade"),
-    check("document_json_snapshots_revision_check", sql`${table.snapshotRevision} > 0`),
-    check(
-      "document_json_snapshots_summary_check",
-      sql`${table.blockCount} >= 0 and ${table.textLength} >= 0 and ${table.assetCount} >= 0`,
-    ),
   ],
 );
 
@@ -650,86 +653,6 @@ export const assets = pgTable(
     uniqueIndex("assets_tenant_document_id_uq").on(table.tenantId, table.documentId, table.id),
     uniqueIndex("assets_object_key_uq").on(table.objectKey),
     index("assets_upload_cleanup_idx").on(table.status, table.uploadExpiresAt),
-  ],
-);
-
-export const documentJsonAssetReferences = pgTable(
-  "document_json_asset_references",
-  {
-    tenantId: text("tenant_id").notNull(),
-    documentId: text("document_id").notNull(),
-    assetId: text("asset_id").notNull(),
-    blockId: text("block_id").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.tenantId, table.documentId, table.assetId, table.blockId] }),
-    foreignKey({
-      columns: [table.tenantId, table.documentId],
-      foreignColumns: [documents.tenantId, documents.id],
-      name: "document_json_asset_references_document_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [table.tenantId, table.documentId, table.assetId],
-      foreignColumns: [assets.tenantId, assets.documentId, assets.id],
-      name: "document_json_asset_references_asset_fk",
-    }).onDelete("cascade"),
-    index("document_json_asset_references_asset_idx").on(table.tenantId, table.assetId),
-  ],
-);
-
-export const documentJsonVersionSnapshots = pgTable(
-  "document_json_version_snapshots",
-  {
-    versionId: text("version_id")
-      .primaryKey()
-      .references(() => documentVersions.id, { onDelete: "cascade" }),
-    tenantId: text("tenant_id").notNull(),
-    documentId: text("document_id").notNull(),
-    snapshotRevision: integer("snapshot_revision").notNull(),
-    content: jsonb("content").$type<DocumentContent>().notNull(),
-    contentHash: text("content_hash").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.tenantId, table.documentId],
-      foreignColumns: [documents.tenantId, documents.id],
-      name: "document_json_version_snapshots_tenant_document_fk",
-    }).onDelete("cascade"),
-    check("document_json_version_snapshots_revision_check", sql`${table.snapshotRevision} > 0`),
-    check(
-      "document_json_version_snapshots_hash_check",
-      sql`${table.contentHash} ~ '^[a-f0-9]{64}$'`,
-    ),
-    index("document_json_version_snapshots_document_idx").on(table.tenantId, table.documentId),
-  ],
-);
-
-export const documentJsonVersionAssetReferences = pgTable(
-  "document_json_version_asset_references",
-  {
-    versionId: text("version_id")
-      .notNull()
-      .references(() => documentVersions.id, { onDelete: "cascade" }),
-    tenantId: text("tenant_id").notNull(),
-    documentId: text("document_id").notNull(),
-    assetId: text("asset_id").notNull(),
-    blockId: text("block_id").notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.versionId, table.assetId, table.blockId] }),
-    foreignKey({
-      columns: [table.tenantId, table.documentId],
-      foreignColumns: [documents.tenantId, documents.id],
-      name: "document_json_version_asset_references_document_fk",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [table.tenantId, table.documentId, table.assetId],
-      foreignColumns: [assets.tenantId, assets.documentId, assets.id],
-      name: "document_json_version_asset_references_asset_fk",
-    }).onDelete("cascade"),
-    index("document_json_version_asset_references_asset_idx").on(table.tenantId, table.assetId),
   ],
 );
 

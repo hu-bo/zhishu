@@ -37,6 +37,10 @@ import {
   type StoredStructureState,
 } from "./structure-operations.js";
 import { collaborationOwnerLock } from "./owner-lock.js";
+import type { CollaborationOwner } from "./owner.js";
+import type { Principal } from "../identity/identity.types.js";
+import { DomainError } from "../../shared/domain-error.js";
+import { createSessionTicket } from "./session-ticket.js";
 
 type CollaborationContext = { collaborationSession?: CollaborationSessionClaims };
 type DurableReceipt = {
@@ -1162,7 +1166,187 @@ export function createCollaborationServer(
     }
   };
 
+  const openOwnedDocument = async (principal: Principal, documentId: string) => {
+    if (!ownerLeaseClient) throw new DomainError("SERVICE_UNAVAILABLE", "协同服务尚未就绪");
+    const active = await repository.findActiveForAction(
+      documentId,
+      principal.tenantId,
+      principal.identityId,
+      "read",
+    );
+    if (!active) throw new DomainError("NOT_FOUND", "文档不存在或无权访问");
+    const { claims } = createSessionTicket(
+      {
+        tenantId: principal.tenantId,
+        documentId,
+        generationId: active.generationId,
+        schemaVersion: active.schemaVersion,
+        extensions: active.extensions,
+        subject: principal.identityId,
+        displayName: principal.displayName.slice(0, 80) || "成员",
+        presenceColor: "#6366f1",
+        readOnly: true,
+      },
+      config.COLLABORATION_TOKEN_SECRET,
+      300,
+    );
+    const direct = await server.hocuspocus.openDirectConnection(
+      documentNameFor(documentId, active.generationId),
+      { collaborationSession: claims },
+    );
+    if (!direct.document) throw new DomainError("CONFLICT", "文档会话已关闭");
+    return { active, direct, document: direct.document };
+  };
+  const owner: CollaborationOwner = {
+    async snapshot(principal, documentId) {
+      return withDocumentLock(documentId, documentLockTails, async () => {
+        const loaded = await openOwnedDocument(principal, documentId);
+        try {
+          // Use the same generation lock as websocket text and structural commands.
+          return await withDocumentLock(
+            documentNameFor(documentId, loaded.active.generationId),
+            documentLockTails,
+            async () => {
+              const active = await repository.findActiveForAction(
+                documentId,
+                principal.tenantId,
+                principal.identityId,
+                "read",
+              );
+              if (!active || active.generationId !== loaded.active.generationId)
+                throw new DomainError("CONFLICT", "文档版本已变化，请重试");
+              if (!active.workspaceId) throw new DomainError("CONFLICT", "文档尚未归属空间");
+              const state = readStoredStructureState(loaded.document);
+              const content = projectDocumentContent(loaded.document, active.schemaVersion);
+              if (!state || !sameDocumentContent(state.content, content))
+                throw new DomainError("CONFLICT", "正文正在同步，请稍后重试");
+              return {
+                snapshot: {
+                  documentId,
+                  generationId: active.generationId,
+                  durableSeq: active.durableSeq,
+                  schemaVersion: active.schemaVersion,
+                  extensions: active.extensions,
+                  snapshotRevision: Math.max(1, active.durableSeq),
+                  content,
+                },
+                structureRevision: state.revision,
+                workspaceId: active.workspaceId,
+                title: active.title,
+              };
+            },
+          );
+        } finally {
+          await loaded.direct.disconnect();
+        }
+      });
+    },
+    async apply(input) {
+      const { batch, principal } = input;
+      const documentName = documentNameFor(batch.documentId, batch.generationId);
+      return withDocumentLock(documentName, documentLockTails, async () => {
+        const requestHash = createHash("sha256")
+          .update(JSON.stringify({ baseStructureRevision: input.baseStructureRevision, batch }))
+          .digest("hex");
+        const receiptKey = createHash("sha256")
+          .update(`conditional:${batch.generationId}:${batch.operationId}:${requestHash}`)
+          .digest("hex");
+        const previous = await repository.findUpdateReceipt(
+          batch.documentId,
+          batch.generationId,
+          receiptKey,
+        );
+        if (previous)
+          return {
+            operationId: batch.operationId,
+            generationId: batch.generationId,
+            durableSeq: previous.durableSeq,
+            structureRevision: input.baseStructureRevision + 1,
+          };
+        const loaded = await openOwnedDocument(principal, batch.documentId);
+        try {
+          if (
+            loaded.active.generationId !== batch.generationId ||
+            loaded.active.durableSeq !== input.expectedDurableSeq
+          )
+            throw new DomainError("CONFLICT", "文档已更新，本次未写入。草稿已保留。");
+          const state = readStoredStructureState(loaded.document);
+          if (
+            !state ||
+            !sameDocumentContent(
+              state.content,
+              projectDocumentContent(loaded.document, loaded.active.schemaVersion),
+            )
+          )
+            throw new DomainError("CONFLICT", "正文结构已变化");
+          const applied = applyStructuredOperation(state, {
+            batch,
+            requestHash,
+            baseRevision: input.baseStructureRevision,
+            documentId: batch.documentId,
+            generationId: batch.generationId,
+          });
+          if (applied.result.status !== "accepted")
+            throw new DomainError("CONFLICT", "文档已更新，本次未写入。草稿已保留。");
+          const scratch = new Y.Doc();
+          let updateBytes: Uint8Array;
+          try {
+            Y.applyUpdate(scratch, Y.encodeStateAsUpdate(loaded.document));
+            writeBodyAndStructureState(
+              scratch,
+              applied.state,
+              batch.operationId,
+              loaded.active.schemaVersion,
+            );
+            updateBytes = Y.encodeStateAsUpdate(scratch, Y.encodeStateVector(loaded.document));
+          } finally {
+            scratch.destroy();
+          }
+          if (updateBytes.byteLength > config.COLLABORATION_MAX_UPDATE_BYTES)
+            throw new DomainError("VALIDATION_ERROR", "生成内容超出写入限制");
+          const persisted = await repository.persistUpdate({
+            documentId: batch.documentId,
+            generationId: batch.generationId,
+            tenantId: principal.tenantId,
+            subjectId: principal.identityId,
+            updateHash: updateHash(updateBytes),
+            sourceUpdateHash: receiptKey,
+            updateBytes,
+            content: applied.state.content,
+            contentChanged: true,
+            assetReferences: collectAssetReferences(applied.state.content),
+            expectedDurableSeq: input.expectedDurableSeq,
+            guard: input.guard,
+            record: (tx, durableSeq) =>
+              input.record(tx, {
+                operationId: batch.operationId,
+                generationId: batch.generationId,
+                durableSeq,
+                structureRevision: applied.result.revision,
+              }),
+          });
+          Y.applyUpdate(loaded.document, updateBytes, "server-structure-operation");
+          loaded.document.broadcastStateless(
+            persistedMessage({
+              generationId: batch.generationId,
+              updateHash: persisted.updateHash,
+              durableSeq: persisted.durableSeq,
+            }),
+          );
+          return {
+            operationId: batch.operationId,
+            generationId: batch.generationId,
+            durableSeq: persisted.durableSeq,
+            structureRevision: applied.result.revision,
+          };
+        } finally {
+          await loaded.direct.disconnect();
+        }
+      });
+    },
+  };
   return {
+    owner,
     async listen() {
       if (ownerLeaseClient) throw new Error("Collaboration server is already listening.");
       await acquireOwnerLock();

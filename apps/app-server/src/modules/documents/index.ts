@@ -30,6 +30,7 @@ import { ShareService } from "./share.service.js";
 import { shareRoutes } from "./share.routes.js";
 
 export const currentSchemaVersion = CURRENT_DOCUMENT_SCHEMA_VERSION;
+export { AiDocumentAccess } from "./ai-document-access.js";
 const contentMigrations: readonly ContentMigration[] = [
   {
     id: "document-schema-v1-to-v2-task-list",

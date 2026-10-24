@@ -1,8 +1,22 @@
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { documentContractJsonSchemas } from "@zhishu/document-contracts";
+import {
+  AuthoringRequestSchema,
+  AuthoringProposalSchema,
+  ChatRequestSchema,
+  ChatResultSchema,
+  AiTaskEventSchema,
+  AiTaskEventV2Schema,
+} from "@zhishu/ai-contracts";
 import type { FastifyInstance } from "fastify";
 import { jsonSchemaTransform } from "fastify-type-provider-zod";
+import {
+  ChatSnapshotSchema,
+  SubmitChatMessageSchema,
+  ChatFrameSchema,
+} from "@zhishu/chat-contracts";
+import { ImageJobSchema } from "@zhishu/ai-plugins/contracts";
 
 type SwaggerTransformObject = import("@fastify/swagger").SwaggerTransformObject;
 
@@ -13,15 +27,7 @@ function toOpenApiSchema(value: unknown): unknown {
   const schema = { ...(value as Record<string, unknown>) };
   delete schema.$id;
   delete schema.$schema;
-  if (
-    schema.$ref === "DocumentBlock" ||
-    schema.$ref === "DocumentContent" ||
-    schema.$ref === "TaskList" ||
-    schema.$ref === "Table" ||
-    schema.$ref === "TableRow" ||
-    schema.$ref === "TableCell" ||
-    schema.$ref === "TableHeader"
-  )
+  if (typeof schema.$ref === "string" && !schema.$ref.startsWith("#"))
     schema.$ref = `#/components/schemas/${schema.$ref}`;
   for (const [key, child] of Object.entries(schema)) schema[key] = toOpenApiSchema(child);
   return schema;
@@ -88,8 +94,110 @@ function transformOpenApiDocument(
   void servers;
   patchSharedContentReferences(document as unknown as Record<string, unknown>);
   const schemas = Object.fromEntries(
-    documentContractJsonSchemas.map((schema) => [schema.$id, toOpenApiSchema(schema)]),
+    [
+      ...documentContractJsonSchemas,
+      AuthoringRequestSchema,
+      AuthoringProposalSchema,
+      ChatRequestSchema,
+      ChatResultSchema,
+      AiTaskEventSchema,
+      AiTaskEventV2Schema,
+    ].map((schema) => [schema.$id, toOpenApiSchema(schema)]),
   );
+  Object.assign(schemas, {
+    WritingChatSnapshot: toOpenApiSchema(ChatSnapshotSchema),
+    SubmitWritingMessage: toOpenApiSchema(SubmitChatMessageSchema),
+    WritingChatFrame: toOpenApiSchema(ChatFrameSchema),
+    WritingImageJob: toOpenApiSchema(ImageJobSchema),
+  });
+  const paths = document.paths as Record<string, Record<string, unknown>>;
+  for (const [path, operations] of Object.entries(paths)) {
+    if (!path.startsWith("/api/writing/conversations")) continue;
+    for (const operation of Object.values(operations)) {
+      const op = operation as {
+        requestBody?: { content?: Record<string, { schema?: unknown }> };
+        responses?: Record<string, { content?: Record<string, { schema?: unknown }> }>;
+      };
+      if (path.includes("/images")) {
+        const json = op.responses?.["200"]?.content?.["application/json"];
+        if (json && !path.endsWith("/access"))
+          json.schema = path.endsWith("/images")
+            ? { type: "array", items: { $ref: "#/components/schemas/WritingImageJob" } }
+            : { $ref: "#/components/schemas/WritingImageJob" };
+        continue;
+      }
+      if (path.endsWith("/messages") && op.requestBody?.content?.["application/json"])
+        op.requestBody.content["application/json"].schema = {
+          $ref: "#/components/schemas/SubmitWritingMessage",
+        };
+      if (path.endsWith("/events")) {
+        if (op.responses?.["200"])
+          op.responses["200"].content = { "text/event-stream": { schema: { type: "string" } } };
+      } else if (op.responses?.["200"]?.content?.["application/json"])
+        op.responses["200"].content["application/json"].schema = {
+          $ref: "#/components/schemas/WritingChatSnapshot",
+        };
+      const accepted = op.responses?.["202"]?.content?.["application/json"];
+      if (accepted)
+        accepted.schema = {
+          type: "object",
+          required: ["runId", "snapshot"],
+          properties: {
+            runId: { type: "string" },
+            snapshot: { $ref: "#/components/schemas/WritingChatSnapshot" },
+          },
+        };
+    }
+  }
+  for (const [path, reference] of [
+    ["/api/ai/chat", "ChatRequest"],
+    ["/api/ai/authoring", "AuthoringRequest"],
+  ]) {
+    const operation = paths[path!]?.post as
+      | {
+          requestBody?: {
+            content?: Record<string, { schema?: { properties?: Record<string, unknown> } }>;
+          };
+          responses?: Record<string, { content?: Record<string, unknown> }>;
+        }
+      | undefined;
+    const properties = operation?.requestBody?.content?.["application/json"]?.schema?.properties;
+    if (properties) properties.request = { $ref: `#/components/schemas/${reference}` };
+    if (operation?.responses?.["200"]?.content)
+      operation.responses["200"].content["text/event-stream"] = {
+        schema: { type: "string" },
+        "x-event-schema": {
+          $ref: `#/components/schemas/${reference === "ChatRequest" ? "AiTaskEventV2" : "AiTaskEvent"}`,
+        },
+      };
+  }
+  for (const [path, operations] of Object.entries(paths)) {
+    if (!path.startsWith("/api/ai/")) continue;
+    for (const operation of Object.values(operations)) {
+      const responses = (
+        operation as {
+          responses?: Record<
+            string,
+            { content?: Record<string, { schema?: { properties?: Record<string, unknown> } }> }
+          >;
+        }
+      )?.responses;
+      for (const response of Object.values(responses ?? {})) {
+        const properties = response.content?.["application/json"]?.schema?.properties;
+        if (!properties) continue;
+        if ("result" in properties)
+          properties.result = {
+            anyOf: [
+              { $ref: "#/components/schemas/AuthoringProposal" },
+              { $ref: "#/components/schemas/ChatResult" },
+              { type: "null" },
+            ],
+          };
+        if ("snapshot" in properties)
+          properties.snapshot = { $ref: "#/components/schemas/DocumentSnapshot" };
+      }
+    }
+  }
   return {
     ...document,
     openapi: "3.1.0",

@@ -82,18 +82,8 @@ export function DocumentMetadata({
   };
 
   return (
-    <details className="rounded-xl border bg-card px-4 py-3 text-sm">
-      <summary className="cursor-pointer font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        文档信息{' '}
-        {document.tags.length > 0 && (
-          <span className="ml-2 text-xs text-muted-foreground">{document.tags.length} 个标签</span>
-        )}
-      </summary>
-      <div className="mt-4 space-y-4">
-        <p className="text-xs text-muted-foreground">
-          创建者：{document.createdBy} · 创建于{' '}
-          {new Date(document.createdAt).toLocaleDateString('zh-CN')}
-        </p>
+    <section aria-label="图标与标签" className="text-sm">
+      <div className="space-y-5">
         <div className="flex flex-wrap gap-2" aria-label="文档标签">
           {(editable ? tags : document.tags).map((tag) => (
             <span
@@ -205,6 +195,6 @@ export function DocumentMetadata({
           </p>
         )}
       </div>
-    </details>
+    </section>
   );
 }

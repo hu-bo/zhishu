@@ -44,7 +44,6 @@ type ShareWithDocumentRow = {
   title: string | null;
   icon: string | null;
   updatedAt: Date | null;
-  mode: string | null;
   schemaVersion: number | null;
   extensions: Array<{ name: string; version: string; required: boolean }> | null;
   generationId: string | null;
@@ -60,7 +59,6 @@ export type PublicShareDetail = {
     title: string;
     icon: string | null;
     updatedAt: string;
-    mode: "standard" | "collaborative";
     schemaVersion: number;
     extensions: Array<{ name: string; version: string; required: boolean }>;
     generationId: string;
@@ -72,7 +70,6 @@ export type PublicShareDocument = {
   documentId: string;
   title: string;
   icon: string | null;
-  mode: "standard" | "collaborative";
   schemaVersion: number;
   extensions: Array<{ name: string; version: string; required: boolean }>;
   generationId: string;
@@ -211,7 +208,6 @@ export class ShareRepository {
         title: documents.title,
         icon: documents.icon,
         updatedAt: documents.updatedAt,
-        mode: documents.mode,
         schemaVersion: documentGenerations.schemaVersion,
         extensions: documentGenerations.extensions,
         generationId: documentGenerations.id,
@@ -255,7 +251,6 @@ export class ShareRepository {
       documentId: row.documentId,
       title: row.title,
       icon: row.icon,
-      mode: row.mode === "standard" ? "standard" : "collaborative",
       schemaVersion: row.schemaVersion,
       extensions: row.extensions,
       generationId: row.generationId,
@@ -294,7 +289,6 @@ export class ShareRepository {
         title: document.title,
         icon: document.icon,
         updatedAt: document.updatedAt,
-        mode: document.mode,
         schemaVersion: document.schemaVersion,
         extensions: document.extensions,
         generationId: document.generationId,
@@ -313,25 +307,6 @@ export class ShareRepository {
   async contentForPublic(shareId: string) {
     const document = await this.requireActivePublicDocument(shareId);
     // Anonymous visitors are always read-only; the edit tier only applies after join.
-    if (document.mode === "standard") {
-      const snapshot = await this.documents.findStandardContentSnapshot(
-        document.tenantId,
-        document.documentId,
-      );
-      if (!snapshot)
-        throw new DomainError("CONFLICT", "The document content snapshot is unavailable");
-      return {
-        documentId: document.documentId,
-        mode: document.mode,
-        readOnly: true,
-        schemaVersion: document.schemaVersion,
-        extensions: document.extensions,
-        generationId: null,
-        durableSeq: null,
-        snapshotRevision: snapshot.snapshotRevision,
-        content: snapshot.content,
-      };
-    }
     const snapshot = await this.documents.findProjectionContentSnapshot(
       document.tenantId,
       document.documentId,
@@ -341,7 +316,6 @@ export class ShareRepository {
       throw new DomainError("CONFLICT", "The document content snapshot is unavailable");
     return {
       documentId: document.documentId,
-      mode: document.mode,
       readOnly: true,
       schemaVersion: document.schemaVersion,
       extensions: document.extensions,

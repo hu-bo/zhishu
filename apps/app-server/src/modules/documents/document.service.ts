@@ -11,7 +11,6 @@ import {
   checkDocumentCompatibility,
   cloneContentWithFreshBlockIds,
   repairDuplicateBlockIds,
-  validateDocumentContent,
   type DocumentContent,
   type ContentMigrationExecutor,
   type ContentMigrationReport,
@@ -38,7 +37,6 @@ import type {
   CreateDocumentVersionInput,
   RestoreDocumentVersionInput,
   ImportDocumentInput,
-  PutDocumentContentInput,
 } from "./document.schema.js";
 import {
   emptyStructureState,
@@ -120,7 +118,6 @@ function presentDocument(document: ActiveDocument, identityId: string) {
     icon: document.icon ?? null,
     tags: document.tags ?? [],
     createdBy: document.createdBy,
-    mode: document.mode ?? "collaborative",
     generationId: document.generationId,
     schemaVersion: document.schemaVersion,
     extensions: document.extensions,
@@ -138,7 +135,6 @@ function presentListItem(document: DocumentListItem, identityId: string) {
     isFavorite: document.isFavorite,
     canManage: document.createdBy === identityId,
     deletedAt: document.deletedAt?.toISOString() ?? null,
-    snapshotRevision: document.snapshotRevision,
     workspaceName: document.workspaceName,
     excerpt: document.excerpt,
   };
@@ -149,8 +145,6 @@ function presentVersion(version: DocumentVersion) {
     id: version.id,
     documentId: version.documentId,
     generationId: version.generationId,
-    sourceMode: version.sourceMode,
-    snapshotRevision: version.snapshotRevision,
     name: version.name,
     kind: version.kind,
     durableSeq: version.durableSeq,
@@ -206,7 +200,8 @@ function summarizePortableContent(content: unknown): {
   return { blockCount, assetCount, assetPaths };
 }
 
-function collectAssetReferences(
+// Kept exported only for the one-time standard→collaborative migration script.
+export function collectAssetReferences(
   content: DocumentContent,
 ): Array<{ assetId: string; blockId: string; mediaType: string }> {
   const references: Array<{ assetId: string; blockId: string; mediaType: string }> = [];
@@ -236,7 +231,8 @@ function collectAssetReferences(
   return references;
 }
 
-function createCollaborationStateFromContent(content: DocumentContent): Uint8Array {
+// Kept exported only for the one-time standard→collaborative migration script.
+export function createCollaborationStateFromContent(content: DocumentContent): Uint8Array {
   const doc = prosemirrorJSONToYDoc(createEditorSchema(), content, "content");
   const projectedStructure = projectContentUpdateToStructure(
     emptyStructureState(),
@@ -333,7 +329,6 @@ export class DocumentService {
       requestId,
       this.maxDocumentsPerTenant,
       undefined,
-      input.mode,
       idempotency,
       undefined,
       undefined,
@@ -376,33 +371,22 @@ export class DocumentService {
     );
     if (!template) throw new DomainError("NOT_FOUND", "An accessible template was not found");
 
-    const isStandardTemplate = (template.mode ?? "collaborative") === "standard";
-    const standardSnapshot = isStandardTemplate
-      ? await this.repository.findStandardContentSnapshot(principal.tenantId, templateId)
-      : null;
-    if (isStandardTemplate && !standardSnapshot) {
-      throw new DomainError("CONFLICT", "The template content snapshot is unavailable");
-    }
-    const sourceDoc = isStandardTemplate
-      ? null
-      : await this.replayDocumentYDoc(
-          template.id,
-          template.generationId,
-          template.durableSeq,
-          "template-copy-source",
-          "The template update history is incomplete",
-        );
+    const sourceDoc = await this.replayDocumentYDoc(
+      template.id,
+      template.generationId,
+      template.durableSeq,
+      "template-copy-source",
+      "The template update history is incomplete",
+    );
     try {
-      const sourceContent =
-        standardSnapshot?.content ??
-        (() => {
-          const projected = yDocToProsemirrorJSON(sourceDoc!, "content");
-          return normalizeTiptapDocumentJSON(
-            Array.isArray(projected.content) || projected.content !== undefined
-              ? projected
-              : { ...projected, content: [] },
-          );
-        })();
+      const sourceContent = (() => {
+        const projected = yDocToProsemirrorJSON(sourceDoc, "content");
+        return normalizeTiptapDocumentJSON(
+          Array.isArray(projected.content) || projected.content !== undefined
+            ? projected
+            : { ...projected, content: [] },
+        );
+      })();
       const validatedSource = this.migration.validateSource(sourceContent, template.schemaVersion);
       if (!validatedSource.success) {
         throw new DomainError("CONFLICT", "The template content cannot be copied safely");
@@ -430,14 +414,9 @@ export class DocumentService {
         throw new DomainError("CONFLICT", "The template schema cannot be copied safely");
       }
       const migrationArchive = migrationPersistence(migrated.stepSnapshots);
-      if (sourceDoc) {
-        const sourceStructure = readStoredStructureState(sourceDoc);
-        if (
-          !sourceStructure ||
-          !sameDocumentContent(sourceStructure.content, validatedSource.data)
-        ) {
-          throw new DomainError("CONFLICT", "The template content projection is inconsistent");
-        }
+      const sourceStructure = readStoredStructureState(sourceDoc);
+      if (!sourceStructure || !sameDocumentContent(sourceStructure.content, validatedSource.data)) {
+        throw new DomainError("CONFLICT", "The template content projection is inconsistent");
       }
 
       const content = cloneContentWithFreshBlockIds(migrated.content);
@@ -474,9 +453,6 @@ export class DocumentService {
         tenantId: principal.tenantId,
         identityId: principal.identityId,
         templateId,
-        ...(standardSnapshot
-          ? { expectedSourceSnapshotRevision: standardSnapshot.snapshotRevision }
-          : {}),
         expectedGenerationId: template.generationId,
         expectedDurableSeq: template.durableSeq,
         title: input.title,
@@ -637,27 +613,6 @@ export class DocumentService {
         principal.identityId,
         "write",
       )) === null;
-    const mode = document.mode ?? "collaborative";
-    if (mode === "standard") {
-      const snapshot = await this.repository.findStandardContentSnapshot(
-        principal.tenantId,
-        documentId,
-      );
-      if (!snapshot)
-        throw new DomainError("CONFLICT", "The document content snapshot is unavailable");
-      return {
-        documentId,
-        mode,
-        readOnly,
-        schemaVersion: document.schemaVersion,
-        extensions: document.extensions,
-        generationId: null,
-        durableSeq: null,
-        snapshotRevision: snapshot.snapshotRevision,
-        content: snapshot.content,
-      };
-    }
-
     const snapshot = await this.repository.findProjectionContentSnapshot(
       principal.tenantId,
       documentId,
@@ -667,7 +622,6 @@ export class DocumentService {
       throw new DomainError("CONFLICT", "The document content snapshot is unavailable");
     return {
       documentId,
-      mode,
       readOnly,
       schemaVersion: document.schemaVersion,
       extensions: document.extensions,
@@ -675,121 +629,6 @@ export class DocumentService {
       durableSeq: snapshot.durableSeq,
       snapshotRevision: snapshot.snapshotRevision,
       content: snapshot.content,
-    };
-  }
-
-  async putContent(
-    principal: Principal,
-    documentId: string,
-    input: PutDocumentContentInput,
-    requestId?: string,
-  ) {
-    const document = await this.repository.findActiveForAction(
-      documentId,
-      principal.tenantId,
-      principal.identityId,
-      "write",
-    );
-    if (!document) throw new DomainError("NOT_FOUND", "Document not found");
-    if ((document.mode ?? "collaborative") !== "standard") {
-      throw new DomainError(
-        "CONFLICT",
-        "Collaborative document content must be saved through its session",
-      );
-    }
-    if (document.schemaVersion > this.migration.targetSchemaVersion) {
-      throw new DomainError("CONFLICT", "The document schema requires a newer editor");
-    }
-
-    let standardMigration:
-      | {
-          report: ContentMigrationReport;
-          persistence: ReturnType<typeof migrationPersistence>;
-        }
-      | undefined;
-    if (document.schemaVersion < this.migration.targetSchemaVersion) {
-      const snapshot = await this.repository.findStandardContentSnapshot(
-        principal.tenantId,
-        documentId,
-      );
-      if (!snapshot || snapshot.snapshotRevision !== input.expectedSnapshotRevision) {
-        throw new DomainError("CONFLICT", "The document changed before its schema could migrate");
-      }
-      const validatedSource = this.migration.validateSource(
-        snapshot.content,
-        document.schemaVersion,
-      );
-      if (!validatedSource.success) {
-        throw new DomainError("CONFLICT", "The document content cannot be migrated safely");
-      }
-      const migrated = this.migration.execute(
-        validatedSource.data,
-        document.schemaVersion,
-        this.migration.targetSchemaVersion,
-      );
-      if (!migrated.success || migrated.report.status !== "migrated") {
-        throw new DomainError("CONFLICT", "No safe document migration is available");
-      }
-      standardMigration = {
-        report: migrated.report,
-        persistence: migrationPersistence(migrated.stepSnapshots),
-      };
-    }
-
-    let normalized: unknown;
-    try {
-      normalized = normalizeTiptapDocumentJSON(input.content);
-    } catch {
-      throw new DomainError("VALIDATION_ERROR", "Document content is malformed");
-    }
-    const validation = validateDocumentContent(normalized);
-    if (!validation.success) {
-      throw new DomainError(
-        "VALIDATION_ERROR",
-        "Document content does not match the document schema",
-        {
-          issues: validation.issues,
-        },
-      );
-    }
-    const editorValidation = validateContentForEditor(validation.data, createEditorSchema());
-    if (!editorValidation.success) {
-      throw new DomainError("VALIDATION_ERROR", "Document content uses unsupported editor nodes");
-    }
-
-    const result = await this.repository.saveStandardContentSnapshot({
-      tenantId: principal.tenantId,
-      documentId,
-      identityId: principal.identityId,
-      expectedSnapshotRevision: input.expectedSnapshotRevision,
-      expectedGenerationId: document.generationId,
-      targetSchemaVersion: this.migration.targetSchemaVersion,
-      ...(standardMigration
-        ? {
-            migrationReport: standardMigration.report,
-            ...(standardMigration.persistence
-              ? { migrationPersistence: standardMigration.persistence }
-              : {}),
-          }
-        : {}),
-      content: editorValidation.content,
-      assetReferences: collectAssetReferences(editorValidation.content),
-      requestId,
-    });
-    if (result.status === "not-found") throw new DomainError("NOT_FOUND", "Document not found");
-    if (result.status !== "updated") {
-      throw new DomainError("CONFLICT", "The document changed or is no longer in standard mode");
-    }
-    return {
-      documentId,
-      mode: "standard" as const,
-      readOnly: false,
-      schemaVersion: result.schemaVersion,
-      extensions: document.extensions,
-      generationId: null,
-      durableSeq: null,
-      snapshotRevision: result.snapshotRevision,
-      content: editorValidation.content,
     };
   }
 
@@ -802,35 +641,22 @@ export class DocumentService {
     );
     if (!document) throw new DomainError("NOT_FOUND", "Document not found");
 
-    const mode = document.mode ?? "collaborative";
-    const standardSnapshot =
-      mode === "standard"
-        ? await this.repository.findStandardContentSnapshot(principal.tenantId, documentId)
-        : null;
-    if (mode === "standard" && !standardSnapshot) {
-      throw new DomainError("CONFLICT", "The document content snapshot is unavailable");
-    }
-    const yDoc =
-      mode === "collaborative"
-        ? await this.replayDocumentYDoc(
-            document.id,
-            document.generationId,
-            document.durableSeq,
-            "document-export-replay",
-            "The document update history is incomplete",
-          )
-        : null;
+    const yDoc = await this.replayDocumentYDoc(
+      document.id,
+      document.generationId,
+      document.durableSeq,
+      "document-export-replay",
+      "The document update history is incomplete",
+    );
     try {
-      const source =
-        standardSnapshot?.content ??
-        (() => {
-          const projected = yDocToProsemirrorJSON(yDoc!, "content");
-          return normalizeTiptapDocumentJSON(
-            Array.isArray(projected.content) || projected.content !== undefined
-              ? projected
-              : { ...projected, content: [] },
-          );
-        })();
+      const source = (() => {
+        const projected = yDocToProsemirrorJSON(yDoc, "content");
+        return normalizeTiptapDocumentJSON(
+          Array.isArray(projected.content) || projected.content !== undefined
+            ? projected
+            : { ...projected, content: [] },
+        );
+      })();
       const validated = this.migration.validateSource(source, document.schemaVersion);
       if (
         !validated.success ||
@@ -847,7 +673,6 @@ export class DocumentService {
         durableSeq: document.durableSeq,
         schemaVersion: document.schemaVersion,
         blockCount: summary.blockCount,
-        ...(standardSnapshot ? { snapshotRevision: standardSnapshot.snapshotRevision } : {}),
         requestId,
       });
       if (recorded === "not-found" || recorded === "not-authorized") {
@@ -868,7 +693,7 @@ export class DocumentService {
       if (error instanceof DomainError) throw error;
       throw new DomainError("CONFLICT", "The document content cannot be exported safely");
     } finally {
-      yDoc?.destroy();
+      yDoc.destroy();
     }
   }
 
@@ -1000,7 +825,6 @@ export class DocumentService {
         requestId,
         this.maxDocumentsPerTenant,
         { updateHash, updateBytes, content: contentToImport },
-        "collaborative",
         idempotency,
         migrationReport,
         migrationArchive,
@@ -1058,33 +882,6 @@ export class DocumentService {
       throw new DomainError("CONFLICT", "The document version content is unavailable");
     }
 
-    if (version.sourceMode === "standard") {
-      const snapshot = await this.repository.findJsonVersionSnapshot(
-        principal.tenantId,
-        documentId,
-        versionId,
-      );
-      if (!snapshot)
-        throw new DomainError("CONFLICT", "The document version content is unavailable");
-      const validated = this.migration.validateSource(snapshot.content, schemaVersion);
-      if (!validated.success) {
-        throw new DomainError("CONFLICT", "The document version content cannot be read safely");
-      }
-      const editorValidation = validateContentForEditor(validated.data, createEditorSchema());
-      if (!editorValidation.success) {
-        throw new DomainError("CONFLICT", "The document version content cannot be read safely");
-      }
-      return {
-        documentId,
-        generationId: version.generationId,
-        sourceMode: "standard" as const,
-        schemaVersion,
-        durableSeq: version.durableSeq,
-        snapshotRevision: snapshot.snapshotRevision,
-        content: editorValidation.content,
-      };
-    }
-
     const versionDoc = await this.replayDocumentYDoc(
       documentId,
       version.generationId,
@@ -1107,10 +904,8 @@ export class DocumentService {
       return {
         documentId,
         generationId: version.generationId,
-        sourceMode: "collaborative" as const,
         schemaVersion,
         durableSeq: version.durableSeq,
-        snapshotRevision: null,
         content: validated.data,
       };
     } catch (error) {
@@ -1137,27 +932,16 @@ export class DocumentService {
             .digest("hex"),
         }
       : undefined;
-    const result =
-      input.mode === "standard"
-        ? await this.repository.createStandardSnapshotVersion({
-            tenantId: principal.tenantId,
-            documentId,
-            identityId: principal.identityId,
-            name: input.name,
-            expectedSnapshotRevision: input.expectedSnapshotRevision,
-            requestId,
-            ...(idempotency ? { idempotency } : {}),
-          })
-        : await this.repository.createVersion({
-            tenantId: principal.tenantId,
-            documentId,
-            identityId: principal.identityId,
-            name: input.name,
-            expectedGenerationId: input.expectedGenerationId,
-            expectedDurableSeq: input.expectedDurableSeq,
-            requestId,
-            ...(idempotency ? { idempotency } : {}),
-          });
+    const result = await this.repository.createVersion({
+      tenantId: principal.tenantId,
+      documentId,
+      identityId: principal.identityId,
+      name: input.name,
+      expectedGenerationId: input.expectedGenerationId,
+      expectedDurableSeq: input.expectedDurableSeq,
+      requestId,
+      ...(idempotency ? { idempotency } : {}),
+    });
     if (result.status === "not-found") throw new DomainError("NOT_FOUND", "Document not found");
     if (result.status !== "created" && result.status !== "replayed")
       throw new DomainError(
@@ -1185,32 +969,9 @@ export class DocumentService {
         }
       : undefined;
     const restoredContent = await this.getVersionContent(principal, documentId, versionId);
-    if (input.mode === "standard") {
-      const result = await this.repository.restoreStandardSnapshotVersion({
-        tenantId: principal.tenantId,
-        documentId,
-        versionId,
-        identityId: principal.identityId,
-        expectedSnapshotRevision: input.expectedSnapshotRevision,
-        requestId,
-        content: restoredContent.content as DocumentContent,
-        assetReferences: collectAssetReferences(restoredContent.content as DocumentContent),
-        ...(idempotency ? { idempotency } : {}),
-      });
-      if (result.status === "not-found")
-        throw new DomainError("NOT_FOUND", "Document or version not found");
-      if (result.status !== "restored" && result.status !== "restore-replayed")
-        throw new DomainError("CONFLICT", "Document changed or version content is unavailable");
-      if (result.status === "restored")
-        this.sessionRevoker.revokeDocumentSessions(documentId, result.previousGenerationId);
-      return presentDocument(result.document, principal.identityId);
-    }
     const version = await this.repository.findVersion(principal.tenantId, documentId, versionId);
     if (!version) throw new DomainError("NOT_FOUND", "Document or version not found");
-    const stateBytes =
-      version.sourceMode === "standard"
-        ? createCollaborationStateFromContent(restoredContent.content as DocumentContent)
-        : await this.createVersionStateBytes(documentId, version);
+    const stateBytes = await this.createVersionStateBytes(documentId, version);
     const result = await this.repository.restoreVersion({
       tenantId: principal.tenantId,
       documentId,
@@ -1433,7 +1194,6 @@ export class DocumentService {
     principal: Principal,
     documentId: string,
     client: CollaborationSessionInput,
-    requestId?: string,
   ) {
     if (
       new Set(client.extensions.map((extension) => extension.name)).size !==
@@ -1453,89 +1213,8 @@ export class DocumentService {
       principal.identityId,
       "write",
     );
-    if ((document.mode ?? "collaborative") === "standard") {
-      if (!writableDocument) {
-        throw new DomainError(
-          "CONFLICT",
-          "A writer must enable collaboration before read-only sessions can join",
-        );
-      }
-      const snapshot = await this.repository.findStandardContentSnapshot(
-        principal.tenantId,
-        documentId,
-      );
-      if (!snapshot)
-        throw new DomainError("CONFLICT", "The standard document snapshot is unavailable");
-      const validated = this.migration.validateSource(snapshot.content, document.schemaVersion);
-      if (!validated.success) {
-        throw new DomainError(
-          "CONFLICT",
-          "The document content cannot be converted to collaboration safely",
-        );
-      }
-      const editorValidation = validateContentForEditor(validated.data, createEditorSchema());
-      if (!editorValidation.success) {
-        throw new DomainError(
-          "CONFLICT",
-          "The document content cannot be converted to collaboration safely",
-        );
-      }
-      const targetDoc = prosemirrorJSONToYDoc(
-        createEditorSchema(),
-        editorValidation.content,
-        "content",
-      );
-      const projectedStructure = projectContentUpdateToStructure(
-        emptyStructureState(),
-        { type: "doc", content: [] },
-        editorValidation.content,
-      );
-      if (!projectedStructure.success) {
-        targetDoc.destroy();
-        throw new DomainError("CONFLICT", "The document structure cannot be initialized safely");
-      }
-      writeStoredStructureState(
-        targetDoc,
-        projectedStructure.state,
-        "standard-content-collaboration-init",
-      );
-      let updateBytes: Uint8Array;
-      try {
-        updateBytes = Y.encodeStateAsUpdate(targetDoc);
-      } finally {
-        targetDoc.destroy();
-      }
-      const result = await this.repository.enableCollaborationFromStandardSnapshot({
-        tenantId: principal.tenantId,
-        documentId,
-        identityId: principal.identityId,
-        expectedSnapshotRevision: snapshot.snapshotRevision,
-        updateHash: createHash("sha256").update(updateBytes).digest("hex"),
-        updateBytes,
-        content: editorValidation.content,
-        assetReferences: collectAssetReferences(editorValidation.content),
-        requestId,
-      });
-      if (result.status === "not-found") throw new DomainError("NOT_FOUND", "Document not found");
-      if (result.status === "enabled") {
-        this.sessionRevoker.revokeDocumentSessions(documentId, result.previousGenerationId);
-        document = result.document;
-      } else {
-        const current = await this.repository.findActiveForAction(
-          documentId,
-          principal.tenantId,
-          principal.identityId,
-          "read",
-        );
-        if (!current || (current.mode ?? "collaborative") !== "collaborative") {
-          throw new DomainError(
-            "CONFLICT",
-            "The document changed while collaboration was being enabled",
-          );
-        }
-        document = current;
-      }
-    }
+    // Every document is collaborative. The one-time standard→collaborative
+    // migration lives in src/scripts/migrate-standard-to-collaborative.ts.
     if (writableDocument && document.schemaVersion < this.migration.targetSchemaVersion) {
       document = await this.migrateActiveGeneration(principal, document);
     }

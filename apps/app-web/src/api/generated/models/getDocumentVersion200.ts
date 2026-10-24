@@ -5,7 +5,6 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { GetDocumentVersion200Kind } from './getDocumentVersion200Kind';
-import type { GetDocumentVersion200SourceMode } from './getDocumentVersion200SourceMode';
 
 export type GetDocumentVersion200 = {
   /** @pattern ^ver_[A-Za-z0-9_-]{1,64}$ */
@@ -14,12 +13,6 @@ export type GetDocumentVersion200 = {
   documentId: string;
   /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
   generationId: string;
-  sourceMode: GetDocumentVersion200SourceMode;
-  /**
-     * @minimum 0
-     * @exclusiveMinimum
-     */
-  snapshotRevision: number | null;
   name: string;
   kind: GetDocumentVersion200Kind;
   /** @minimum 0 */

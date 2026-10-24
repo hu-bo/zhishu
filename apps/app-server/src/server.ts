@@ -26,6 +26,16 @@ export async function startServer(
         collaborationRef.current?.revokeDocumentSessions(documentId, generationId);
       },
     },
+    collaborationOwner: {
+      snapshot(principal, id) {
+        if (!collaborationRef.current) throw new Error("COLLABORATION_NOT_READY");
+        return collaborationRef.current.owner.snapshot(principal, id);
+      },
+      apply(input) {
+        if (!collaborationRef.current) throw new Error("COLLABORATION_NOT_READY");
+        return collaborationRef.current.owner.apply(input);
+      },
+    },
   });
   const collaboration = createCollaborationServer(
     config,

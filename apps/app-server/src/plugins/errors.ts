@@ -16,19 +16,23 @@ export function registerErrorHandlers(app: FastifyInstance): void {
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof DomainError) {
       const status =
-        error.code === "NOT_FOUND"
-          ? 404
-          : error.code === "CONFLICT"
+        error.code === "AI_WRITE_PERSONAL_ONLY" || error.code === "AI_ACCESS_REVOKED"
+          ? 403
+          : error.code === "AI_HISTORY_UNAVAILABLE"
             ? 409
-            : error.code === "IDEMPOTENCY_KEY_REUSED"
-              ? 409
-              : error.code === "UNAUTHENTICATED"
-                ? 401
-                : error.code === "RESOURCE_LIMIT"
-                  ? 429
-                  : error.code === "SERVICE_UNAVAILABLE"
-                    ? 503
-                    : 400;
+            : error.code === "NOT_FOUND"
+              ? 404
+              : error.code === "CONFLICT"
+                ? 409
+                : error.code === "IDEMPOTENCY_KEY_REUSED"
+                  ? 409
+                  : error.code === "UNAUTHENTICATED"
+                    ? 401
+                    : error.code === "RESOURCE_LIMIT"
+                      ? 429
+                      : error.code === "SERVICE_UNAVAILABLE"
+                        ? 503
+                        : 400;
       if (status === 401) reply.header("www-authenticate", "Bearer");
       return reply.code(status).send({
         code: error.code,

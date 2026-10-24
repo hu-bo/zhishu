@@ -1,6 +1,13 @@
 import type { Key, ReactNode } from 'react';
+import { Children, createContext, isValidElement, useContext, useMemo } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
-import { ListBox, ListBoxItem, ListBoxItemIndicator, Select as HeroSelect } from '@heroui/react';
+import {
+  Label,
+  ListBox,
+  ListBoxItem,
+  ListBoxItemIndicator,
+  Select as HeroSelect,
+} from '@heroui/react';
 import { cn } from '@/lib/cn';
 
 /**
@@ -19,30 +26,50 @@ import { cn } from '@/lib/cn';
  *   - The trigger renders a `ChevronDown` indicator via `Select.Indicator`.
  */
 
+const SelectLabels = createContext<Record<string, string>>({});
 interface SelectProps<T extends string> {
   value: T;
   onValueChange: (value: T | null) => void;
   disabled?: boolean;
   children?: ReactNode;
   /**
-   * Base UI legacy: a map of value → label describing the items. Ignored
-   * because we render items via `SelectItem` children for HeroUI's ListBox.
+   * Accessible labels for items with icons or other rich children.
    */
   items?: Record<string, string>;
 }
 
-function Select<T extends string>({ value, onValueChange, disabled, children }: SelectProps<T>) {
+function Select<T extends string>({
+  value,
+  onValueChange,
+  disabled,
+  children,
+  items = {},
+}: SelectProps<T>) {
+  const trigger = Children.toArray(children).find(
+    (child) =>
+      isValidElement<SelectTriggerProps>(child) &&
+      (child.props.id || child.props['aria-label'] || child.props['aria-labelledby']),
+  );
+  const labelProps = isValidElement<SelectTriggerProps>(trigger) ? trigger.props : undefined;
   return (
-    <HeroSelect
-      data-slot="select"
-      isDisabled={disabled}
-      selectedKey={value}
-      onSelectionChange={(key: Key | null) => {
-        onValueChange((key as T | null) ?? null);
-      }}
-    >
-      {children}
-    </HeroSelect>
+    <SelectLabels.Provider value={items}>
+      <HeroSelect
+        data-slot="select"
+        id={labelProps?.id}
+        aria-label={labelProps?.['aria-label'] ? undefined : '选择选项'}
+        aria-labelledby={labelProps?.['aria-labelledby']}
+        isDisabled={disabled}
+        selectedKey={value}
+        onSelectionChange={(key: Key | null) => {
+          onValueChange((key as T | null) ?? null);
+        }}
+      >
+        {labelProps?.['aria-label'] && (
+          <Label className="sr-only">{labelProps['aria-label']}</Label>
+        )}
+        {children}
+      </HeroSelect>
+    </SelectLabels.Provider>
   );
 }
 
@@ -55,23 +82,13 @@ interface SelectTriggerProps {
   'aria-labelledby'?: string;
 }
 
-function SelectTrigger({
-  className,
-  children,
-  disabled,
-  id,
-  'aria-label': ariaLabel,
-  'aria-labelledby': ariaLabelledBy,
-}: SelectTriggerProps) {
+function SelectTrigger({ className, children, disabled }: SelectTriggerProps) {
   return (
     <HeroSelect.Trigger
       data-slot="select-trigger"
-      id={id}
       isDisabled={disabled}
-      aria-label={ariaLabel}
-      aria-labelledby={ariaLabelledBy}
       className={cn(
-        'inline-flex h-8 shrink-0 items-center justify-between gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium whitespace-nowrap text-foreground transition-colors outline-none select-none hover:bg-muted disabled:pointer-events-none disabled:opacity-50 data-[open=true]:bg-muted aria-invalid:border-destructive focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:shrink-0',
+        'inline-flex h-10 min-w-0 shrink-0 items-center justify-between gap-2 rounded-lg border border-input bg-card px-3 text-[13px] font-normal whitespace-nowrap text-foreground shadow-none transition-colors outline-none select-none hover:bg-secondary disabled:pointer-events-none disabled:opacity-50 data-[open=true]:bg-secondary aria-invalid:border-destructive focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/10 [&_svg]:pointer-events-none [&_svg]:shrink-0',
         className,
       )}
     >
@@ -112,25 +129,31 @@ interface SelectItemProps {
 }
 
 function SelectItem({ value, className, children }: SelectItemProps) {
-  const textValue = typeof children === 'string' ? children : value;
-  return (
-    <ListBoxItem
-      id={value}
-      textValue={textValue}
-      data-slot="select-item"
-      className={cn(
-        'flex cursor-pointer items-center gap-2 rounded-lg py-1.5 pr-2 pl-2 text-sm outline-none select-none',
-        'data-[focused=true]:bg-muted data-[focused=true]:text-foreground',
-        'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-        '[&_svg]:pointer-events-none [&_svg]:shrink-0',
-        className,
-      )}
-    >
-      <ListBoxItemIndicator className="flex size-4 items-center justify-center text-primary">
-        <Check size={14} aria-hidden="true" />
-      </ListBoxItemIndicator>
-      <span className="min-w-0 flex-1 truncate">{children}</span>
-    </ListBoxItem>
+  const labels = useContext(SelectLabels);
+  const textValue = labels[value] ?? (typeof children === 'string' ? children : value);
+  // React Aria builds a hidden collection from these elements. Keep its
+  // item props stable when only the label context's object identity changes.
+  return useMemo(
+    () => (
+      <ListBoxItem
+        id={value}
+        textValue={textValue}
+        data-slot="select-item"
+        className={cn(
+          'flex cursor-pointer items-center gap-2 rounded-lg py-1.5 pr-2 pl-2 text-sm outline-none select-none',
+          'data-[focused=true]:bg-secondary data-[focused=true]:text-foreground',
+          'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+          '[&_svg]:pointer-events-none [&_svg]:shrink-0',
+          className,
+        )}
+      >
+        <ListBoxItemIndicator className="flex size-4 items-center justify-center text-primary">
+          <Check size={14} aria-hidden="true" />
+        </ListBoxItemIndicator>
+        <span className="flex min-w-0 flex-1 items-center gap-2 truncate">{children}</span>
+      </ListBoxItem>
+    ),
+    [value, textValue, className, children],
   );
 }
 

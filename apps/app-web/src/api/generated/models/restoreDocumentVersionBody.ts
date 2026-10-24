@@ -6,16 +6,8 @@
  */
 
 export type RestoreDocumentVersionBody = {
-  mode: 'collaborative';
   /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
   expectedGenerationId: string;
   /** @minimum 0 */
   expectedDurableSeq: number;
-} | {
-  mode: 'standard';
-  /**
-     * @minimum 0
-     * @exclusiveMinimum
-     */
-  expectedSnapshotRevision: number;
 };

@@ -8,8 +8,6 @@ import {
   apiIdempotencyRecords,
   documentAcl,
   documentGenerations,
-  documentJsonAssetReferences,
-  documentJsonVersionAssetReferences,
   documents,
 } from "../../../database/schema/index.js";
 import { hasDocumentAction } from "../documents/document.repository.js";
@@ -378,22 +376,6 @@ export class AssetRepository {
         ),
       )
       .leftJoin(
-        documentJsonAssetReferences,
-        and(
-          eq(documentJsonAssetReferences.tenantId, assets.tenantId),
-          eq(documentJsonAssetReferences.documentId, assets.documentId),
-          eq(documentJsonAssetReferences.assetId, assets.id),
-        ),
-      )
-      .leftJoin(
-        documentJsonVersionAssetReferences,
-        and(
-          eq(documentJsonVersionAssetReferences.tenantId, assets.tenantId),
-          eq(documentJsonVersionAssetReferences.documentId, assets.documentId),
-          eq(documentJsonVersionAssetReferences.assetId, assets.id),
-        ),
-      )
-      .leftJoin(
         documents,
         and(eq(documents.tenantId, assets.tenantId), eq(documents.id, assets.documentId)),
       )
@@ -407,8 +389,6 @@ export class AssetRepository {
             eq(assets.status, "ready"),
             lt(assets.createdAt, input.before),
             isNull(assetReferences.assetId),
-            isNull(documentJsonAssetReferences.assetId),
-            isNull(documentJsonVersionAssetReferences.assetId),
           ),
           isNull(documents.id),
         ),

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useEditorSelector } from "@zhishu/editor-react";
 
 export interface EditorStatsFooterMessages {
@@ -7,14 +8,18 @@ export interface EditorStatsFooterMessages {
   readingTime: string;
   minute: string;
   minutes: string;
+  /** @deprecated Configure the toolbar shortcut popover with EditorShell.keyboardHelpMessages. */
   keyboardHelp: string;
+  /** @deprecated Configure the toolbar shortcut popover with EditorShell.keyboardHelpMessages. */
   underline: string;
+  /** @deprecated Configure the toolbar shortcut popover with EditorShell.keyboardHelpMessages. */
   highlight: string;
 }
 
 export interface EditorStatsFooterProps {
   messages?: Partial<EditorStatsFooterMessages>;
   className?: string;
+  trailingSlot?: ReactNode;
 }
 
 const defaultMessages: EditorStatsFooterMessages = {
@@ -29,11 +34,9 @@ const defaultMessages: EditorStatsFooterMessages = {
   highlight: "黄色高亮",
 };
 
-export function EditorStatsFooter({ messages, className }: EditorStatsFooterProps) {
+export function EditorStatsFooter({ messages, className, trailingSlot }: EditorStatsFooterProps) {
   const statistics = useEditorSelector((snapshot) => snapshot.statistics);
   const labels = { ...defaultMessages, ...messages };
-  const modifier =
-    typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 
   return (
     <div className={["zhishu-ui-stats-footer", className].filter(Boolean).join(" ")}>
@@ -49,29 +52,7 @@ export function EditorStatsFooter({ messages, className }: EditorStatsFooterProp
           {statistics.readingTimeMinutes === 1 ? labels.minute : labels.minutes}
         </span>
       </div>
-      <details className="zhishu-ui-keyboard-help">
-        <summary>{labels.keyboardHelp}</summary>
-        <div className="zhishu-ui-keyboard-help-popover">
-          <p>
-            <kbd>{modifier}+B</kbd> 粗体
-          </p>
-          <p>
-            <kbd>{modifier}+I</kbd> 斜体
-          </p>
-          <p>
-            <kbd>{modifier}+U</kbd> {labels.underline}
-          </p>
-          <p>
-            <kbd>{modifier}+Shift+H</kbd> {labels.highlight}
-          </p>
-          <p>
-            <kbd>{modifier}+K</kbd> 插入链接
-          </p>
-          <p>
-            <kbd>/</kbd> 打开插入菜单
-          </p>
-        </div>
-      </details>
+      {trailingSlot}
     </div>
   );
 }

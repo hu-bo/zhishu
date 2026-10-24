@@ -12,6 +12,7 @@ import {
 import type { Principal } from "../identity/identity.types.js";
 import { DomainError } from "../../shared/domain-error.js";
 import type { CreateCatalogInput, MoveCatalogInput, UpdateCatalogInput } from "./catalog.schema.js";
+import { requireWorkspaceOrganizer, workspaceAccess } from "./workspace-access.js";
 
 type DbExecutor = Pick<Database, "select" | "insert" | "update" | "delete" | "execute">;
 
@@ -133,6 +134,7 @@ export class CatalogRepository {
     if (!catalog) throw new DomainError("NOT_FOUND", "目录不存在");
     if (catalog.createdBy !== principal.identityId)
       throw new DomainError("NOT_FOUND", "目录不存在");
+    await requireWorkspaceOrganizer(tx, principal, catalog.workspaceId);
     return catalog;
   }
 
@@ -157,13 +159,14 @@ export class CatalogRepository {
       .where(and(eq(workspaces.tenantId, principal.tenantId), eq(workspaces.id, workspaceId)))
       .limit(1);
     if (!workspace) throw new DomainError("NOT_FOUND", "Workspace not found");
+    const { canOrganize } = await workspaceAccess(this.db, principal, workspaceId);
     const childCatalogs = await this.db
       .select({
         id: catalogs.id,
         name: catalogs.name,
         icon: catalogs.icon,
         position: catalogs.position,
-        canManage: sql<boolean>`${catalogs.createdBy} = ${principal.identityId}`,
+        canManage: sql<boolean>`${canOrganize} and ${catalogs.createdBy} = ${principal.identityId}`,
         // NOTE: reference the outer table by its literal name — inside a select builder,
         // interpolated ${catalogs.id} renders as bare "id" and would resolve to the subquery alias.
         hasChildren: sql<boolean>`(exists (select 1 from ${catalogs} c2 where c2.tenant_id = ${principal.tenantId} and c2.parent_id = catalogs.id) or exists (select 1 from ${documents} d2 where d2.tenant_id = ${principal.tenantId} and d2.catalog_id = catalogs.id and d2.status = 'active' and (d2.created_by = ${principal.identityId} or exists (select 1 from ${documentAcl} a2 where a2.tenant_id = ${principal.tenantId} and a2.document_id = d2.id and a2.identity_id = ${principal.identityId} and a2.action in ('read', 'write', 'comment', 'export', 'ai')))))`,
@@ -209,7 +212,8 @@ export class CatalogRepository {
         icon: catalog.icon,
         parentId: catalog.parentId,
         isRoot: catalog.parentId === null,
-        canManage: catalog.parentId !== null && catalog.createdBy === principal.identityId,
+        canManage:
+          canOrganize && catalog.parentId !== null && catalog.createdBy === principal.identityId,
       },
       catalogs: childCatalogs,
       documents: childDocuments.map((row) => ({
@@ -247,6 +251,7 @@ export class CatalogRepository {
         .where(and(eq(workspaces.tenantId, principal.tenantId), eq(workspaces.id, workspaceId)))
         .limit(1);
       if (!workspace) throw new DomainError("NOT_FOUND", "Workspace not found");
+      await requireWorkspaceOrganizer(tx, principal, workspaceId);
       const [count] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(catalogs)
@@ -369,6 +374,7 @@ export class CatalogRepository {
         .where(and(eq(catalogs.tenantId, principal.tenantId), eq(catalogs.id, input.parentId)))
         .limit(1);
       if (!target) throw new DomainError("NOT_FOUND", "目标目录不存在");
+      await requireWorkspaceOrganizer(tx, principal, target.workspaceId);
       const subtree = await collectSubtree(tx, principal.tenantId, catalogId);
       const subtreeIds = subtree.map((row) => row.id);
       if (subtreeIds.includes(input.parentId))
@@ -495,6 +501,21 @@ export class CatalogRepository {
       const subtree = await collectSubtree(tx, principal.tenantId, catalogId);
       const subtreeIds = subtree.map((row) => row.id);
       const rootId = await ensureRootCatalog(tx, principal.tenantId, catalog.workspaceId);
+      if (subtree.some((row) => row.created_by !== principal.identityId))
+        throw new DomainError("CONFLICT", "目录中包含其他成员创建的子目录，请先移出后再删除");
+      const [foreignDocument] = await tx
+        .select({ id: documents.id })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.tenantId, principal.tenantId),
+            sql`${documents.catalogId} = any(${sql.param(subtreeIds)}::text[])`,
+            ne(documents.createdBy, principal.identityId),
+          ),
+        )
+        .limit(1);
+      if (foreignDocument)
+        throw new DomainError("CONFLICT", "目录中包含其他成员的文档，请先移出后再删除");
       const affectedDocuments = await tx
         .select({ id: documents.id })
         .from(documents)

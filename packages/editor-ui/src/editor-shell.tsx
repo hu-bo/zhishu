@@ -15,7 +15,7 @@ import {
   useEditorInstance,
 } from "@zhishu/editor-react";
 import { EditorBlockMenu, type EditorBlockMenuMessages } from "./editor-block-menu.js";
-import { EditorLinkEditor, type EditorLinkEditorMessages } from "./editor-link-editor.js";
+import type { EditorLinkEditorMessages } from "./editor-link-editor.js";
 import { EditorOutline } from "./editor-outline.js";
 import { EditorFindPanel, type EditorFindPanelMessages } from "./editor-find-panel.js";
 import { EditorSelectionMenu, type EditorSelectionMenuMessages } from "./editor-selection-menu.js";
@@ -34,7 +34,11 @@ import { EditorCollaborationIndicator } from "./editor-collaboration-indicator.j
 import { EditorCollaborationParticipants } from "./editor-collaboration-participants.js";
 import { EditorIcon } from "./editor-icon.js";
 import { EditorStatsFooter, type EditorStatsFooterMessages } from "./editor-stats-footer.js";
-import { installTaskCelebration } from "./task-celebration.js";
+import { EditorKeyboardHelp, type EditorKeyboardHelpMessages } from "./editor-keyboard-help.js";
+import {
+  EditorReplacementReview,
+  type EditorReplacementReviewProps,
+} from "./editor-replacement-review.js";
 
 export interface EditorShellMessages {
   collapseOutline: string;
@@ -56,14 +60,19 @@ export interface EditorShellProps extends Omit<HTMLAttributes<HTMLElement>, "chi
   toolbarOffset?: string;
   title?: ReactNode;
   headerSlot?: ReactNode;
+  showHeader?: boolean;
   footerSlot?: ReactNode;
+  footerTrailingSlot?: ReactNode;
   statisticsFooter?: boolean;
+  replacementReview?: EditorReplacementReviewProps;
   statisticsMessages?: Partial<EditorStatsFooterMessages>;
+  keyboardHelp?: boolean;
+  keyboardHelpMessages?: Partial<EditorKeyboardHelpMessages>;
   toolbar?: ReactNode;
   editingControls?: boolean;
-  taskCelebration?: boolean;
   collaborationIndicator?: boolean;
   collaborationParticipants?: boolean;
+  collaborationParticipantsCount?: boolean;
   toolbarMessages?: Partial<EditorToolbarMessages>;
   tableToolbar?: boolean;
   tableToolbarMessages?: Partial<EditorTableToolbarMessages>;
@@ -98,14 +107,19 @@ export function EditorShell({
   toolbarOffset,
   title,
   headerSlot,
+  showHeader = true,
   footerSlot,
+  footerTrailingSlot,
   statisticsFooter = false,
+  replacementReview,
   statisticsMessages,
+  keyboardHelp,
+  keyboardHelpMessages,
   toolbar,
   editingControls = true,
-  taskCelebration = false,
   collaborationIndicator = true,
   collaborationParticipants = true,
+  collaborationParticipantsCount = true,
   toolbarMessages,
   tableToolbar = true,
   tableToolbarMessages,
@@ -140,7 +154,7 @@ export function EditorShell({
   const { resolveAssetURL } = useEditorHost();
   const collaborationStatus = useEditorCollaborationStatus();
   const collaborationPresences = useEditorCollaborationPresences();
-  const { collaboration, controller } = useEditorInstance();
+  const { controller } = useEditorInstance();
   const showParticipants = collaborationParticipants && collaborationPresences.length > 0;
   const [outlineVisible, setOutlineVisible] = useState(false);
   const [findVisible, setFindVisible] = useState(false);
@@ -234,11 +248,6 @@ export function EditorShell({
     document.addEventListener("pointerdown", closeWhenOutside, true);
     return () => document.removeEventListener("pointerdown", closeWhenOutside, true);
   }, [outline, outlineVisible]);
-
-  useEffect(() => {
-    if (!taskCelebration || !editingControls || !shellRef.current) return;
-    return installTaskCelebration(shellRef.current);
-  }, [taskCelebration, editingControls]);
 
   useEffect(() => {
     const shell = shellRef.current;
@@ -424,6 +433,11 @@ export function EditorShell({
     };
   }, [labels.assetFailed, labels.assetLoading, labels.assetUnavailable, resolveAssetURL]);
 
+  const keyboardHelpControl =
+    editingControls && (keyboardHelp ?? statisticsFooter) ? (
+      <EditorKeyboardHelp messages={keyboardHelpMessages} />
+    ) : null;
+
   return (
     <section
       ref={shellRef}
@@ -439,27 +453,30 @@ export function EditorShell({
       style={shellStyle}
       aria-label={ariaLabel}
     >
-      {(title ||
-        headerSlot ||
-        (collaborationIndicator && collaborationStatus) ||
-        showParticipants ||
-        showHeaderOutlineToggle) && (
-        <header className="zhishu-ui-header">
-          {title && <div className="zhishu-ui-title">{title}</div>}
-          {headerSlot}
-          {showParticipants && (
-            <EditorCollaborationParticipants participants={collaborationPresences} />
-          )}
-          {collaborationIndicator && collaborationStatus && (
-            <EditorCollaborationIndicator
-              status={collaborationStatus}
-              className="zhishu-ui-collaboration-status"
-              onRetry={() => collaboration?.retry?.()}
-            />
-          )}
-          {showHeaderOutlineToggle && outlineToggle}
-        </header>
-      )}
+      {showHeader &&
+        (title ||
+          headerSlot ||
+          (collaborationIndicator && collaborationStatus) ||
+          showParticipants ||
+          showHeaderOutlineToggle) && (
+          <header className="zhishu-ui-header">
+            {title && <div className="zhishu-ui-title">{title}</div>}
+            {headerSlot}
+            {showParticipants && (
+              <EditorCollaborationParticipants
+                participants={collaborationPresences}
+                showCount={collaborationParticipantsCount}
+              />
+            )}
+            {collaborationIndicator && collaborationStatus && (
+              <EditorCollaborationIndicator
+                status={collaborationStatus}
+                className="zhishu-ui-collaboration-status"
+              />
+            )}
+            {showHeaderOutlineToggle && outlineToggle}
+          </header>
+        )}
       <div className={stickyToolbar ? "zhishu-ui-toolbar-row is-sticky" : "zhishu-ui-toolbar-row"}>
         {editingControls &&
           (toolbar ?? (
@@ -467,9 +484,12 @@ export function EditorShell({
               messages={toolbarMessages}
               onOpenCommandMenu={slashMenu ? requestOpenSlashMenu : undefined}
               outlineToggle={outlineToggle}
+              linkEditorOpenRequest={linkEditor ? linkOpenRequest : undefined}
+              linkEditorMessages={linkEditorMessages}
             />
           ))}
         {editingControls && tableToolbar && <EditorTableToolbar messages={tableToolbarMessages} />}
+        {!editingControls && !showHeader && outlineToggle}
         {find && (
           <>
             <button
@@ -499,9 +519,6 @@ export function EditorShell({
             />
           </>
         )}
-        {editingControls && linkEditor && (
-          <EditorLinkEditor messages={linkEditorMessages} openRequest={linkOpenRequest} />
-        )}
       </div>
       {editingControls && <EditorImageAltEditor messages={imageAltEditorMessages} />}
       {editingControls && <EditorCodeLanguageSelector messages={codeLanguageMessages} />}
@@ -509,9 +526,25 @@ export function EditorShell({
         {surfaceElement}
         {outlineElement}
       </div>
-      {(statisticsFooter || footerSlot) && (
+      {replacementReview && <EditorReplacementReview {...replacementReview} />}
+      {(statisticsFooter || footerSlot || footerTrailingSlot || keyboardHelpControl) && (
         <footer className="zhishu-ui-footer">
-          {statisticsFooter && <EditorStatsFooter messages={statisticsMessages} />}
+          {statisticsFooter ? (
+            <EditorStatsFooter
+              messages={statisticsMessages}
+              trailingSlot={
+                <div className="zhishu-ui-footer-tools">
+                  {keyboardHelpControl}
+                  {footerTrailingSlot}
+                </div>
+              }
+            />
+          ) : (
+            <div className="zhishu-ui-footer-tools">
+              {keyboardHelpControl}
+              {footerTrailingSlot}
+            </div>
+          )}
           {footerSlot}
         </footer>
       )}

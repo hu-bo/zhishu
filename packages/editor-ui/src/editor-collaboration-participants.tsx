@@ -4,12 +4,14 @@ import type { EditorCollaborationPresence } from "@zhishu/editor-react";
 export interface EditorCollaborationParticipantsProps {
   participants: readonly EditorCollaborationPresence[];
   label?: string;
+  showCount?: boolean;
   className?: string;
 }
 
 export function EditorCollaborationParticipants({
   participants,
   label = "协同参与者",
+  showCount = true,
   className,
 }: EditorCollaborationParticipantsProps) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
@@ -64,26 +66,12 @@ export function EditorCollaborationParticipants({
             <span className="zhishu-collaboration-participant-more">+{remaining}</span>
           )}
         </span>
-        <span className="zhishu-collaboration-participants-count">
-          {participants.length} 位在线
-        </span>
+        {showCount && (
+          <span className="zhishu-collaboration-participants-count">
+            {participants.length} 位在线
+          </span>
+        )}
       </summary>
-      <div className="zhishu-collaboration-participants-details" role="group" aria-label={label}>
-        <p>当前协同参与者</p>
-        <ul>
-          {participants.map((participant) => (
-            <li key={participant.clientId}>
-              <span
-                className="zhishu-collaboration-participant-dot"
-                style={{ "--zhishu-presence-color": participant.color } as CSSProperties}
-                aria-hidden="true"
-              />
-              <span>{participant.displayName || "未命名成员"}</span>
-              {participant.local && <span className="zhishu-collaboration-self">你</span>}
-            </li>
-          ))}
-        </ul>
-      </div>
     </details>
   );
 }
