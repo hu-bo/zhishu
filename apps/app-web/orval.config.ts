@@ -5,8 +5,7 @@ export default defineConfig({
     input: { target: '../app-server/openapi.json' },
     output: {
       target: './src/api/generated/app-api.ts',
-      schemas: './src/api/generated/models',
-      mode: 'split',
+      mode: 'tags',
       client: 'react-query',
       httpClient: 'fetch',
       clean: true,

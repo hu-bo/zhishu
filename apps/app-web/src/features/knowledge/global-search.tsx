@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
-import { searchKnowledgeDocuments } from '@/api/generated/app-api';
+import { searchKnowledgeDocuments } from '@/api/generated/knowledge';
 import { errorMessage } from '@/api/api-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

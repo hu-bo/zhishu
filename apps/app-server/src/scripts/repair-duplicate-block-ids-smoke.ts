@@ -17,8 +17,11 @@ import {
   sameDocumentContent,
   emptyStructureState,
 } from "../modules/collaboration/structure-operations.js";
-import { createDocumentService } from "../modules/documents/index.js";
-import { DocumentRepository } from "../modules/documents/document.repository.js";
+import {
+  createDocumentService,
+  DocumentRepository,
+  DocumentHistoryRepository,
+} from "../modules/documents/index.js";
 import type { Principal } from "../modules/identity/identity.types.js";
 import * as Y from "yjs";
 import type { DocumentContent } from "@zhishu/document-contracts";
@@ -41,7 +44,8 @@ const config = loadConfig({
 });
 const app = await buildApp(config);
 const repository = new DocumentRepository(app.db);
-const service = createDocumentService(repository, config, {
+const history = new DocumentHistoryRepository(app.db);
+const service = createDocumentService(app.db, config, {
   revokeDocumentSessions: () => undefined,
 });
 let documentId: string | undefined;
@@ -149,7 +153,7 @@ try {
   assert.equal(generations.find((item) => item.id === created.generationId)?.status, "retired");
   assert.equal(generations.find((item) => item.id === repair.generationId)?.status, "active");
 
-  const repairedUpdates = await repository.loadUpdates(created.id, repair.generationId, 1);
+  const repairedUpdates = await history.loadUpdates(created.id, repair.generationId, 1);
   assert.equal(repairedUpdates.length, 1);
   repairedDocument = new Y.Doc();
   Y.applyUpdate(repairedDocument, repairedUpdates[0]!.updateBytes);

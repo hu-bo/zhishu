@@ -36,7 +36,12 @@ const stateSchema = new StateSchema({
   output: z.unknown().optional(),
 });
 
-export function createChatRuntime(options: RuntimeOptions) {
+export function createChatRuntime(
+  options: RuntimeOptions,
+): Record<
+  "generate" | "resume",
+  (input: ChatInput, signal: AbortSignal) => AsyncGenerator<AiTaskEventV2>
+> {
   const execute = async function* (
     input: ChatInput,
     externalSignal: AbortSignal,

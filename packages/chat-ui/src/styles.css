@@ -12,7 +12,7 @@
   color: var(--chat-foreground);
   background: var(--chat-surface);
   font: inherit;
-  color-scheme: light dark;
+  color-scheme: inherit;
 }
 .zhishu-chat * {
   box-sizing: border-box;
@@ -164,5 +164,125 @@
   }
   .zhishu-chat-messages {
     padding: 12px;
+  }
+}
+
+.zhishu-chat {
+  --chat-raised: var(--card, var(--chat-surface));
+  --chat-wash: color-mix(in srgb, var(--chat-accent) 6%, var(--chat-surface));
+  font-size: 14px;
+}
+.zhishu-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+  min-height: 48px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--chat-border);
+  color: var(--chat-muted);
+  font-size: 12px;
+}
+.zhishu-chat-user {
+  width: fit-content;
+  max-width: min(88%, var(--chat-content-width, 760px));
+  margin-right: 0;
+  background: var(--chat-wash);
+  border-radius: 16px 16px 4px 16px;
+  padding: 8px 13px;
+}
+.zhishu-chat-user .zhishu-chat-role {
+  display: none;
+}
+.zhishu-chat-role {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--chat-foreground);
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.zhishu-chat-role span {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--chat-wash);
+  color: var(--chat-accent);
+}
+.zhishu-chat-actions:not(:empty) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.zhishu-chat-actions details {
+  flex-basis: 100%;
+}
+.zhishu-chat-actions button,
+.zhishu-chat-header button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  font-size: 12px;
+}
+.zhishu-chat button:not(:disabled):hover {
+  background: var(--chat-wash);
+}
+.zhishu-chat-composer {
+  margin: 8px 12px 12px;
+  padding: 10px 11px;
+  background: var(--chat-raised);
+  border-radius: 16px;
+  box-shadow: 0 5px 16px -12px var(--chat-muted);
+}
+.zhishu-chat-composer:focus-within {
+  outline: 1px solid var(--chat-accent);
+  outline-offset: 0;
+}
+.zhishu-chat-composer textarea {
+  display: block;
+  field-sizing: content;
+  min-height: 56px;
+  max-height: 156px;
+  resize: none;
+  padding: 5px 2px;
+  line-height: 1.55;
+}
+.zhishu-chat-toolbar {
+  color: var(--chat-muted);
+  font-size: 11px;
+}
+.zhishu-chat button:is(.zhishu-chat-send, .zhishu-chat-stop) {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: var(--chat-accent);
+  color: var(--primary-foreground, white);
+}
+.zhishu-chat button:is(.zhishu-chat-send, .zhishu-chat-stop):not(:disabled):hover {
+  background: color-mix(in srgb, var(--chat-accent) 86%, var(--chat-foreground));
+}
+.zhishu-chat-stop span {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: currentColor;
+}
+.zhishu-chat-status:empty,
+.zhishu-chat-attachments:empty {
+  display: none;
+}
+@media (max-width: 600px) {
+  .zhishu-chat-composer {
+    margin: 6px 8px max(8px, env(safe-area-inset-bottom));
   }
 }

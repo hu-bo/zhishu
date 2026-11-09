@@ -28,6 +28,7 @@ import {
   type EditorCodeLanguageSelectorMessages,
 } from "./editor-code-language-selector.js";
 import { EditorSlashMenu, type EditorSlashMenuMessages } from "./editor-slash-menu.js";
+import { EditorMentionMenu } from "./editor-mention-menu.js";
 import { EditorToolbar, type EditorToolbarMessages } from "./editor-toolbar.js";
 import { EditorTableToolbar, type EditorTableToolbarMessages } from "./editor-table-toolbar.js";
 import { EditorCollaborationIndicator } from "./editor-collaboration-indicator.js";
@@ -160,13 +161,6 @@ export function EditorShell({
   const [findVisible, setFindVisible] = useState(false);
   const [linkOpenRequest, setLinkOpenRequest] = useState(0);
   const requestOpenLink = () => setLinkOpenRequest((request) => request + 1);
-  const [slashOpenRequest, setSlashOpenRequest] = useState<{
-    request: number;
-    selection: { from: number; to: number } | null;
-  }>({ request: 0, selection: null });
-  const requestOpenSlashMenu = (selection: { from: number; to: number } | null) => {
-    setSlashOpenRequest((current) => ({ request: current.request + 1, selection }));
-  };
   const labels: EditorShellMessages = {
     collapseOutline: "收起大纲",
     expandOutline: "显示大纲",
@@ -482,7 +476,9 @@ export function EditorShell({
           (toolbar ?? (
             <EditorToolbar
               messages={toolbarMessages}
-              onOpenCommandMenu={slashMenu ? requestOpenSlashMenu : undefined}
+              insertCommands={slashMenu}
+              insertCommandCapabilities={slashCapabilities}
+              insertCommandMessages={slashMenuMessages}
               outlineToggle={outlineToggle}
               linkEditorOpenRequest={linkEditor ? linkOpenRequest : undefined}
               linkEditorMessages={linkEditorMessages}
@@ -555,13 +551,9 @@ export function EditorShell({
         />
       )}
       {editingControls && blockMenu && <EditorBlockMenu messages={blockMenuMessages} />}
+      {editingControls && <EditorMentionMenu />}
       {editingControls && slashMenu && (
-        <EditorSlashMenu
-          capabilities={slashCapabilities}
-          messages={slashMenuMessages}
-          openRequest={slashOpenRequest.request}
-          openSelection={slashOpenRequest.selection}
-        />
+        <EditorSlashMenu capabilities={slashCapabilities} messages={slashMenuMessages} />
       )}
     </section>
   );

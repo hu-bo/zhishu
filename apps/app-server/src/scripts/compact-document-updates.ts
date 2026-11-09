@@ -7,7 +7,7 @@ import {
 } from "../modules/collaboration/structure-operations.js";
 import * as Y from "yjs";
 import { createDatabase, createPool } from "../../database/index.js";
-import { DocumentRepository } from "../modules/documents/document.repository.js";
+import { DocumentHistoryRepository } from "../modules/documents/index.js";
 
 assert.ok(
   process.argv.slice(2).includes("--apply"),
@@ -24,7 +24,7 @@ assert.ok(
 );
 
 const pool = createPool({ connectionString: databaseUrl, max: 3 });
-const repository = new DocumentRepository(createDatabase(pool));
+const repository = new DocumentHistoryRepository(createDatabase(pool));
 let compacted = 0;
 let skipped = 0;
 let prunedUpdates = 0;

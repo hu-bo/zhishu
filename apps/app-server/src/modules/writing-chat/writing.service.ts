@@ -12,7 +12,12 @@ import {
   type DshChatSession,
 } from "@zhishu/dsh-agent";
 import type { ApprovalDecision, ChatFrame, SubmitChatMessage } from "@zhishu/chat-contracts";
-import { installWriting, validateInput, type WritingInput } from "@zhishu/ai-plugins/writing";
+import {
+  installWriting,
+  validateInput,
+  type WritingInput,
+  type WritingExecutionPolicy,
+} from "@zhishu/ai-plugins/writing";
 import { installResearch } from "@zhishu/ai-plugins/research";
 import { installImage } from "@zhishu/ai-plugins/image";
 import type { WritingImages } from "./writing.image.js";
@@ -22,7 +27,6 @@ import {
   type AuthoringProposal,
   type EvidenceBundle,
 } from "@zhishu/ai-contracts";
-import type { RuntimeOptions as LegacyOptions } from "@zhishu/ai-runtime";
 import type { Principal } from "../identity/identity.types.js";
 import type { AiDocumentAccess } from "../documents/index.js";
 import type { AppConfig } from "../../config.js";
@@ -32,7 +36,7 @@ import { postgresSessionPersistence } from "./writing.persistence.js";
 
 type AuthoringContext = {
   input: WritingInput;
-  options: LegacyOptions;
+  options: WritingExecutionPolicy;
   proposal?: AuthoringProposal;
 };
 export class WritingService {
@@ -40,6 +44,7 @@ export class WritingService {
   private principals = new Map<string, Principal>();
   private authoring = new Map<string, AuthoringContext>();
   private handles = new Map<string, { session: DshChatSession; used: number }>();
+  private subscribers = new Map<string, number>();
   private timer?: ReturnType<typeof setInterval>;
   private shutdown = new AbortController();
   readonly repository: WritingRepository;
@@ -79,7 +84,7 @@ export class WritingService {
     await ctx.plugin(postgresSessionPersistence(this.pool));
     if (this.adapter) ctx.llm.registerAdapter(["writing"], this.adapter);
     else {
-      ctx.set(
+      ctx.provide(
         "launchEnvironment",
         createLaunchEnvironmentSnapshot([
           { source: "process", values: { AI_API_KEY: this.config.AI_API_KEY ?? "" } },
@@ -89,6 +94,8 @@ export class WritingService {
         (this.config.AI_API_FORMAT ??
           (this.config.AI_BASE_URL?.includes("/anthropic") ? "anthropic" : "openai")) ===
         "anthropic";
+      const reasoning =
+        this.config.AI_THINKING === "disabled" ? undefined : this.config.AI_REASONING_EFFORT;
       await ctx.plugin(Provider, {
         providers: {
           writing: {
@@ -98,7 +105,16 @@ export class WritingService {
               this.config.AI_BASE_URL ??
               (anthropic ? "https://api.anthropic.com" : "https://api.openai.com/v1"),
             models: [
-              { id: this.config.AI_MODEL!, contextWindow: 65536, maxTokens: 4096, input: ["text"] },
+              {
+                id: this.config.AI_MODEL!,
+                contextWindow: 65536,
+                maxTokens: 4096,
+                input: ["text"],
+                ...(reasoning ? { reasoningEfforts: { off: null, [reasoning]: reasoning } } : {}),
+                ...(anthropic && this.config.AI_THINKING === "adaptive"
+                  ? { compat: { forceAdaptiveThinking: true } }
+                  : {}),
+              },
             ],
             timeoutMs: this.config.AI_TIMEOUT_MS,
             retryPolicy: { mode: "normal", maxRetries: 0 },
@@ -112,6 +128,17 @@ export class WritingService {
   private getRuntime() {
     if (!this.capabilities().enabled)
       throw new DomainError("SERVICE_UNAVAILABLE", "写作模型尚未配置");
+    // Each Session owns two dedicated writer connections. The writing pool is
+    // separate from task owners; keep transient storage/authorization queries free.
+    const sessionCapacity = Math.min(
+      this.config.AI_MAX_CONCURRENT * 2,
+      Math.floor(((this.pool.options.max ?? 10) - 2) / 2),
+    );
+    if (sessionCapacity < 1)
+      throw new DomainError(
+        "SERVICE_UNAVAILABLE",
+        "数据库连接额度不足，请增加连接池或降低 AI 并发配置",
+      );
     this.runtime ??= createDshRuntime({
       persistence: "required",
       store: this.repository,
@@ -119,7 +146,7 @@ export class WritingService {
       agentOptions: { provider: "writing", model: this.config.AI_MODEL ?? "test", maxTokens: 4096 },
       configurationId: this.configurationId(),
       limits: {
-        maxSessions: this.config.AI_MAX_CONCURRENT * 2,
+        maxSessions: sessionCapacity,
         maxQueued: 4,
         timeoutMs: this.config.AI_TIMEOUT_MS,
       },
@@ -240,6 +267,7 @@ export class WritingService {
   }
   private async releaseIdle() {
     for (const [id, entry] of this.handles) {
+      if (this.subscribers.get(id)) continue;
       if (Date.now() - entry.used < 60000) continue;
       try {
         const snapshot = await entry.session.snapshot();
@@ -275,10 +303,17 @@ export class WritingService {
       existing.used = Date.now();
       return existing.session;
     }
-    const runtime = await this.getRuntime();
-    const session = row.state ? await runtime.restoreSession(id) : await runtime.createSession(id);
-    this.handles.set(id, { session, used: Date.now() });
-    return session;
+    try {
+      const runtime = await this.getRuntime();
+      const session = row.state
+        ? await runtime.restoreSession(id)
+        : await runtime.createSession(id);
+      this.handles.set(id, { session, used: Date.now() });
+      return session;
+    } catch (error) {
+      this.principals.delete(id);
+      throw error;
+    }
   }
   async create(principal: Principal, sourceIds: string[]) {
     const sourceContext = await this.documents.sources(principal, sourceIds);
@@ -329,7 +364,7 @@ export class WritingService {
   }
   async resume(principal: Principal, id: string, runId: string) {
     const s = await this.attach(principal, id);
-    await s.resume(runId);
+    await this.repository.admit(principal, this.config.AI_MAX_CONCURRENT, () => s.resume(runId));
     return s.snapshot();
   }
   async decide(principal: Principal, id: string, input: ApprovalDecision) {
@@ -359,9 +394,11 @@ export class WritingService {
   ): AsyncGenerator<ChatFrame> {
     const signal = AbortSignal.any([subscriberSignal, this.shutdown.signal]);
     const session = await this.attach(principal, id);
+    this.subscribers.set(id, (this.subscribers.get(id) ?? 0) + 1);
     // Install the live listener before reading the durable barrier. Outbox replay owns ordering.
     const live: ChatFrame[] = [];
     const stop = new AbortController();
+    let streamError: unknown;
     const drain = (async () => {
       for await (const frame of session.observe(AbortSignal.any([signal, stop.signal]))) {
         if (live.length < 128) live.push(frame);
@@ -370,9 +407,15 @@ export class WritingService {
           live.push({ type: "resync-required", conversationId: id });
         }
       }
-    })();
+    })().catch((error: unknown) => {
+      // A rejected live observer must be handled immediately (for example the ninth
+      // subscriber), while the outbox loop is still waiting for its next poll.
+      streamError = error;
+      stop.abort();
+    });
     try {
       while (!signal.aborted) {
+        if (streamError) throw streamError;
         await this.authorize(id);
         const events = await this.repository.events(id, cursor);
         for (const event of events) {
@@ -394,12 +437,15 @@ export class WritingService {
     } finally {
       stop.abort();
       await drain;
+      const remaining = (this.subscribers.get(id) ?? 1) - 1;
+      if (remaining) this.subscribers.set(id, remaining);
+      else this.subscribers.delete(id);
     }
   }
   async *generateProposal(
     principal: Principal,
     input: WritingInput,
-    options: LegacyOptions,
+    options: WritingExecutionPolicy,
     signal: AbortSignal,
     resume: boolean,
   ): AsyncGenerator<AiTaskEvent> {

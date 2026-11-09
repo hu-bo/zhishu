@@ -1,3 +1,5 @@
+import { EditorIcon } from "./editor-icon.js";
+
 export interface EditorKeyboardHelpMessages {
   label: string;
   underline: string;
@@ -29,7 +31,10 @@ export function EditorKeyboardHelp({
     <details
       className={className ? `zhishu-ui-keyboard-help ${className}` : "zhishu-ui-keyboard-help"}
     >
-      <summary>{labels.label}</summary>
+      <summary>
+        {labels.label}
+        <EditorIcon name="chevron-down" className="zhishu-ui-keyboard-help-chevron" />
+      </summary>
       <div className="zhishu-ui-keyboard-help-popover">
         <p>
           <kbd>{modifier}+B</kbd> 粗体

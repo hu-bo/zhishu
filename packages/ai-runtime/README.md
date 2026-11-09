@@ -1,6 +1,8 @@
 # @zhishu/ai-runtime
 
-Node.js 写作与知识研究运行时。通过 Deep Agents 1.15.1、LangChain 1.5.10 和应用注入的模型执行，输出 ai-contracts 的事件和受限编辑提案；不写文档、不连接应用数据库、不读取环境变量。
+Node.js RAG 问答及历史写作兼容运行时。新写作使用 dsh-agent；本包保留旧 Deep Agents 图以恢复已存在的 LangGraph checkpoint，不写文档、不连接应用数据库、不读取环境变量。
+
+应用通过 `./chat` 消费 RAG、通过 `./policy` 消费共享预算/Hash/错误，仅在恢复旧写作时动态加载 `./legacy-authoring`。root 保留原公开入口以兼容独立消费者；app-server 不再调用旧写作 generate，也不会在 DSH 缺失时回退到旧引擎。下方代码为旧写作协议消费示例。
 
 另提供 `createChatRuntime(options)`，输入为 `{ threadId, request: ChatRequest, history, evidence, prompt }`，返回 v2 started/progress/chat/completed。Chat 使用官方 LangGraph 单步工具结构化输出与 checkpoint；普通讨论允许无引用，grounded 模式必须通过真实证据与逐字引用验证。Chat 首期交付完整回复，取消、预算预留、证据复核及 `resume` 与写作沿用同一应用边界。history 只接受应用从有权限的已完成任务重建的消息。
 

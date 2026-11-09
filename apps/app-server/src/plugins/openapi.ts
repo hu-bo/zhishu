@@ -11,6 +11,7 @@ import {
 } from "@zhishu/ai-contracts";
 import type { FastifyInstance } from "fastify";
 import { jsonSchemaTransform } from "fastify-type-provider-zod";
+import { errorResponseSchema } from "../shared/error.schema.js";
 import {
   ChatSnapshotSchema,
   SubmitChatMessageSchema,
@@ -19,6 +20,13 @@ import {
 import { ImageJobSchema } from "@zhishu/ai-plugins/contracts";
 
 type SwaggerTransformObject = import("@fastify/swagger").SwaggerTransformObject;
+
+// Derive the component from the same Zod contract used by HTTP serialization.
+const sharedErrorResponse = jsonSchemaTransform({
+  schema: { body: errorResponseSchema },
+  url: "",
+}).schema.body;
+const errorSchemaFingerprint = JSON.stringify(sharedErrorResponse);
 
 function toOpenApiSchema(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(toOpenApiSchema);
@@ -105,6 +113,7 @@ function transformOpenApiDocument(
     ].map((schema) => [schema.$id, toOpenApiSchema(schema)]),
   );
   Object.assign(schemas, {
+    ErrorResponse: sharedErrorResponse,
     WritingChatSnapshot: toOpenApiSchema(ChatSnapshotSchema),
     SubmitWritingMessage: toOpenApiSchema(SubmitChatMessageSchema),
     WritingChatFrame: toOpenApiSchema(ChatFrameSchema),
@@ -172,18 +181,29 @@ function transformOpenApiDocument(
       };
   }
   for (const [path, operations] of Object.entries(paths)) {
-    if (!path.startsWith("/api/ai/")) continue;
     for (const operation of Object.values(operations)) {
       const responses = (
         operation as {
           responses?: Record<
             string,
-            { content?: Record<string, { schema?: { properties?: Record<string, unknown> } }> }
+            {
+              content?: Record<
+                string,
+                { schema?: { $ref?: string; properties?: Record<string, unknown> } }
+              >;
+            }
           >;
         }
       )?.responses;
       for (const response of Object.values(responses ?? {})) {
-        const properties = response.content?.["application/json"]?.schema?.properties;
+        const json = response.content?.["application/json"];
+        // The provider v4 document-wide resolver fails on literal null defaults.
+        if (json && JSON.stringify(json.schema) === errorSchemaFingerprint) {
+          json.schema = { $ref: "#/components/schemas/ErrorResponse" };
+          continue;
+        }
+        if (!path.startsWith("/api/ai/")) continue;
+        const properties = json?.schema?.properties;
         if (!properties) continue;
         if ("result" in properties)
           properties.result = {

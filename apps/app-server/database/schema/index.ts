@@ -1,5 +1,6 @@
 export { projects } from "./project.table.js";
 export { aiRuns } from "./ai.table.js";
+export { documentIndexes } from "./rag.table.js";
 export {
   assets,
   assetReferences,
@@ -7,7 +8,6 @@ export {
   catalogs,
   collaborationUpdates,
   documentAuditEvents,
-  documentAcl,
   documentFavorites,
   documentShares,
   documentGenerationCheckpoints,
@@ -20,8 +20,15 @@ export {
   documentProjectionSnapshots,
   documents,
   workspaces,
-  workspaceMembers,
   knowledgePresetInstallations,
 } from "./document.table.js";
 
 export * from "./writing.table.js";
+export {
+  identityProfiles,
+  workspaceInvitations,
+  notifications,
+  documentComments,
+} from "./document.table.js";
+
+export { resourceAcl, rolePermissions, authorizationEvents } from "./document.table.js";

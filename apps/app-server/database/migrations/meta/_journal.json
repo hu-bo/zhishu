@@ -253,6 +253,48 @@
       "when": 1792778544638,
       "tag": "0035_organic_hammerhead",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793320243696,
+      "tag": "0036_zippy_white_queen",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1793373050916,
+      "tag": "0037_married_goblin_queen",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1793514753459,
+      "tag": "0038_sharp_deathstrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1793517667614,
+      "tag": "0039_explicit_document_managers",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1793521919828,
+      "tag": "0040_silly_medusa",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1793523329998,
+      "tag": "0041_sleepy_quicksilver",
+      "breakpoints": true
     }
   ]
 }

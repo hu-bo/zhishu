@@ -1,7 +1,8 @@
+import { idempotencyKeyHeadersSchema } from "../../shared/idempotency.schema.js";
+import { requirePrincipal } from "../identity/principal.js";
 import type { FastifyInstance } from "fastify";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
-import { DomainError } from "../../shared/domain-error.js";
-import { errorResponseSchema } from "../documents/document.schema.js";
+import { errorResponseSchema } from "../../shared/error.schema.js";
 import type { AssetService } from "./asset.service.js";
 import {
   assetAccessSchema,
@@ -18,19 +19,8 @@ import {
   documentAssetParamsSchema,
 } from "./asset.schema.js";
 import type { AppConfig } from "../../config.js";
-import { z } from "zod";
 
 const bearerSecurity = [{ bearerAuth: [] }];
-const idempotencyKeyHeadersSchema = z
-  .object({
-    "idempotency-key": z
-      .string()
-      .min(1)
-      .max(128)
-      .regex(/^[A-Za-z0-9._~-]+$/)
-      .optional(),
-  })
-  .passthrough();
 
 export async function assetRoutes(
   app: FastifyInstance,
@@ -59,20 +49,17 @@ export async function assetRoutes(
         },
       },
     },
-    async (request, reply) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return reply
+    async (request, reply) =>
+      reply
         .code(201)
         .send(
           await service.createUpload(
-            request.principal,
+            requirePrincipal(request.principal),
             request.params.documentId,
             request.body,
             request.headers["idempotency-key"],
           ),
-        );
-    },
+        ),
   );
   typed.post(
     "/asset-uploads/:assetId/content",
@@ -95,10 +82,8 @@ export async function assetRoutes(
       },
     },
     async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
       await service.uploadContent(
-        request.principal,
+        requirePrincipal(request.principal),
         request.params.assetId,
         request.body.dataBase64,
       );
@@ -122,11 +107,8 @@ export async function assetRoutes(
         },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.completeUpload(request.principal, request.params.assetId);
-    },
+    async (request) =>
+      service.completeUpload(requirePrincipal(request.principal), request.params.assetId),
   );
   typed.delete(
     "/asset-uploads/:assetId",
@@ -144,11 +126,8 @@ export async function assetRoutes(
         },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.cancelUpload(request.principal, request.params.assetId);
-    },
+    async (request) =>
+      service.cancelUpload(requirePrincipal(request.principal), request.params.assetId),
   );
   typed.post(
     "/documents/:documentId/assets/:assetId/references",
@@ -168,20 +147,17 @@ export async function assetRoutes(
         },
       },
     },
-    async (request, reply) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return reply
+    async (request, reply) =>
+      reply
         .code(201)
         .send(
           await service.addReference(
-            request.principal,
+            requirePrincipal(request.principal),
             request.params.documentId,
             request.params.assetId,
             request.body,
           ),
-        );
-    },
+        ),
   );
   typed.get(
     "/assets/:assetId/access",
@@ -199,10 +175,7 @@ export async function assetRoutes(
         },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.createAccess(request.principal, request.params.assetId);
-    },
+    async (request) =>
+      service.createAccess(requirePrincipal(request.principal), request.params.assetId),
   );
 }

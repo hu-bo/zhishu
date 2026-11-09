@@ -1,3 +1,5 @@
+import { MemberPicker, type MemberChoice } from '@/features/knowledge/member-picker';
+import { DocumentAccessMode } from './document-access-mode';
 import { useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -11,12 +13,13 @@ import {
   removeDocumentAcl,
   revokeDocumentShare,
   setDocumentAcl,
-} from '@/api/generated/app-api';
+} from '@/api/generated/documents';
+import { explainDocumentAuthorization } from '@/api/generated/authorization';
 import type {
   CreateDocumentShare201,
   ListDocumentShares200Item,
-  SetDocumentAclBodyActionsItem,
-} from '@/api/generated/models';
+} from '@/api/generated/app-api.schemas';
+import { SetDocumentAcl200ActionsItem } from '@/api/generated/app-api.schemas';
 import { errorMessage } from '@/api/api-error';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -24,6 +27,19 @@ import { Input } from '@/components/ui/input';
 import { PanelDialog } from '@/components/ui/panel-dialog';
 
 const DAY_MS = 86_400_000;
+const permissionNames: Record<string, string> = {
+  owner: '所有者',
+  admin: '管理员',
+  editor: '编辑者',
+  viewer: '阅读者',
+  read: '阅读',
+  write: '编辑',
+  comment: '评论',
+  share: '分享',
+  export: '导出',
+  manage: '管理',
+  ai: 'AI',
+};
 
 const expiryPresets = [
   { days: 1, label: '1 天' },
@@ -74,9 +90,17 @@ function PermissionBadge({ permission }: { permission: 'read' | 'edit' }) {
   );
 }
 
-function LinkShareSection({ documentId }: { documentId: string }) {
+function LinkShareSection({
+  documentId,
+  canGrantEdit,
+}: {
+  documentId: string;
+  canGrantEdit: boolean;
+}) {
   const queryClient = useQueryClient();
   const [permission, setPermission] = useState<'read' | 'edit'>('read');
+  const [kind, setKind] = useState<'invite' | 'access'>('access');
+  const selectedPermission = canGrantEdit ? permission : 'read';
   const [presetDays, setPresetDays] = useState<number | null>(7);
   const [customExpiry, setCustomExpiry] = useState<DateValue | null>(null);
   const [datePickerResetKey, setDatePickerResetKey] = useState(0);
@@ -127,7 +151,11 @@ function LinkShareSection({ documentId }: { documentId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const share = await createDocumentShare(documentId, { permission, expiresAt });
+      const share = await createDocumentShare(documentId, {
+        permission: selectedPermission,
+        kind,
+        expiresAt,
+      });
       setCreated(share);
       await queryClient.invalidateQueries({ queryKey: ['document-shares', documentId] });
     } catch (cause) {
@@ -166,10 +194,23 @@ function LinkShareSection({ documentId }: { documentId: string }) {
           链接分享
         </h3>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          创建一条公开链接；任何人打开都可以阅读，站内用户打开后会按档位自动获得权限。链接必须设置有效期，最长一年。
+          创建一条公开链接；任何人打开都可以阅读，站内用户接受后按档位获得权限。链接必须设置有效期，最长一年。
+          仅可分享你当前拥有的权限；失去对应权限后，链接将停止公开访问和新成员加入。
         </p>
       </div>
 
+      <label className="block space-y-2 text-xs font-medium">
+        授权期限
+        <select
+          className="h-9 w-full rounded-lg border bg-background px-3 text-sm"
+          value={kind}
+          disabled={busy}
+          onChange={(e) => setKind(e.target.value as 'invite' | 'access')}
+        >
+          <option value="access">限时访问：撤销或过期后收回此来源权限</option>
+          <option value="invite">长期邀请：接受后保留，需单独撤销成员权限</option>
+        </select>
+      </label>
       <fieldset className="space-y-2">
         <legend className="text-xs font-medium text-muted-foreground">访问档位</legend>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -182,7 +223,7 @@ function LinkShareSection({ documentId }: { documentId: string }) {
             <label
               key={option.value}
               className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors duration-150 ${
-                permission === option.value
+                selectedPermission === option.value
                   ? 'border-primary/50 bg-primary/5'
                   : 'hover:border-primary/30'
               }`}
@@ -191,7 +232,8 @@ function LinkShareSection({ documentId }: { documentId: string }) {
                 type="radio"
                 name="share-permission"
                 className="mt-0.5 accent-primary"
-                checked={permission === option.value}
+                checked={selectedPermission === option.value}
+                disabled={option.value === 'edit' && !canGrantEdit}
                 onChange={() => setPermission(option.value)}
               />
               <span className="min-w-0">
@@ -368,6 +410,9 @@ function LinkShareSection({ documentId }: { documentId: string }) {
                   <div className="min-w-0">
                     <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
                       <PermissionBadge permission={share.permission} />
+                      <span className="text-xs text-muted-foreground">
+                        {share.kind === 'access' ? '限时访问' : '长期邀请'}
+                      </span>
                       <span
                         className={`text-xs font-normal ${
                           share.revokedAt
@@ -433,7 +478,11 @@ function LinkShareSection({ documentId }: { documentId: string }) {
           if (!open) setRevokeTarget(null);
         }}
         title="撤销这条分享链接？"
-        description="链接会立即失效，已经通过链接加入的用户保留现有权限。"
+        description={
+          revokeTarget?.kind === 'access'
+            ? '链接及此来源的权限将失效；其他链接、成员或直接授权继续生效。'
+            : '链接会立即失效，已经接受邀请的用户保留权限，可在成员设置中单独撤销。'
+        }
         confirmLabel="撤销链接"
         destructive
         onConfirm={confirmRevoke}
@@ -442,42 +491,25 @@ function LinkShareSection({ documentId }: { documentId: string }) {
   );
 }
 
-const editableActions = [
-  'read',
-  'write',
-  'comment',
-  'share',
-  'export',
-  'ai',
-] as const satisfies readonly SetDocumentAclBodyActionsItem[];
+const editableActions = Object.values(SetDocumentAcl200ActionsItem);
 
-const actionLabels: Record<SetDocumentAclBodyActionsItem, string> = {
+const actionLabels: Record<SetDocumentAcl200ActionsItem, string> = {
   read: '查看正文',
   write: '编辑正文',
-  comment: '评论（评论功能尚未开放）',
-  share: '分享管理（委托管理尚未开放）',
+  comment: '评论',
+  share: '创建与撤销分享链接',
   export: '导出文档',
-  ai: 'AI 使用（AI 功能尚未开放）',
+  ai: 'AI 使用',
+  manage: '管理权限与删除',
+  move: '移动文档',
 };
-
-function describeEffectiveActions(granted: readonly SetDocumentAclBodyActionsItem[]): string {
-  const effective = new Set(granted);
-  if (granted.includes('write')) {
-    effective.add('read');
-    effective.add('comment');
-    effective.add('ai');
-  }
-  if (granted.includes('comment') || granted.includes('export') || granted.includes('ai')) {
-    effective.add('read');
-  }
-  return [...effective].map((action) => actionLabels[action]).join('、');
-}
 
 function MemberAclSection({ documentId }: { documentId: string }) {
   const queryClient = useQueryClient();
-  const identityInputRef = useRef<HTMLInputElement | null>(null);
-  const [identityId, setIdentityId] = useState('');
-  const [actions, setActions] = useState<SetDocumentAclBodyActionsItem[]>(['read']);
+  const [selectedMember, setSelectedMember] = useState<MemberChoice | null>(null);
+  const identityId = selectedMember?.identityId ?? '';
+  const [actions, setActions] = useState<SetDocumentAcl200ActionsItem[]>(['read']);
+  const [role, setRole] = useState<'viewer' | 'editor' | 'admin' | 'custom'>('viewer');
   const [busyIdentity, setBusyIdentity] = useState<string | null>(null);
   const [revokeSubject, setRevokeSubject] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -492,7 +524,7 @@ function MemberAclSection({ documentId }: { documentId: string }) {
     await queryClient.invalidateQueries({ queryKey: ['document-acl', documentId] });
   };
 
-  const toggleAction = (action: SetDocumentAclBodyActionsItem, checked: boolean) => {
+  const toggleAction = (action: SetDocumentAcl200ActionsItem, checked: boolean) => {
     setActions((current) =>
       checked
         ? current.includes(action)
@@ -505,15 +537,16 @@ function MemberAclSection({ documentId }: { documentId: string }) {
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const subject = identityId.trim();
-    if (!subject || actions.length === 0) return;
+    if (!subject || (role === 'custom' && actions.length === 0)) return;
     setBusyIdentity(subject);
     setError(null);
     setNotice(null);
     try {
-      await setDocumentAcl(documentId, subject, { actions });
+      await setDocumentAcl(documentId, subject, role === 'custom' ? { actions } : { role });
       await refresh();
-      setIdentityId('');
+      setSelectedMember(null);
       setActions(['read']);
+      setRole('viewer');
       setNotice('权限已保存。');
     } catch (cause) {
       setError(errorMessage(cause));
@@ -532,7 +565,7 @@ function MemberAclSection({ documentId }: { documentId: string }) {
       await removeDocumentAcl(documentId, subject);
       await refresh();
       if (identityId === subject) {
-        setIdentityId('');
+        setSelectedMember(null);
         setActions(['read']);
       }
       setNotice('已撤销该主体的文档权限。');
@@ -551,52 +584,67 @@ function MemberAclSection({ documentId }: { documentId: string }) {
       <div>
         <h3 className="text-sm font-semibold">成员权限</h3>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          输入主体 ID
-          来授予或更新权限；请确认与对方登录身份一致。当前不查询成员目录，也不发送邮件邀请。
+          搜索成员姓名或邮箱，单独授予访问权限。单独授权与空间继承权限共同生效。
         </p>
       </div>
 
       <form onSubmit={(event) => void save(event)} className="space-y-4">
-        <label className="block space-y-2 text-sm font-medium">
-          主体 ID
-          <Input
-            ref={identityInputRef}
-            value={identityId}
-            onChange={(event) => setIdentityId(event.target.value)}
-            maxLength={256}
-            pattern="[A-Za-z0-9._:@-]+"
-            autoComplete="off"
-            placeholder="例如 user@example.com"
-            required
-          />
-          <span className="block text-xs font-normal text-muted-foreground">
-            仅支持字母、数字、点、下划线、冒号、@ 和连字符。
-          </span>
-        </label>
+        <MemberPicker
+          value={selectedMember}
+          disabled={busyIdentity !== null}
+          onChange={setSelectedMember}
+        />
 
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">授权内容</legend>
-          {editableActions.map((action) => (
-            <label key={action} className="flex cursor-pointer items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="accent-primary"
-                checked={actions.includes(action)}
-                onChange={(event) => toggleAction(action, event.target.checked)}
-              />
-              {actionLabels[action]}
-            </label>
-          ))}
+          <label className="flex items-center gap-2 text-sm">
+            角色
+            <select
+              aria-label="文档成员角色"
+              value={role}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (
+                  value === 'viewer' ||
+                  value === 'editor' ||
+                  value === 'admin' ||
+                  value === 'custom'
+                )
+                  setRole(value);
+              }}
+              className="rounded border bg-background px-2 py-1"
+            >
+              <option value="viewer">只读</option>
+              <option value="editor">编辑</option>
+              <option value="admin">管理</option>
+              <option value="custom">单独操作权限</option>
+            </select>
+          </label>
+          {role === 'custom' &&
+            editableActions.map((action) => (
+              <label key={action} className="flex cursor-pointer items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked={actions.includes(action)}
+                  onChange={(event) => toggleAction(action, event.target.checked)}
+                />
+                {actionLabels[action]}
+              </label>
+            ))}
           <p className="text-xs leading-5 text-muted-foreground">
-            编辑权限包含查看，并按服务端策略包含评论与 AI 能力；查看、评论、导出和 AI
-            权限也允许读取文档。评论、再次分享和 AI 的对应产品功能尚未开放。
+            角色能力按本空间配置生效，单独操作权限与继承来源共同生效。实际能力见下方授权列表。
           </p>
         </fieldset>
 
         <Button
           type="submit"
           variant="outline"
-          disabled={!identityId.trim() || actions.length === 0 || busyIdentity !== null}
+          disabled={
+            !identityId.trim() ||
+            (role === 'custom' && actions.length === 0) ||
+            busyIdentity !== null
+          }
         >
           {busyIdentity ? '正在保存…' : '保存授权'}
         </Button>
@@ -625,11 +673,19 @@ function MemberAclSection({ documentId }: { documentId: string }) {
               className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0">
-                <p className="break-all text-sm font-medium">{entry.identityId}</p>
+                <p className="break-all text-sm font-medium">
+                  {entry.displayName || entry.identityId}
+                </p>
+                {entry.email && <p className="text-xs text-muted-foreground">{entry.email}</p>}
+                {entry.grantedAt && (
+                  <p className="text-xs text-muted-foreground">
+                    授权于 {formatShareDate(entry.grantedAt)}
+                  </p>
+                )}
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   直接授予：{entry.actions.map((action) => actionLabels[action]).join('、')}
                   <br />
-                  有效能力：{describeEffectiveActions(entry.actions)}
+                  有效能力：{entry.actions.map((action) => actionLabels[action]).join('、')}
                 </p>
               </div>
               <div className="flex shrink-0 gap-2">
@@ -639,11 +695,15 @@ function MemberAclSection({ documentId }: { documentId: string }) {
                   size="sm"
                   disabled={busyIdentity !== null}
                   onClick={() => {
-                    setIdentityId(entry.identityId);
+                    setSelectedMember({
+                      identityId: entry.identityId,
+                      displayName: entry.displayName ?? entry.identityId,
+                      email: entry.email,
+                    });
+                    setRole(entry.role ?? 'custom');
                     setActions(entry.actions.filter((action) => editableActions.includes(action)));
                     setError(null);
                     setNotice(null);
-                    identityInputRef.current?.focus();
                   }}
                 >
                   编辑权限
@@ -700,12 +760,23 @@ export function DocumentShareDialog({
   onOpenChange,
   documentId,
   canManage,
+  canShare,
+  canWrite,
+  canComment,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   documentId: string;
   canManage: boolean;
+  canShare: boolean;
+  canWrite: boolean;
+  canComment: boolean;
 }) {
+  const authorization = useQuery({
+    queryKey: ['document-authorization', documentId],
+    queryFn: ({ signal }) => explainDocumentAuthorization(documentId, { signal }),
+    enabled: open,
+  });
   return (
     <PanelDialog
       open={open}
@@ -713,17 +784,46 @@ export function DocumentShareDialog({
       title="分享与权限"
       description="把知识分享给需要的人，自由控制查看与编辑权限。"
     >
-      {canManage ? (
+      {canManage || canShare ? (
         <div className="space-y-8 text-foreground">
-          <LinkShareSection documentId={documentId} />
-          <details className="rounded-xl border border-border/70 bg-background/50 p-4">
-            <summary className="cursor-pointer text-[13px] font-medium text-muted-foreground">
-              成员权限设置
-            </summary>
-            <div className="mt-5">
-              <MemberAclSection documentId={documentId} />
-            </div>
+          {canManage && <DocumentAccessMode documentId={documentId} />}
+          <details className="rounded-xl border p-3 text-xs">
+            <summary className="cursor-pointer">我的权限来源</summary>
+            {authorization.isError ? (
+              <p role="alert">权限来源加载失败，请重新打开重试。</p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                <p>
+                  当前有效角色：
+                  {authorization.data?.roles
+                    .map((role) => permissionNames[role] ?? role)
+                    .join('、') || '正在加载'}
+                </p>
+                <p>
+                  直接授权来源：
+                  {authorization.data?.directGrants
+                    .map(
+                      (g) =>
+                        `${g.sourceShareId ? (g.kind === 'access' ? '限时访问链接' : '长期邀请') : '成员直接授权'} · ${permissionNames[g.role] ?? g.role}${g.active ? '' : '（已失效）'}`,
+                    )
+                    .join('；') || '通过空间或目录继承'}
+                </p>
+              </div>
+            )}
           </details>
+          {canShare && (
+            <LinkShareSection documentId={documentId} canGrantEdit={canWrite && canComment} />
+          )}
+          {canManage && (
+            <details className="rounded-xl border border-border/70 bg-background/50 p-4">
+              <summary className="cursor-pointer text-[13px] font-medium text-muted-foreground">
+                成员权限设置
+              </summary>
+              <div className="mt-5">
+                <MemberAclSection documentId={documentId} />
+              </div>
+            </details>
+          )}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">你没有这篇文档的分享管理权限。</p>

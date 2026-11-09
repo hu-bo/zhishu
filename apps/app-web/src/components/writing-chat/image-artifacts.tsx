@@ -4,7 +4,7 @@ import {
   getWritingImageAccess,
   listWritingImages,
   refreshWritingImage,
-} from '@/api/generated/app-api';
+} from '@/api/generated/writing-chat';
 import { errorMessage } from '@/api/api-error';
 import { useState } from 'react';
 

@@ -5,6 +5,8 @@ import { useEditorSelector } from "@zhishu/editor-react";
 import type { EditorAIAction, EditorHostServices, EditorTextSelection } from "@zhishu/editor-react";
 import { EditorIcon, type EditorIconName } from "./editor-icon.js";
 import { EditorLinkEditor, type EditorLinkEditorMessages } from "./editor-link-editor.js";
+import { useEditorInsertionActions, type EditorSlashMenuMessages } from "./editor-slash-menu.js";
+import { EditorStructureFeedback } from "./editor-structure-feedback.js";
 
 export interface EditorToolbarMessages {
   label: string;
@@ -40,7 +42,6 @@ export interface EditorToolbarMessages {
   alignRight: string;
   bulletList: string;
   orderedList: string;
-  commandMenu: string;
   blockStructureUnavailable: string;
   code: string;
   undo: string;
@@ -95,7 +96,6 @@ const defaultMessages: ResolvedEditorToolbarMessages = {
   alignRight: "右对齐",
   bulletList: "无序列表",
   orderedList: "有序列表",
-  commandMenu: "插入块和命令",
   blockStructureUnavailable: "当前模式暂不支持此块操作",
   code: "行内代码",
   undo: "撤销",
@@ -117,7 +117,9 @@ const defaultMessages: ResolvedEditorToolbarMessages = {
 export interface EditorToolbarProps {
   messages?: Partial<EditorToolbarMessages>;
   className?: string;
-  onOpenCommandMenu?: (selection: { from: number; to: number } | null) => void;
+  insertCommands?: boolean;
+  insertCommandCapabilities?: readonly string[];
+  insertCommandMessages?: Partial<EditorSlashMenuMessages>;
   outlineToggle?: ReactNode;
   linkEditorOpenRequest?: number;
   linkEditorMessages?: Partial<EditorLinkEditorMessages>;
@@ -147,7 +149,7 @@ function ToolbarDropdown({
       }
     };
     const closeOnEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Escape" || !detailsRef.current?.open) return;
+      if (event.key !== "Escape" || event.isComposing || !detailsRef.current?.open) return;
       event.preventDefault();
       detailsRef.current.open = false;
       summaryRef.current?.focus({ preventScroll: true });
@@ -184,7 +186,7 @@ function ToolbarDropdown({
           focusFirstItem();
         }
       }}
-      onClick={(event) => {
+      onClickCapture={(event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
         const item = target.closest<HTMLButtonElement>("button[data-menu-action]");
@@ -224,12 +226,14 @@ type ToolbarAction = {
 export function EditorToolbar({
   messages,
   className,
-  onOpenCommandMenu,
+  insertCommands = false,
+  insertCommandCapabilities,
+  insertCommandMessages,
   outlineToggle,
   linkEditorOpenRequest,
   linkEditorMessages,
 }: EditorToolbarProps) {
-  const { controller, hostServices, collaboration, collaborationStatus } = useEditorInstance();
+  const { controller, hostServices, collaboration } = useEditorInstance();
   const isEditable = useEditorSelector((state) => state.isEditable);
   const readOnlyReason = useEditorSelector((state) => state.readOnlyReason);
   const canUndo = useEditorSelector((state) => state.canUndo);
@@ -238,11 +242,12 @@ export function EditorToolbar({
   const block = useEditorSelector((state) => state.block);
   const list = useEditorSelector((state) => state.list);
   const blockStructure = useEditorSelector((state) => state.capabilities.blockStructure);
-  const collaborativeStructureAllowed =
-    collaboration?.readOnly === false &&
-    collaborationStatus?.connection === "connected" &&
-    collaborationStatus.sync === "current" &&
-    typeof collaboration.submitStructureOperation === "function";
+  const {
+    visibleActions: commands,
+    getActionDisabledReason,
+    contentAction,
+  } = useEditorInsertionActions(null, insertCommandCapabilities, insertCommandMessages);
+  const [toolbarLinkOpenRequest, setToolbarLinkOpenRequest] = useState(0);
   const selection = useEditorSelector((state) => state.selection);
   const highlightColor = useEditorSelector((state) => state.highlightColor);
   const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
@@ -575,27 +580,6 @@ export function EditorToolbar({
           pressed: list.ordered,
           run: () => controller?.toggleOrderedList(),
         },
-        ...(onOpenCommandMenu
-          ? [
-              {
-                id: "insert-menu",
-                label: labels.commandMenu,
-                icon: "more" as const,
-                disabled:
-                  !controller || (!blockStructure.allowed && !collaborativeStructureAllowed),
-                disabledReason: !controller
-                  ? labels.editorNotReady
-                  : !blockStructure.allowed && !collaborativeStructureAllowed
-                    ? blockStructure.reason === "read-only"
-                      ? (readOnlyReason ?? labels.currentlyReadOnly)
-                      : labels.blockStructureUnavailable
-                    : undefined,
-                run: () => {
-                  onOpenCommandMenu(captureSelection());
-                },
-              },
-            ]
-          : []),
       ],
     },
     {
@@ -708,8 +692,6 @@ export function EditorToolbar({
           ]
         : []),
   ];
-  const allActions = groups.flatMap((group) => group.actions);
-  const actionById = (id: string) => allActions.find((action) => action.id === id);
   const formattingActions = groups.find((group) => group.id === "formatting")?.actions ?? [];
   const historyActions = groups.find((group) => group.id === "history")?.actions ?? [];
   const recoveryActions = groups.find((group) => group.id === "upload-recovery")?.actions ?? [];
@@ -776,10 +758,38 @@ export function EditorToolbar({
   ];
   const alignmentActions = groups.find((group) => group.id === "alignment")?.actions ?? [];
   const listActions = groups.find((group) => group.id === "lists")?.actions ?? [];
-  const insertionActions = [
-    ...(actionById("insert-menu") ? [actionById("insert-menu")] : []),
-    ...(actionById("image") ? [actionById("image")] : []),
-  ].filter((action): action is ToolbarAction => action !== undefined);
+  const insertionActions = groups.find((group) => group.id === "attachments")?.actions ?? [];
+  if (linkEditorOpenRequest !== undefined) {
+    const disabledReason = !controller
+      ? labels.editorNotReady
+      : !isEditable
+        ? (readOnlyReason ?? labels.currentlyReadOnly)
+        : undefined;
+    insertionActions.push({
+      id: "link",
+      label: linkEditorMessages?.label ?? "插入或编辑链接",
+      visibleLabel: linkEditorMessages?.title ?? "链接",
+      icon: "link",
+      disabled: disabledReason !== undefined,
+      disabledReason,
+      shortcut: "Ctrl/Cmd+K",
+      keyShortcuts: "Control+K Meta+K",
+      run: () => setToolbarLinkOpenRequest((request) => request + 1),
+    });
+  }
+  if (insertCommands) {
+    for (const action of commands) {
+      const disabledReason = getActionDisabledReason(action);
+      insertionActions.push({
+        id: action.id,
+        label: action.label,
+        icon: action.icon,
+        disabled: disabledReason !== undefined,
+        disabledReason,
+        run: () => action.run(controller),
+      });
+    }
+  }
   const currentSelection = (): EditorTextSelection | null => captureSelection();
 
   return (
@@ -813,9 +823,7 @@ export function EditorToolbar({
         <div className="zhishu-ui-toolbar-menu-divider" />
         <p className="zhishu-ui-toolbar-menu-heading">{labels.listGroup}</p>
         <div className="zhishu-ui-toolbar-menu-section" role="group" aria-label={labels.listGroup}>
-          {listActions
-            .filter((action) => action.id !== "insert-menu")
-            .map((action) => renderAction(action, true))}
+          {listActions.map((action) => renderAction(action, true))}
         </div>
       </ToolbarDropdown>
       <div
@@ -876,7 +884,11 @@ export function EditorToolbar({
         </div>
       </ToolbarDropdown>
       {linkEditorOpenRequest !== undefined && (
-        <EditorLinkEditor messages={linkEditorMessages} openRequest={linkEditorOpenRequest} />
+        <EditorLinkEditor
+          hideTrigger
+          messages={linkEditorMessages}
+          openRequest={linkEditorOpenRequest + toolbarLinkOpenRequest}
+        />
       )}
       {insertionActions.length > 0 && (
         <ToolbarDropdown label={labels.insertGroup} icon="more" className="is-insert-menu">
@@ -889,6 +901,7 @@ export function EditorToolbar({
           </div>
         </ToolbarDropdown>
       )}
+      {insertCommands && <EditorStructureFeedback action={contentAction} />}
       {hostServices.requestAIAction && (
         <ToolbarDropdown label={labels.aiCreate} icon="sparkles" className="is-ai-menu">
           {hostServices.requestAIAction ? (

@@ -131,3 +131,7 @@ React、React DOM 和相应 Tiptap React 运行时采用一致的 peer 兼容范
 `examples/editor-consumer` 的 `/lifecycle` 入口提供双实例、动态 selector、主题/只读/文档切换、手动完成的本地上传和内存 Yjs 双端。2026-10-03 Edge 验证节点错误重试保持 JSON、取消/失效锚点/旧文档迟到上传不误插入，以及远端格式/撤销/统计投影。30 次选区移动没有序列化正文、重算统计或重渲染宿主页；12 轮 StrictMode 双实例卸载后 controller/store/session 监听与观察器归零、资源请求全部取消。该内存传输仅验证适配与订阅，服务端 durable 验收使用 `/collaboration` 与应用链路。
 
 独立 `/bare.html` 入口不导入 editor-ui 或其 CSS，只通过 Provider/Surface 和宿主按钮消费公开 core 命令；Vite build 同时生成这两个独立入口。SSR hydration 与物理输入法/跨浏览器矩阵仍待验。
+
+## 成员目录宿主接口（2026-10-31）
+
+`EditorHostServices.searchMembers(query, signal)` 异步提供 `EditorMentionMember[]`（identityId、displayName，可选 email/title）。应用负责真实身份来源、访问过滤与请求取消，包不连接业务目录或发送通知；未注入接口时不显示 @ 菜单。身份、工作区和文档切换沿用 Provider 生命周期；阅读模式保留既有提及但隐藏插入动作。

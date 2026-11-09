@@ -48,3 +48,4 @@ export {
   EditorStatusTagView,
   defaultEditorNodeViews,
 } from "./editor-content-node-views.js";
+export { EditorMentionMenu } from "./editor-mention-menu.js";

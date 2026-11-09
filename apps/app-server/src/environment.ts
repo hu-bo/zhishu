@@ -1,4 +1,4 @@
 import { config } from "dotenv";
 import { resolve } from "node:path";
-import { workspaceRoot } from "./paths.js";
-config({ path: resolve(workspaceRoot, ".env") });
+import { serverRoot } from "./paths.js";
+config({ path: resolve(serverRoot, ".env") });

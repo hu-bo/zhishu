@@ -9,6 +9,7 @@ import type { EditorCapability, EditorController } from "@zhishu/editor-core";
 export type MarkActivity = boolean | "mixed";
 function statisticsText(doc: EditorController["editor"]["state"]["doc"]): string {
   return doc.textBetween(0, doc.content.size, "\n", (node) => {
+    if (node.type.name === "mention") return `@${String(node.attrs.label ?? "")}`;
     if (node.type.name === "statusTag") {
       const status = DOCUMENT_STATUSES.find((value) => value === node.attrs.status) ?? "todo";
       return DOCUMENT_STATUS_LABELS[status];

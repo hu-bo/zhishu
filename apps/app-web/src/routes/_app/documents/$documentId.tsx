@@ -1,7 +1,8 @@
-import { createFileRoute, Link, Navigate } from '@tanstack/react-router';
+import { useEffect } from 'react';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, ArrowLeft, LoaderCircle } from 'lucide-react';
-import { locateDocument } from '@/api/generated/app-api';
+import { locateDocument } from '@/api/generated/knowledge';
 import { ApiError, errorMessage } from '@/api/api-error';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { useKnowledgeWorkspace } from '@/features/knowledge/workspace-context';
@@ -11,13 +12,13 @@ export const Route = createFileRoute('/_app/documents/$documentId')({
 });
 
 /**
- * Legacy document URL → space locator shim. The editor lives at
  * Legacy document URL → canonical space document route. The access token lives
  * in memory, so the lookup runs in the component rather than `beforeLoad`.
  */
 function DocumentLocator() {
   const { documentId } = Route.useParams();
-  const { identityKey, enabled } = useKnowledgeWorkspace();
+  const navigate = useNavigate();
+  const { identityKey, enabled, authPending } = useKnowledgeWorkspace();
   const locate = useQuery({
     queryKey: ['document-locate', identityKey, documentId],
     queryFn: ({ signal }) => locateDocument(documentId, { signal }),
@@ -25,19 +26,18 @@ function DocumentLocator() {
     enabled,
     retry: (count, error) => !(error instanceof ApiError && error.status === 404) && count < 2,
   });
+  const workspaceId = locate.data?.workspaceId;
+  useEffect(() => {
+    if (!enabled || !workspaceId) return;
+    void navigate({
+      to: '/spaces/$workspaceId/doc/$documentId',
+      params: { workspaceId, documentId },
+      replace: true,
+    });
+  }, [enabled, workspaceId, documentId, navigate]);
 
-  if (!enabled)
+  if (!enabled && !authPending)
     return <p className="p-8 text-center text-sm text-muted-foreground">请登录后打开文档。</p>;
-
-  if (locate.data) {
-    return (
-      <Navigate
-        to="/spaces/$workspaceId/doc/$documentId"
-        params={{ workspaceId: locate.data.workspaceId, documentId }}
-        replace
-      />
-    );
-  }
 
   if (locate.isError) {
     const missing = locate.error instanceof ApiError && locate.error.status === 404;

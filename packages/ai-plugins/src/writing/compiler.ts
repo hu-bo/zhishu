@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
   checkSnapshotCompatibility,
+  displayLatexPattern,
+  inlineLatexPattern,
+  isValidMathSource,
+  MATHEMATICS_DOCUMENT_SCHEMA_VERSION,
   SUPPORTED_DOCUMENT_SCHEMA_VERSIONS,
   validateDocumentSnapshot,
   type DocumentBlock,
@@ -15,7 +19,7 @@ import {
   type EvidenceBundle,
   type SourceCitation,
 } from "@zhishu/ai-contracts";
-import type { WritingInput as AuthoringInput, CompilerOptions as RuntimeOptions } from "./types.js";
+import type { WritingInput, CompilerOptions } from "./types.js";
 import { fail } from "../errors.js";
 
 export const hashContent = (value: unknown): string =>
@@ -52,7 +56,47 @@ export const AuthoringOutputSchema = z
   .strict()
   .meta({ title: "authoring_result" });
 export type AuthoringOutput = z.infer<typeof AuthoringOutputSchema>;
-export function validateInput(input: AuthoringInput, options: RuntimeOptions): void {
+
+type OutputBlock = AuthoringOutput["blocks"][number];
+type DraftBlock = OutputBlock | { type: "blockMath"; text: string };
+type Paragraph = Extract<DocumentBlock, { type: "paragraph" }>;
+
+function splitDisplayMath(block: OutputBlock): DraftBlock[] {
+  if (block.type !== "paragraph") return [block];
+  const blocks: DraftBlock[] = [];
+  let offset = 0;
+  const addParagraph = (end: number) => {
+    const text = block.text.slice(offset, end).replace(/^(?:\r?\n)+|(?:\r?\n)+$/gu, "");
+    if (text) blocks.push({ type: "paragraph", text });
+  };
+  for (const match of block.text.matchAll(new RegExp(displayLatexPattern.source, "gmu"))) {
+    const latex = match[1]!.trim();
+    if (!isValidMathSource(latex)) continue;
+    addParagraph(match.index);
+    blocks.push({ type: "blockMath", text: latex });
+    offset = match.index + match[0].length;
+  }
+  if (offset === 0) return [block];
+  addParagraph(block.text.length);
+  return blocks;
+}
+
+function inlineContent(text: string): NonNullable<Paragraph["content"]> {
+  const content: NonNullable<Paragraph["content"]> = [];
+  let offset = 0;
+  const pattern = new RegExp(`${displayLatexPattern.source}|${inlineLatexPattern.source}`, "gmu");
+  for (const match of text.matchAll(pattern)) {
+    const latex = (match[1] ?? match[2] ?? match[3]!).trim();
+    if (!isValidMathSource(latex)) continue;
+    if (offset < match.index) content.push({ type: "text", text: text.slice(offset, match.index) });
+    content.push({ type: "inlineMath", attrs: { latex } });
+    offset = match.index + match[0].length;
+  }
+  if (offset < text.length) content.push({ type: "text", text: text.slice(offset) });
+  return content;
+}
+
+export function validateInput(input: WritingInput, options: CompilerOptions): void {
   const { request, snapshot } = input;
   const checked = validateAiTaskRequest(request);
   if (!checked.success)
@@ -118,11 +162,10 @@ export function validateInput(input: AuthoringInput, options: RuntimeOptions): v
     )
       fail("UNSUPPORTED_TARGET");
   }
-  if (request.intent === "research" && (!options.researchTools || !options.verifyEvidence))
-    fail("INSUFFICIENT_EVIDENCE");
+  if (request.intent === "research" && !options.researchAvailable) fail("INSUFFICIENT_EVIDENCE");
 }
 export function compileProposal(
-  input: AuthoringInput,
+  input: WritingInput,
   outputValue: unknown,
   evidence: EvidenceBundle,
 ): AuthoringProposal {
@@ -151,6 +194,13 @@ export function compileProposal(
   const replacing = request.intent === "rewrite" || request.intent === "translate";
   const replacingDocument = request.intent === "rewrite-document";
   if (replacing && output.blocks.length !== 1) fail("INVALID_OUTPUT");
+  const supportsMath = input.snapshot.schemaVersion >= MATHEMATICS_DOCUMENT_SCHEMA_VERSION;
+  const expandedBlocks =
+    supportsMath && !replacing ? output.blocks.flatMap(splitDisplayMath) : output.blocks;
+  const draftBlocks =
+    expandedBlocks.length <= (request.constraints?.maxBlocks ?? 256)
+      ? expandedBlocks
+      : output.blocks;
   if (request.target.kind === "selection") fail("UNSUPPORTED_TARGET");
   let afterBlockId =
     request.target.kind === "document"
@@ -160,19 +210,23 @@ export function compileProposal(
         : request.target.blocks.at(-1)!.blockId;
   const anchor = afterBlockId;
   const idSeed = hashContent([input.threadId, request.requestId]).slice(7);
-  const blocks = output.blocks.map((block, index): DocumentBlock => {
+  const blocks = draftBlocks.map((block, index): DocumentBlock => {
     const blockId =
       replacingDocument && input.snapshot.content.content[index]
         ? input.snapshot.content.content[index]!.attrs.blockId
         : replacing
           ? anchor!
           : `block_${createHash("sha256").update(`${idSeed}:${index}`).digest("hex").slice(0, 48)}`;
-    const content = block.text ? [{ type: "text" as const, text: block.text }] : [];
+    if (block.type === "blockMath")
+      return { type: "blockMath", attrs: { blockId, latex: block.text } };
+    const text = block.text ? [{ type: "text" as const, text: block.text }] : [];
+    if (block.type === "codeBlock") {
+      return { type: "codeBlock", attrs: { blockId, language: block.language }, content: text };
+    }
+    const content = supportsMath ? inlineContent(block.text) : text;
     return block.type === "heading"
       ? { type: "heading", attrs: { blockId, level: block.level }, content }
-      : block.type === "codeBlock"
-        ? { type: "codeBlock", attrs: { blockId, language: block.language }, content }
-        : { type: "paragraph", attrs: { blockId }, content };
+      : { type: "paragraph", attrs: { blockId }, content };
   });
   const proposal: AuthoringProposal = {
     proposalId: `proposal_${idSeed.slice(0, 48)}`,

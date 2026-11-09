@@ -33,7 +33,7 @@ apps/workflow-web/
     lib/cn.ts
     styles/globals.css
     vite-env.d.ts
-  scripts/api-check.ts
+  scripts/api-generate.ts
   components.json
   orval.config.ts
   tsr.config.json
@@ -53,27 +53,31 @@ UI 暂无跨组件客户端状态，不创建空 Zustand store；远程数据只
 
 ```powershell
 pnpm install
-pnpm dev:web
+cd apps/app-web
+pnpm dev
 ```
 
 打开 [Workflow Web](http://127.0.0.1:5173)。开发默认将 `/api` 代理到 `http://127.0.0.1:3000`。前端可以独立启动；后端不可用时展示错误与重试状态，不返回虚构数据。
 
-完整联调请按根目录 README 配置 PostgreSQL 并执行 migration，然后使用 `pnpm dev` 同时启动前后端。当前页面管理基础信息；AST 编辑与工作流执行属于后续功能。
+完整联调请按根目录 README 配置 PostgreSQL 并执行 migration，然后分别在 `apps/app-server` 和 `apps/app-web` 目录执行 `pnpm dev` 启动前后端。当前页面管理基础信息；AST 编辑与工作流执行属于后续功能。
+
+前端 dev 直接读取所依赖工作区包的 `src`，修改编辑器源码即可热更新；并行执行 typecheck/build 对 `dist` 的重编译不会触发页面更新。生产 build 仍按包的公开 exports 消费构建产物。若代理报告 `ECONNREFUSED 127.0.0.1:3000`，请检查后端是否已成功启动。
 
 可选复制本目录 `.env.example` 为 `.env`。`API_PROXY_TARGET` 只影响 Vite dev/preview 代理；`VITE_API_BASE_URL` 是浏览器公开配置，默认空字符串用于同源 `/api`，不要加入 secret。跨域 API 需要后端额外配置 CORS；当前默认同源。
 
 ## API Contract
 
-Orval 直接读取 `../workflow-server/openapi.json`，避免复制 contract。前端类型、请求、Query options、mutation hooks 全部自动生成。
+Orval 直接读取 `../app-server/openapi.json`，避免复制 contract。前端类型、请求、Query options、mutation hooks 全部自动生成。
 
 从仓库根目录执行：
 
 ```powershell
-pnpm api:generate
-pnpm api:check
+pnpm --dir apps/app-server openapi:export
+pnpm --dir apps/app-web api:generate
+pnpm --dir apps/app-web api:check
 ```
 
-`api:generate` 先导出实际后端 routes，再生成前端代码，无需数据库。`api:check` 比较重新生成前后的所有文件，覆盖内容修改、新增与删除，发生漂移返回非零并保留新结果；即使仓库还没初始化 Git 也能使用。
+后端 OpenAPI 离线导出无需数据库。`api:generate` 在临时目录生成完整结果，成功后仅替换内容发生变化的文件，再删除失效文件；重复生成不改写源码，避免 dev 期间批量 HMR 和生成目录被清空造成的模块缺失。`api:check` 使用同一流程，比较内容修改、新增与删除，发生漂移返回非零并保留新结果；即使仓库还没初始化 Git 也能使用。
 
 请求通过统一 fetch transport 传递 AbortSignal，处理 JSON、204、网络错误与后端 error envelope。错误转换为安全中文提示；slug 冲突显示在对应表单字段。写操作不自动重试。删除使用 Base UI 确认弹窗。
 

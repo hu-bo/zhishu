@@ -15,7 +15,7 @@ import {
   replacementBatch,
 } from "@zhishu/ai-contracts";
 import { createAuthoringRuntime, hashContent } from "../dist/index.js";
-import { applyOperationBatch } from "@zhishu/document-contracts";
+import { applyOperationBatch, CURRENT_DOCUMENT_SCHEMA_VERSION } from "@zhishu/document-contracts";
 
 const block = {
   type: "paragraph",
@@ -126,6 +126,43 @@ const completed = (events) => {
   assert.equal(validator.finish().success, true);
   return events.find((event) => event.type === "proposal").payload;
 };
+
+test("AI authoring writes formula nodes while preserving text after a delimiter", async () => {
+  const source = [
+    "$$a^2 - b^2 = (a+b)(a-b)$$s",
+    "$$(a+b)^2 = a^2 + 2ab + b^2$$",
+    String.raw`$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$`,
+  ].join("\n");
+  const original = input("formula_run");
+  original.snapshot.schemaVersion = CURRENT_DOCUMENT_SCHEMA_VERSION;
+  const model = new ScriptedModel([
+    [
+      {
+        name: "authoring_result",
+        args: { ...output, blocks: [{ type: "paragraph", text: source }] },
+        id: "formula_result",
+      },
+    ],
+  ]);
+  const runtime = createAuthoringRuntime(options(model));
+  const proposal = completed(
+    await collect(runtime.generate(original, AbortSignal.timeout(10_000))),
+  );
+  const applied = applyOperationBatch(original.snapshot.content, proposal.operationBatch, {
+    documentId: original.snapshot.documentId,
+    generationId: original.snapshot.generationId,
+  });
+  assert.ok(applied.success);
+  const [paragraph, binomial, quadratic] = applied.content.content.slice(1);
+  assert.deepEqual(paragraph.content, [
+    { type: "inlineMath", attrs: { latex: "a^2 - b^2 = (a+b)(a-b)" } },
+    { type: "text", text: "s" },
+  ]);
+  assert.equal(binomial.type, "blockMath");
+  assert.equal(binomial.attrs.latex, "(a+b)^2 = a^2 + 2ab + b^2");
+  assert.equal(quadratic.type, "blockMath");
+  assert.equal(quadratic.attrs.latex, String.raw`x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}`);
+});
 
 test("real Deep Agents streams a restricted proposal; completed checkpoints compile without another model call", async () => {
   const model = new ScriptedModel([]),

@@ -11,6 +11,7 @@ export default tseslint.config(
       ".claude/**",
       "syncscribe/**",
       "output/**",
+      ".playwright-cli/**",
       // Design-reference demo, not part of the shipped workspace.
       "zhishu-demo-gemini/**",
       // app-web has its own flat config (react-hooks / react-refresh plugins)

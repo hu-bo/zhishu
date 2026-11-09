@@ -13,7 +13,7 @@ import {
   LockKeyhole,
   Trash2,
 } from 'lucide-react';
-import { listCatalogChildren, moveCatalog, moveKnowledgeDocument } from '@/api/generated/app-api';
+import { listCatalogChildren, moveCatalog, moveKnowledgeDocument } from '@/api/generated/knowledge';
 import { errorMessage } from '@/api/api-error';
 import { invalidateSpaceData } from './space-data';
 import {
@@ -66,6 +66,8 @@ function CatalogRow({
     icon: string | null;
     hasChildren: boolean;
     canManage: boolean;
+    canWrite: boolean;
+    canMove: boolean;
   };
   depth: number;
   parentCatalogId: string;
@@ -78,7 +80,7 @@ function CatalogRow({
   const ref = useAutoScrollIntoView(active);
   const dropTarget = useCatalogDropTarget(
     { catalogId: catalog.id, parentCatalogId, beforeCatalogId: catalog.id },
-    catalog.canManage ? { kind: 'catalog', id: catalog.id } : undefined,
+    catalog.canMove ? { kind: 'catalog', id: catalog.id } : undefined,
   );
   return (
     <div
@@ -118,7 +120,7 @@ function CatalogRow({
         </span>
         <span className="min-w-0 flex-1 truncate">{catalog.name}</span>
       </button>
-      {catalog.canManage && (
+      {(catalog.canWrite || catalog.canManage || catalog.canMove) && (
         <Menu>
           <MenuTrigger
             render={
@@ -133,16 +135,23 @@ function CatalogRow({
             }
           />
           <MenuContent align="end">
-            <MenuItem onClick={() => onAction({ kind: 'create-catalog', parentId: catalog.id })}>
+            <MenuItem
+              isDisabled={!catalog.canWrite}
+              onClick={() => onAction({ kind: 'create-catalog', parentId: catalog.id })}
+            >
               <FolderPlus size={14} aria-hidden="true" />
               新建子目录
             </MenuItem>
-            <MenuItem onClick={() => onAction({ kind: 'create-document', catalogId: catalog.id })}>
+            <MenuItem
+              isDisabled={!catalog.canWrite}
+              onClick={() => onAction({ kind: 'create-document', catalogId: catalog.id })}
+            >
               <FilePlus2 size={14} aria-hidden="true" />
               在此新建文档
             </MenuItem>
             <MenuSeparator />
             <MenuItem
+              isDisabled={!catalog.canWrite}
               onClick={() =>
                 onAction({
                   kind: 'rename-catalog',
@@ -154,6 +163,7 @@ function CatalogRow({
               重命名…
             </MenuItem>
             <MenuItem
+              isDisabled={!catalog.canMove}
               onClick={() =>
                 onAction({ kind: 'move-catalog', catalog: { id: catalog.id, name: catalog.name } })
               }
@@ -161,9 +171,18 @@ function CatalogRow({
               <FolderInput size={14} aria-hidden="true" />
               移动到…
             </MenuItem>
+            {/* Directory ACL is deferred; connect this entry through CatalogActionDialogs later. */}
+            {catalog.canManage && (
+              <MenuItem isDisabled>
+                <LockKeyhole size={14} aria-hidden="true" />
+                目录权限
+                <span className="ml-auto text-xs">规划中</span>
+              </MenuItem>
+            )}
             <MenuSeparator />
             <MenuItem
               variant="destructive"
+              isDisabled={!catalog.canManage}
               onClick={() =>
                 onAction({
                   kind: 'delete-catalog',
@@ -195,6 +214,7 @@ function DocumentRow({
     icon: string | null;
     metadataRevision: number;
     canWrite: boolean;
+    canMove: boolean;
     canManage: boolean;
   };
   depth: number;
@@ -206,7 +226,7 @@ function DocumentRow({
   const ref = useAutoScrollIntoView(active);
   const dropTarget = useCatalogDropTarget(
     { catalogId, beforeDocumentId: document.id },
-    document.canManage
+    document.canMove
       ? { kind: 'document', id: document.id, metadataRevision: document.metadataRevision }
       : undefined,
   );
@@ -236,7 +256,7 @@ function DocumentRow({
           <LockKeyhole size={13} className="shrink-0 text-muted-foreground" aria-hidden="true" />
         )}
       </button>
-      {document.canManage && (
+      {document.canMove && (
         <Menu>
           <MenuTrigger
             render={

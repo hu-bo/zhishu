@@ -1,6 +1,0 @@
-{
-  "name": "SyncScribe",
-  "description": "A real-time collaborative rich-text editor built on Tiptap, Yjs CRDTs, and a server-side WebSocket synchronization layer.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

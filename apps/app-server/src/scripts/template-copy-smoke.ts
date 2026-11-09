@@ -16,7 +16,7 @@ import {
   sameDocumentContent,
   writeStoredStructureState,
 } from "../modules/collaboration/structure-operations.js";
-import { DocumentRepository } from "../modules/documents/document.repository.js";
+import { DocumentRepository, DocumentHistoryRepository } from "../modules/documents/index.js";
 import type { DocumentContent } from "@zhishu/document-contracts";
 import * as Y from "yjs";
 
@@ -34,6 +34,7 @@ const app = await buildApp(
   loadConfig({ ...process.env, NODE_ENV: "test", AUTH_MODE: "mock", LOG_LEVEL: "silent" }),
 );
 const repository = new DocumentRepository(app.db);
+const history = new DocumentHistoryRepository(app.db);
 let sourceId: string | undefined;
 let copiedId: string | undefined;
 let sourceDocument: Y.Doc | undefined;
@@ -154,7 +155,7 @@ try {
   assert.notEqual(copy.generationId, source.generationId);
   assert.equal(copy.durableSeq, 1);
 
-  const copiedUpdates = await repository.loadUpdates(copy.id, copy.generationId, copy.durableSeq);
+  const copiedUpdates = await history.loadUpdates(copy.id, copy.generationId, copy.durableSeq);
   assert.equal(copiedUpdates.length, 1);
   copiedDocument = new Y.Doc();
   for (const update of copiedUpdates) Y.applyUpdate(copiedDocument, update.updateBytes);

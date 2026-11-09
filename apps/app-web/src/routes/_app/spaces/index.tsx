@@ -10,10 +10,10 @@ import {
   Settings,
   Users,
 } from 'lucide-react';
-import type { ListKnowledgeWorkspaces200Item } from '@/api/generated/models';
+import type { ListKnowledgeWorkspaces200Item } from '@/api/generated/app-api.schemas';
 import { WorkspaceSettingsDialog } from '@/features/knowledge/workspace-settings-dialog';
 import { WORKSPACE_KIND_LABELS, WORKSPACE_ROLE_LABELS } from '@/features/knowledge/workspace-roles';
-import { createKnowledgeWorkspace } from '@/api/generated/app-api';
+import { createKnowledgeWorkspace } from '@/api/generated/knowledge';
 import { errorMessage } from '@/api/api-error';
 import { Button } from '@/components/ui/button';
 import {

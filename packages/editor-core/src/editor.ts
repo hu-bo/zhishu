@@ -12,12 +12,14 @@ import {
   normalizeDocumentContent,
   TEXT_ALIGNMENTS,
   validateDocumentContent,
+  isValidMathSource,
 } from "@zhishu/document-contracts";
 import type {
   ApplyOperationContext,
   ApplyOperationResult,
   DocumentBlock,
   DocumentContent,
+  DocumentMention,
   DocumentOperation,
   OperationBatch,
 } from "@zhishu/document-contracts";
@@ -26,6 +28,7 @@ import { createBaseEditorExtensions } from "./extensions.js";
 import type { BaseEditorExtensionsOptions } from "./extensions.js";
 import { findIndexedBlock, getIndexedHeadings } from "./index-plugin.js";
 import type { EditorLimitExceededReason, IndexedBlock } from "./index-plugin.js";
+import { promptMathSource, type RequestMathSource } from "./mathematics.js";
 import {
   createEmptyDocumentContent,
   normalizeTiptapDocumentJSON,
@@ -73,6 +76,7 @@ export type EditorStructureAction =
   | { type: "unwrap-callout"; targetBlockId: string }
   | { type: "set-divider-label"; targetBlockId: string; label: string }
   | { type: "make-divider"; targetBlockId: string; expectedText: string; label: string }
+  | { type: "make-block-math"; targetBlockId: string; expectedText: string; latex: string }
   | {
       type: "change-block-type";
       targetBlockId: string;
@@ -135,6 +139,7 @@ export interface CreateEditorOptions {
   statusTagNodeView?: BaseEditorExtensionsOptions["statusTagNodeView"];
   extensions?: Extensions;
   onLinkClick?: (href: string) => void;
+  requestMathSource?: RequestMathSource;
   onLimitExceeded?: (reason: EditorLimitExceededReason) => void;
   hashBlock?: ApplyOperationContext["hashBlock"];
   collaborative?: boolean;
@@ -320,7 +325,10 @@ export class EditorController {
   private destroyed = false;
   private readOnlyReason?: string;
 
+  readonly requestMathSource: RequestMathSource;
+
   constructor(options: CreateEditorOptions = {}) {
+    this.requestMathSource = options.requestMathSource ?? promptMathSource;
     if (options.collaborative && options.content !== undefined)
       throw new TypeError(
         "Collaborative editors read initial content from the synchronized Y.Doc.",
@@ -338,6 +346,7 @@ export class EditorController {
           : [createCodeBlockHighlightingExtension()]),
       ],
       onLinkClick: options.onLinkClick,
+      requestMathSource: this.requestMathSource,
       onLimitExceeded: options.onLimitExceeded,
       collaborative: options.collaborative,
       collaborationStructure,
@@ -742,7 +751,7 @@ export class EditorController {
           : { label: action.label }),
       };
       operations = [{ type: "replace-block", targetBlockId: action.targetBlockId, block }];
-    } else if (action.type === "make-divider") {
+    } else if (action.type === "make-divider" || action.type === "make-block-math") {
       const location = locateBlock(content, action.targetBlockId);
       const nodes = location?.block.type === "paragraph" ? (location.block.content ?? []) : [];
       const text = nodes.map((node) => (node.type === "text" ? node.text : "\uFFFC")).join("");
@@ -750,14 +759,15 @@ export class EditorController {
         !location ||
         location.block.type !== "paragraph" ||
         text !== action.expectedText ||
-        (text !== "" && !/^\/\S*$/u.test(text))
+        (text !== "" && !/^\/\S*$/u.test(text)) ||
+        (action.type === "make-block-math" && !isValidMathSource(action.latex))
       ) {
         return {
           success: false,
           result: operationFailure(
             operationId,
             "invalid-operation",
-            "A divider can replace only an empty paragraph or its slash command.",
+            "A divider or formula can replace only an empty paragraph or its slash command.",
           ),
         };
       }
@@ -765,12 +775,26 @@ export class EditorController {
         {
           type: "replace-block",
           targetBlockId: action.targetBlockId,
-          block: {
-            type: "horizontalRule",
-            attrs: { blockId: action.targetBlockId, label: action.label },
-          },
+          block:
+            action.type === "make-divider"
+              ? {
+                  type: "horizontalRule",
+                  attrs: { blockId: action.targetBlockId, label: action.label },
+                }
+              : {
+                  type: "blockMath",
+                  attrs: { blockId: action.targetBlockId, latex: action.latex },
+                },
         },
       ];
+      if (action.type === "make-block-math" && location.index === location.siblings.length - 1) {
+        operations.push({
+          type: "insert-block",
+          parentBlockId: location.parentBlockId,
+          afterBlockId: action.targetBlockId,
+          block: { type: "paragraph", attrs: { blockId: createBlockId() } },
+        });
+      }
     } else if (action.type === "duplicate-block") {
       const location = locateBlock(content, action.targetBlockId);
       if (!location) {
@@ -1492,7 +1516,14 @@ export class EditorController {
           return;
         }
 
-        const value = child.type.name === "hardBreak" ? "\n" : child.isInline ? "\uFFFC" : "";
+        const value =
+          child.type.name === "mention"
+            ? `@${String(child.attrs.label ?? "")}`
+            : child.type.name === "hardBreak"
+              ? "\n"
+              : child.isInline
+                ? "\uFFFC"
+                : "";
         if (value.length > 0) {
           blockText += value;
           for (let index = 0; index < value.length; index += 1) {
@@ -1576,14 +1607,21 @@ export class EditorController {
     return getIndexedHeadings(this.editor).map((block) => {
       const json = block.json as unknown as {
         attrs?: { level?: unknown };
-        content?: Array<{ text?: unknown }>;
+        content?: Array<{ type?: string; text?: unknown; attrs?: { label?: unknown } }>;
       };
       return {
         blockId: block.id,
         level: typeof json.attrs?.level === "number" ? json.attrs.level : 1,
         text:
-          json.content?.map((node) => (typeof node.text === "string" ? node.text : "")).join("") ??
-          "",
+          json.content
+            ?.map((node) =>
+              typeof node.text === "string"
+                ? node.text
+                : node.type === "mention"
+                  ? `@${String(node.attrs?.label ?? "")}`
+                  : "",
+            )
+            .join("") ?? "",
         position: block.position,
       };
     });
@@ -1699,6 +1737,44 @@ export class EditorController {
     });
   }
 
+  insertMention(member: DocumentMention, range?: { from: number; to: number }): boolean {
+    const selection = this.editor.state.selection;
+    if (
+      !this.canExecute("write").allowed ||
+      this.editor.view.composing ||
+      !selection.empty ||
+      !selection.$from.parent.inlineContent ||
+      selection.$from.parent.type.name === "codeBlock" ||
+      !/^[A-Za-z0-9._:@-]{1,256}$/.test(member.identityId) ||
+      !member.label.trim() ||
+      member.label.length > 80
+    )
+      return false;
+    const target = range ?? { from: selection.from, to: selection.to };
+    if (
+      target.to !== selection.from ||
+      target.from < selection.$from.start() ||
+      target.from > target.to
+    )
+      return false;
+    if (
+      range &&
+      !/^@[^\s\uFFFC]{0,100}$/u.test(
+        this.editor.state.doc.textBetween(target.from, target.to, "", "\uFFFC"),
+      )
+    )
+      return false;
+    return this.editor
+      .chain()
+      .focus()
+      .insertContentAt(target, [
+        { type: "mention", attrs: member },
+        { type: "text", text: " " },
+      ])
+      .setMeta(editorOriginMeta, "host-command")
+      .run();
+  }
+
   insertStatusTag(status: DocumentStatus = "todo"): boolean {
     if (
       !this.canExecute("write").allowed ||
@@ -1711,6 +1787,24 @@ export class EditorController {
       .chain()
       .focus()
       .insertContent({ type: "statusTag", attrs: { status } })
+      .setMeta(editorOriginMeta, "host-command")
+      .run();
+  }
+
+  insertInlineFormula(latex: string): boolean {
+    const { $from, $to } = this.editor.state.selection;
+    if (
+      !this.canExecute("write").allowed ||
+      !isValidMathSource(latex) ||
+      !$from.sameParent($to) ||
+      !$from.parent.inlineContent ||
+      $from.parent.type.spec.code
+    )
+      return false;
+    return this.editor
+      .chain()
+      .focus()
+      .insertContent({ type: "inlineMath", attrs: { latex } })
       .setMeta(editorOriginMeta, "host-command")
       .run();
   }

@@ -13,11 +13,9 @@ import {
 import {
   hashDocumentContent,
   summarizeDocumentContent,
-} from "../modules/documents/document.repository.js";
-import {
   collectAssetReferences,
   createCollaborationStateFromContent,
-} from "../modules/documents/document.service.js";
+} from "../modules/documents/index.js";
 import type { DocumentContent } from "@zhishu/document-contracts";
 
 // One-time standard → collaborative migration. MUST run before db:migrate drops

@@ -1,3 +1,4 @@
+import { readKnowledgeTree } from "../../shared/knowledge-transaction.js";
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import type { Database } from "../../../database/index.js";
@@ -6,11 +7,10 @@ import {
   assetReferences,
   assets,
   apiIdempotencyRecords,
-  documentAcl,
   documentGenerations,
   documents,
 } from "../../../database/schema/index.js";
-import { hasDocumentAction } from "../documents/document.repository.js";
+import { hasDocumentPermission } from "../authorization/permissions.js";
 import type { Principal } from "../identity/identity.types.js";
 import type { CreateAssetReferenceInput, CreateAssetUploadInput } from "./asset.schema.js";
 
@@ -32,8 +32,9 @@ export class AssetRepository {
   }): Promise<AssetRecord | null> {
     if (input.file.size > input.maxBytes) return null;
     return this.db.transaction(async (tx) => {
+      await readKnowledgeTree(tx, input.principal.tenantId);
       const [document] = await tx
-        .select({ id: documents.id, createdBy: documents.createdBy })
+        .select({ id: documents.id })
         .from(documents)
         .where(
           and(
@@ -45,16 +46,7 @@ export class AssetRepository {
         .for("update")
         .limit(1);
       if (!document) return null;
-      if (
-        document.createdBy !== input.principal.identityId &&
-        !(await this.hasAction(
-          tx,
-          input.principal.tenantId,
-          input.documentId,
-          input.principal.identityId,
-          "write",
-        ))
-      ) {
+      if (!(await hasDocumentPermission(tx, input.principal, input.documentId, "write"))) {
         return null;
       }
       const keyHash = input.idempotency
@@ -170,6 +162,7 @@ export class AssetRepository {
 
   async beginUpload(principal: Principal, assetId: string): Promise<AssetRecord | null> {
     return this.db.transaction(async (tx) => {
+      await readKnowledgeTree(tx, principal.tenantId);
       const [asset] = await tx
         .select()
         .from(assets)
@@ -244,6 +237,7 @@ export class AssetRepository {
 
   async completeUpload(principal: Principal, assetId: string): Promise<AssetRecord | null> {
     return this.db.transaction(async (tx) => {
+      await readKnowledgeTree(tx, principal.tenantId);
       const [asset] = await tx
         .select()
         .from(assets)
@@ -264,6 +258,7 @@ export class AssetRepository {
 
   async cancelUpload(principal: Principal, assetId: string): Promise<AssetRecord | null> {
     return this.db.transaction(async (tx) => {
+      await readKnowledgeTree(tx, principal.tenantId);
       const [asset] = await tx
         .select()
         .from(assets)
@@ -291,8 +286,9 @@ export class AssetRepository {
     reference: CreateAssetReferenceInput;
   }): Promise<boolean> {
     return this.db.transaction(async (tx) => {
+      await readKnowledgeTree(tx, input.principal.tenantId);
       const [document] = await tx
-        .select({ id: documents.id, createdBy: documents.createdBy })
+        .select({ id: documents.id })
         .from(documents)
         .where(
           and(
@@ -304,16 +300,7 @@ export class AssetRepository {
         .for("update")
         .limit(1);
       if (!document) return false;
-      if (
-        document.createdBy !== input.principal.identityId &&
-        !(await this.hasAction(
-          tx,
-          input.principal.tenantId,
-          input.documentId,
-          input.principal.identityId,
-          "write",
-        ))
-      ) {
+      if (!(await hasDocumentPermission(tx, input.principal, input.documentId, "write"))) {
         return false;
       }
       const [generation] = await tx
@@ -408,7 +395,7 @@ export class AssetRepository {
     action: "read" | "write",
   ): Promise<boolean> {
     const [document] = await db
-      .select({ createdBy: documents.createdBy })
+      .select({ id: documents.id })
       .from(documents)
       .where(
         and(
@@ -419,27 +406,6 @@ export class AssetRepository {
       )
       .limit(1);
     if (!document) return false;
-    if (document.createdBy === principal.identityId) return true;
-    return this.hasAction(db, asset.tenantId, asset.documentId, principal.identityId, action);
-  }
-
-  private async hasAction(
-    db: DatabaseReader,
-    tenantId: string,
-    documentId: string,
-    identityId: string,
-    action: "read" | "write",
-  ): Promise<boolean> {
-    const grants = await db
-      .select({ action: documentAcl.action })
-      .from(documentAcl)
-      .where(
-        and(
-          eq(documentAcl.tenantId, tenantId),
-          eq(documentAcl.documentId, documentId),
-          eq(documentAcl.identityId, identityId),
-        ),
-      );
-    return hasDocumentAction(new Set(grants.map((grant) => grant.action)), action);
+    return hasDocumentPermission(db, principal, asset.documentId, action);
   }
 }

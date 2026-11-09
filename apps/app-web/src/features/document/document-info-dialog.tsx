@@ -1,4 +1,4 @@
-import type { GetDocument200 } from '@/api/generated/models';
+import type { GetDocument200 } from '@/api/generated/app-api.schemas';
 import { PanelDialog } from '@/components/ui/panel-dialog';
 import type { DocumentCollaborationSnapshot } from './document-collaboration-editor';
 

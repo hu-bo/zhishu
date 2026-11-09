@@ -2,20 +2,16 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
-import {
-  createAuthoringRuntime,
-  createChatRuntime,
-  DEFAULT_GENERATION_LIMITS,
-  hashContent,
-  AiRuntimeError,
-} from "@zhishu/ai-runtime";
+import { DEFAULT_GENERATION_LIMITS, hashContent, AiRuntimeError } from "@zhishu/ai-runtime/policy";
+import { createChatRuntime } from "@zhishu/ai-runtime/chat";
+import { DshRuntimeError } from "@zhishu/dsh-agent";
 import {
   canonicalJson,
   createAiEventValidator,
   validateAiTaskRequestV2,
   validateAuthoringProposal,
   validateChatResult,
-  isReplacementIntent,
+  isReplacementProposal,
   replacementChanges,
   replacementBatch,
   type AiTaskEvent,
@@ -34,12 +30,14 @@ import { AiRepository, threadId, type AiRun } from "./ai.repository.js";
 import type { ReviewAiInput } from "./ai.schema.js";
 import { applyOperationBatch } from "@zhishu/document-contracts";
 import type { WritingService } from "../writing-chat/writing.service.js";
+import type { RagService } from "../rag/rag.service.js";
 
 export interface StartAiInput {
   request: AuthoringRequest | ChatRequest;
   protocolVersion: 1 | 2;
   previousRequestIds?: string[];
   sourceDocumentIds: string[];
+  sourceWorkspaceId?: string;
 }
 const prompt = {
   id: "zhishu-writing",
@@ -60,6 +58,8 @@ export class AiService {
     private readonly leases: Pool,
     private readonly config: AppConfig,
     private readonly writing?: WritingService,
+    private readonly rag?: RagService,
+    private readonly ragReason: string | null = null,
   ) {
     this.modelVersion = hashContent([
       config.AI_MODEL ?? "injected-model",
@@ -71,15 +71,22 @@ export class AiService {
     ]);
   }
   capabilities() {
+    const enabled = !!(this.writing?.capabilities().enabled || this.model);
     return {
-      enabled: this.model !== null,
+      enabled,
       protocolVersions: [1, 2],
-      reason: this.model
+      reason: enabled
         ? null
         : "尚未配置 AI 模型，请在服务端设置 AI_MODEL、AI_API_KEY 和可选的 AI_BASE_URL。",
-      supportsTokenPreview: true,
+      supportsTokenPreview: false,
       chatDelivery: "complete-result" as const,
+      knowledge: { enabled: !!this.rag, reason: this.ragReason },
     };
+  }
+  async indexStatus(principal: Principal, workspaceId?: string, documentIds?: string[]) {
+    if (!this.rag)
+      throw new DomainError("SERVICE_UNAVAILABLE", this.ragReason ?? "知识向量化尚未配置");
+    return this.rag.status({ principal, workspaceId, documentIds });
   }
   async context(principal: Principal, id: string) {
     const context = await this.documents.context(principal, id);
@@ -146,7 +153,8 @@ export class AiService {
     return this.present(run);
   }
   async start(principal: Principal, body: StartAiInput) {
-    if (!this.model) throw new DomainError("SERVICE_UNAVAILABLE", "AI 模型尚未配置");
+    if (body.request.kind === "authoring" ? !this.writing?.capabilities().enabled : !this.model)
+      throw new DomainError("SERVICE_UNAVAILABLE", "AI 模型尚未配置");
     if (!validateAiTaskRequestV2(body.request).success)
       throw new DomainError("VALIDATION_ERROR", "AI 请求不合法");
     if (
@@ -176,6 +184,8 @@ export class AiService {
     let previousCreatedAt = 0;
     for (const id of previousRequestIds) {
       const run = await this.load(principal, id);
+      if (run.input.request.kind !== body.request.kind)
+        throw new DomainError("VALIDATION_ERROR", "写作与知识问答的历史必须分别维护");
       if (run.status !== "completed" || !run.result)
         throw new DomainError("AI_HISTORY_UNAVAILABLE", "历史任务尚未完成，请开启新对话");
       if (run.createdAt.getTime() < previousCreatedAt)
@@ -186,12 +196,7 @@ export class AiService {
       history.push(
         {
           role: "user",
-          content:
-            request.kind === "chat"
-              ? request.message
-              : request.kind === "authoring"
-                ? request.instruction
-                : request.question,
+          content: request.kind === "chat" ? request.message : request.instruction,
         },
         { role: "assistant", content: text },
       );
@@ -211,13 +216,31 @@ export class AiService {
       )
         throw new DomainError("CONFLICT", "文档已更新，请重新读取写入位置");
     }
-    if (body.request.contextRef && !body.sourceDocumentIds.length)
+    if (
+      body.request.contextRef &&
+      !body.sourceDocumentIds.length &&
+      !(body.request.kind === "chat" && body.request.responseMode === "grounded" && this.rag)
+    )
       throw new DomainError("VALIDATION_ERROR", "请重新选择资料范围");
-    const sources = await this.documents.sources(
-      principal,
-      body.sourceDocumentIds,
-      target?.workspaceId,
-    );
+    if (
+      body.sourceWorkspaceId &&
+      (body.request.kind !== "chat" || body.request.responseMode !== "grounded")
+    )
+      throw new DomainError("VALIDATION_ERROR", "空间范围仅用于知识问答");
+    if (body.sourceWorkspaceId && !this.rag)
+      throw new DomainError("SERVICE_UNAVAILABLE", this.ragReason ?? "知识向量化尚未配置");
+    const sources =
+      body.request.kind === "chat" && body.request.responseMode === "grounded" && this.rag
+        ? await this.rag.retrieve(
+            {
+              principal,
+              workspaceId: body.sourceWorkspaceId,
+              documentIds: body.sourceDocumentIds.length ? body.sourceDocumentIds : undefined,
+            },
+            body.request.message,
+            AbortSignal.timeout(this.config.AI_TIMEOUT_MS),
+          )
+        : await this.documents.sources(principal, body.sourceDocumentIds, target?.workspaceId);
     const sourceVersions = [
       ...new Map(
         [...historicalVersions, ...sources.sourceVersions].map((v) => [v.documentId, v]),
@@ -289,15 +312,12 @@ export class AiService {
       client.once("error", lost);
       client.once("end", lost);
       const input = run.input;
-      if (!this.model || input.modelVersion !== this.modelVersion)
+      if (input.modelVersion !== this.modelVersion)
         throw new DomainError("CONFLICT", "模型配置已变化，请重新生成");
       await this.documents.verify(principal, input);
-      const options = {
-        model: this.model,
-        checkpointer: this.saver,
+      const policy = {
         limits: input.limits,
-        modelVersion: this.modelVersion,
-        countTokens: (text: string) => Buffer.byteLength(text),
+        researchAvailable: true,
         verifyEvidence: async () => {
           await this.documents.verify(principal, input);
           return true;
@@ -322,76 +342,83 @@ export class AiService {
             );
           }
         },
-        researchTools: {
-          searchKnowledge: async (query: string) => {
-            const terms = query.toLocaleLowerCase().split(/\s+/u).filter(Boolean);
-            return input.sourceDocumentIds
-              .map((sourceId) => {
-                const items = input.evidence.items.filter((i) => i.source.sourceId === sourceId);
-                return {
-                  sourceId,
-                  title: items[0]?.title ?? "资料",
-                  excerpt: items
-                    .map((i) => i.text)
-                    .join(" ")
-                    .slice(0, 1200),
-                  score: terms.reduce(
-                    (n, t) => n + Number(items.some((i) => i.text.toLocaleLowerCase().includes(t))),
-                    0,
-                  ),
-                };
-              })
-              .sort((a, b) => b.score - a.score)
-              .map(({ sourceId, title, excerpt }) => ({ sourceId, title, excerpt }));
-          },
-          readSource: async (sourceId: string) => {
-            await this.documents.verify(principal, input);
-            if (!input.sourceDocumentIds.includes(sourceId))
-              throw new AiRuntimeError("ACCESS_REVOKED");
-            return input.evidence.items.filter((i) => i.source.sourceId === sourceId);
-          },
-        },
       };
       const request = input.request;
-      const events =
-        request.kind === "chat"
-          ? (resume ? createChatRuntime(options).resume : createChatRuntime(options).generate)(
-              { threadId: key, request, history: input.history, evidence: input.evidence, prompt },
-              signal,
-            )
-          : request.kind === "authoring" && input.snapshot
-            ? input.engine === "dsh-v1" && this.writing
-              ? this.writing.generateProposal(
-                  principal,
-                  {
-                    threadId: key,
-                    request,
-                    snapshot: input.snapshot,
-                    structureRevision: request.baseStructureRevision,
-                    evidence: input.evidence,
-                    prompt,
-                    history: input.history,
-                  },
-                  options,
-                  signal,
-                  resume,
-                )
-              : (resume
-                  ? createAuthoringRuntime(options).resume
-                  : createAuthoringRuntime(options).generate)(
-                  {
-                    threadId: key,
-                    request,
-                    snapshot: input.snapshot,
-                    structureRevision: request.baseStructureRevision,
-                    evidence: input.evidence,
-                    prompt,
-                    history: input.history,
-                  },
-                  signal,
-                )
-            : null;
-      if (!events) throw new DomainError("VALIDATION_ERROR", "任务类型不支持");
+      let events: AsyncIterable<AiTaskEvent | AiTaskEventV2>;
+      if (request.kind === "authoring" && input.snapshot) {
+        const authoringInput = {
+          threadId: key,
+          request,
+          snapshot: input.snapshot,
+          structureRevision: request.baseStructureRevision,
+          evidence: input.evidence,
+          prompt,
+          history: input.history,
+        };
+        if (input.engine === "dsh-v1") {
+          if (!this.writing) throw new DomainError("SERVICE_UNAVAILABLE", "写作执行器尚未装配");
+          events = this.writing.generateProposal(principal, authoringInput, policy, signal, resume);
+        } else {
+          // Only persisted pre-migration tasks may reopen their original LangGraph checkpoint.
+          if (!resume || (input.engine && input.engine !== "langchain-v1"))
+            throw new DomainError("CONFLICT", "旧写作执行器仅支持恢复历史任务");
+          if (!this.model) throw new DomainError("SERVICE_UNAVAILABLE", "历史任务模型尚未配置");
+          const { createAuthoringRuntime } = await import("@zhishu/ai-runtime/legacy-authoring");
+          const runtime = createAuthoringRuntime({
+            ...policy,
+            model: this.model,
+            checkpointer: this.saver,
+            modelVersion: this.modelVersion,
+            countTokens: (text: string) => Buffer.byteLength(text),
+            researchTools: {
+              searchKnowledge: async (query: string) => {
+                const terms = query.toLocaleLowerCase().split(/\s+/u).filter(Boolean);
+                return input.sourceDocumentIds
+                  .map((sourceId) => {
+                    const items = input.evidence.items.filter(
+                      (i) => i.source.sourceId === sourceId,
+                    );
+                    return {
+                      sourceId,
+                      title: items[0]?.title ?? "资料",
+                      excerpt: items
+                        .map((i) => i.text)
+                        .join(" ")
+                        .slice(0, 1200),
+                      score: terms.reduce(
+                        (n, t) =>
+                          n + Number(items.some((i) => i.text.toLocaleLowerCase().includes(t))),
+                        0,
+                      ),
+                    };
+                  })
+                  .sort((a, b) => b.score - a.score)
+                  .map(({ sourceId, title, excerpt }) => ({ sourceId, title, excerpt }));
+              },
+              readSource: async (sourceId: string) => {
+                await this.documents.verify(principal, input);
+                if (!input.sourceDocumentIds.includes(sourceId))
+                  throw new AiRuntimeError("ACCESS_REVOKED");
+                return input.evidence.items.filter((i) => i.source.sourceId === sourceId);
+              },
+            },
+          });
+          events = runtime.resume(authoringInput, signal);
+        }
+      } else if (request.kind === "chat") {
+        if (!this.model) throw new DomainError("SERVICE_UNAVAILABLE", "问答模型尚未配置");
+        const runtime = createChatRuntime({
+          ...policy,
+          model: this.model,
+          checkpointer: this.saver,
+          modelVersion: this.modelVersion,
+          countTokens: (text: string) => Buffer.byteLength(text),
+        });
+        events = (resume ? runtime.resume : runtime.generate)(
+          { threadId: key, request, history: input.history, evidence: input.evidence, prompt },
+          signal,
+        );
+      } else throw new DomainError("VALIDATION_ERROR", "任务类型不支持");
       const validator =
         request.kind === "chat"
           ? createAiEventValidator({ requestId: run.requestId, protocolVersion: 2 })
@@ -426,7 +453,7 @@ export class AiService {
     } catch (error) {
       if (!terminal) {
         const code =
-          error instanceof AiRuntimeError
+          error instanceof AiRuntimeError || error instanceof DshRuntimeError
             ? error.code
             : signal.aborted
               ? "CANCELLED"
@@ -480,7 +507,11 @@ export class AiService {
     }
   }
   /** Writing execution is owned by the service; disconnect ends only this subscriber. */
-  async *executeDetached(run: AiRun, principal: Principal, subscriber: AbortSignal) {
+  async *executeDetached(
+    run: AiRun,
+    principal: Principal,
+    subscriber: AbortSignal,
+  ): AsyncGenerator<AiTaskEvent | AiTaskEventV2> {
     const queue: (AiTaskEvent | AiTaskEventV2)[] = [];
     let done = false,
       wake: (() => void) | undefined;
@@ -535,7 +566,7 @@ export class AiService {
     )
       throw new DomainError("CONFLICT", "提案验证失败");
     if (run.receipt && !run.review) return this.present(run);
-    if (isReplacementIntent(request.intent))
+    if (isReplacementProposal(request, run.result))
       return this.review(principal, id, {
         decisionId: randomUUID(),
         revision: run.review?.revision ?? 0,
@@ -574,10 +605,10 @@ export class AiService {
       request = run.input.request;
     if (
       request.kind !== "authoring" ||
-      !isReplacementIntent(request.intent) ||
       run.status !== "completed" ||
       !run.result ||
       !("operationBatch" in run.result) ||
+      !isReplacementProposal(request, run.result) ||
       !run.input.snapshot ||
       !validateAuthoringProposal(run.result, {
         request,

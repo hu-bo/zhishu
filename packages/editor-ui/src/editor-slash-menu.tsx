@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { editorOriginMeta } from "@zhishu/editor-core";
+import { editorOriginMeta, MAX_LATEX_LENGTH } from "@zhishu/editor-core";
 import type { EditorController } from "@zhishu/editor-core";
 import { useEditorEvents, useEditorInstance, useEditorStructureAction } from "@zhishu/editor-react";
 import { EditorIcon, type EditorIconName } from "./editor-icon.js";
@@ -38,13 +38,13 @@ type SlashAction = {
   keywords: readonly string[];
   capability: string;
   collaborativeOperation?: boolean;
+  inline?: boolean;
   run: (editor: ReturnType<typeof useEditorInstance>["controller"]) => boolean;
 };
 
 type SlashCollaboration = NonNullable<ReturnType<typeof useEditorInstance>["collaboration"]>;
 
 interface SlashMenuState {
-  source: "slash" | "toolbar";
   query: string;
   from: number;
   to: number;
@@ -69,23 +69,15 @@ export interface EditorSlashMenuProps {
   messages?: Partial<EditorSlashMenuMessages>;
   capabilities?: readonly string[];
   className?: string;
-  openRequest?: number;
-  openSelection?: { from: number; to: number } | null;
 }
 
-export function EditorSlashMenu({
-  messages,
-  capabilities,
-  className,
-  openRequest = 0,
-  openSelection,
-}: EditorSlashMenuProps) {
+export function useEditorInsertionActions(
+  menu: SlashMenuState | null,
+  capabilities?: readonly string[],
+  messages?: Partial<EditorSlashMenuMessages>,
+) {
   const { controller, collaboration, collaborationStatus, hostServices } = useEditorInstance();
   const contentAction = useEditorStructureAction();
-  const [menu, setMenu] = useState<SlashMenuState | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const toolbarMenuOpenRef = useRef(false);
-  const listboxId = useId();
   const labels = { ...defaultMessages, ...messages };
   const collaborativeStructureAllowed =
     collaboration?.readOnly === false &&
@@ -94,8 +86,8 @@ export function EditorSlashMenu({
     typeof collaboration.submitStructureOperation === "function";
   function runContentAction(kind: "callout" | "divider" | "status"): boolean {
     if (!controller || contentAction.busy || contentAction.canRetry) return false;
-    const toolbarMenu = menu?.source === "toolbar";
-    if (toolbarMenu && !focusToolbarSelection(controller, menu, collaborativeStructureAllowed))
+    const toolbarMenu = !menu;
+    if (toolbarMenu && !focusToolbarSelection(controller, collaborativeStructureAllowed))
       return false;
     const trigger = toolbarMenu
       ? null
@@ -133,7 +125,98 @@ export function EditorSlashMenu({
       });
     return true;
   }
+  function insertFormula(inline: boolean): boolean {
+    if (
+      !controller ||
+      (!inline && (!contentAction.allowed || contentAction.busy || contentAction.canRetry))
+    ) {
+      return false;
+    }
+    const toolbarMenu = !menu;
+    const allowStructure = inline || collaborativeStructureAllowed;
+    if (toolbarMenu && !focusToolbarSelection(controller, allowStructure)) return false;
+    const trigger = toolbarMenu ? null : getSlashTrigger(controller, menu, allowStructure);
+    if (!toolbarMenu && !trigger) return false;
+    const { $from, $to } = controller.editor.state.selection;
+    const paragraph = $from.parent;
+    const blockId = paragraph.attrs.blockId;
+    const expectedText = trigger?.text ?? "";
+    if (
+      !inline &&
+      (paragraph.type.name !== "paragraph" ||
+        typeof blockId !== "string" ||
+        !$from.sameParent($to) ||
+        paragraph.textBetween(0, paragraph.content.size, "", "\uFFFC") !== expectedText)
+    ) {
+      hostServices.reportError?.(new Error("请在空段落中插入公式块。"));
+      return false;
+    }
+    if (
+      inline &&
+      (!paragraph.inlineContent || paragraph.type.spec.code || !$from.sameParent($to))
+    ) {
+      return false;
+    }
+    const { doc, selection } = controller.editor.state;
+    void Promise.resolve()
+      .then(() => controller.requestMathSource({ kind: inline ? "inline" : "block" }))
+      .then((source) => {
+        if (source === null || !controller.canExecute("write").allowed) return;
+        const latex = source.trim();
+        if (!latex || latex.length > MAX_LATEX_LENGTH) {
+          throw new Error(`请输入 1 至 ${MAX_LATEX_LENGTH} 个字符的 LaTeX 公式。`);
+        }
+        if (inline) {
+          if (
+            !controller.editor.state.doc.eq(doc) ||
+            !controller.focusTextRange(
+              trigger?.from ?? selection.from,
+              trigger?.to ?? selection.to,
+            ) ||
+            !controller.insertInlineFormula(latex)
+          ) {
+            throw new Error("原选区已变化，请重新选择后插入公式。");
+          }
+          return;
+        }
+        return contentAction.run({
+          type: "make-block-math",
+          targetBlockId: blockId,
+          expectedText,
+          latex,
+        });
+      })
+      .catch((error: unknown) =>
+        hostServices.reportError?.(error instanceof Error ? error : new Error("无法插入公式。")),
+      )
+      .finally(() => {
+        if (!controller.isDestroyed) controller.focus();
+      });
+    return true;
+  }
   const actions: readonly SlashAction[] = [
+    {
+      id: "inline-math",
+      label: "行内公式",
+      description: "在当前行插入 LaTeX 公式。",
+      icon: "code",
+      group: "other",
+      keywords: ["数学", "latex", "math", "inline"],
+      capability: "inlineMath",
+      inline: true,
+      run: () => insertFormula(true),
+    },
+    {
+      id: "block-math",
+      label: "公式块",
+      description: "在空段落插入独立的 LaTeX 公式。",
+      icon: "code",
+      group: "other",
+      keywords: ["数学", "latex", "math", "equation"],
+      capability: "blockMath",
+      collaborativeOperation: true,
+      run: () => insertFormula(false),
+    },
     {
       id: "callout",
       label: "提示块",
@@ -258,8 +341,8 @@ export function EditorSlashMenu({
       collaborativeOperation: true,
       run: (instance) => {
         if (!instance) return false;
-        const toolbarMenu = menu?.source === "toolbar";
-        if (toolbarMenu && !focusToolbarSelection(instance, menu, collaborativeStructureAllowed))
+        const toolbarMenu = !menu;
+        if (toolbarMenu && !focusToolbarSelection(instance, collaborativeStructureAllowed))
           return false;
         const trigger = toolbarMenu
           ? null
@@ -310,8 +393,8 @@ export function EditorSlashMenu({
       collaborativeOperation: true,
       run: (instance) => {
         if (!instance) return false;
-        const toolbarMenu = menu?.source === "toolbar";
-        if (toolbarMenu && !focusToolbarSelection(instance, menu, collaborativeStructureAllowed))
+        const toolbarMenu = !menu;
+        if (toolbarMenu && !focusToolbarSelection(instance, collaborativeStructureAllowed))
           return false;
         const trigger = toolbarMenu
           ? null
@@ -362,8 +445,8 @@ export function EditorSlashMenu({
       collaborativeOperation: true,
       run: (instance) => {
         if (!instance) return false;
-        const toolbarMenu = menu?.source === "toolbar";
-        if (toolbarMenu && !focusToolbarSelection(instance, menu, collaborativeStructureAllowed))
+        const toolbarMenu = !menu;
+        if (toolbarMenu && !focusToolbarSelection(instance, collaborativeStructureAllowed))
           return false;
         const trigger = toolbarMenu
           ? null
@@ -489,7 +572,8 @@ export function EditorSlashMenu({
     ) {
       return false;
     }
-    if (action.id === "table" && isInsideTable(controller)) return false;
+    if ((action.id === "table" || action.id === "block-math") && isInsideTable(controller))
+      return false;
     if (!menu?.query) return true;
     const query = menu.query.toLocaleLowerCase();
     return `${action.label} ${action.keywords.join(" ")}`.toLocaleLowerCase().includes(query);
@@ -498,6 +582,7 @@ export function EditorSlashMenu({
     (action: SlashAction) => {
       if (!controller) return labels.editorNotReady;
       if (!controller.canExecute("write").allowed) return labels.currentlyReadOnly;
+      if (action.inline) return undefined;
       const structure = controller.canExecute("block-structure");
       if (structure.allowed || (action.collaborativeOperation && collaborativeStructureAllowed)) {
         return undefined;
@@ -515,9 +600,28 @@ export function EditorSlashMenu({
     ],
   );
 
+  return { contentAction, visibleActions, getActionDisabledReason };
+}
+
+export function EditorSlashMenu({ messages, capabilities, className }: EditorSlashMenuProps) {
+  const { controller, hostServices } = useEditorInstance();
+  const [menu, setMenu] = useState<SlashMenuState | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const listboxId = useId();
+  const labels = { ...defaultMessages, ...messages };
+  const { contentAction, visibleActions, getActionDisabledReason } = useEditorInsertionActions(
+    menu,
+    capabilities,
+    messages,
+  );
+
   const refreshMenu = useCallback(() => {
-    if (toolbarMenuOpenRef.current) return;
-    if (!controller || controller.isDestroyed || controller.editor.view.composing) {
+    if (
+      !controller ||
+      controller.isDestroyed ||
+      !controller.editor.isFocused ||
+      controller.editor.view.composing
+    ) {
       setMenu(null);
       return;
     }
@@ -556,7 +660,6 @@ export function EditorSlashMenu({
       return;
     }
     setMenu((current) => ({
-      source: "slash",
       query,
       from,
       to: selection.from,
@@ -566,49 +669,6 @@ export function EditorSlashMenu({
       placement,
     }));
   }, [controller]);
-
-  useEffect(() => {
-    if (openRequest === 0 || !controller || controller.isDestroyed) return;
-    if (!controller.canExecute("write").allowed) {
-      hostServices.reportError?.(new Error("当前文档为只读，无法打开插入菜单。"));
-      return;
-    }
-    const range = openSelection ?? {
-      from: controller.editor.state.selection.from,
-      to: controller.editor.state.selection.to,
-    };
-    toolbarMenuOpenRef.current = true;
-    if (!controller.focusTextRange(range.from, range.to)) {
-      toolbarMenuOpenRef.current = false;
-      hostServices.reportError?.(new Error("原编辑位置已失效，请重新选择插入位置。"));
-      return;
-    }
-    let x = 8;
-    let y = 8;
-    let placement: SlashMenuState["placement"] = "below";
-    try {
-      const rect = controller.editor.view.coordsAtPos(range.to);
-      const menuWidth = Math.min(280, Math.max(0, window.innerWidth - 16));
-      x = Math.max(8, Math.min(Math.max(8, window.innerWidth - menuWidth - 8), rect.left));
-      const below = rect.bottom + 6;
-      placement = below + 260 > window.innerHeight ? "above" : "below";
-      y = placement === "below" ? below : Math.max(8, rect.top - 6);
-    } catch {
-      toolbarMenuOpenRef.current = false;
-      hostServices.reportError?.(new Error("无法定位当前插入位置。"));
-      return;
-    }
-    setMenu({
-      source: "toolbar",
-      query: "",
-      from: range.from,
-      to: range.to,
-      index: 0,
-      x,
-      y,
-      placement,
-    });
-  }, [controller, hostServices, openRequest, openSelection]);
 
   useEditorEvents((event) => {
     if (event.docChanged || event.selectionChanged) requestAnimationFrame(refreshMenu);
@@ -622,27 +682,18 @@ export function EditorSlashMenu({
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(refreshMenu);
     };
-    const onCompositionStart = () => {
-      toolbarMenuOpenRef.current = false;
-      setMenu(null);
-    };
-    const onOutsidePointerDown = (event: PointerEvent) => {
-      if (!toolbarMenuOpenRef.current) return;
-      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
-      toolbarMenuOpenRef.current = false;
-      setMenu(null);
-    };
+    const onCompositionStart = () => setMenu(null);
     dom.addEventListener("compositionstart", onCompositionStart);
+    dom.addEventListener("blur", scheduleRefresh);
     dom.addEventListener("keyup", scheduleRefresh);
     document.addEventListener("selectionchange", scheduleRefresh);
-    document.addEventListener("pointerdown", onOutsidePointerDown);
     window.addEventListener("resize", scheduleRefresh);
     window.addEventListener("scroll", scheduleRefresh, true);
     scheduleRefresh();
     return () => {
       cancelAnimationFrame(frame);
       dom.removeEventListener("compositionstart", onCompositionStart);
-      document.removeEventListener("pointerdown", onOutsidePointerDown);
+      dom.removeEventListener("blur", scheduleRefresh);
       dom.removeEventListener("keyup", scheduleRefresh);
       document.removeEventListener("selectionchange", scheduleRefresh);
       window.removeEventListener("resize", scheduleRefresh);
@@ -702,15 +753,10 @@ export function EditorSlashMenu({
         const disabledReason = selectedAction && getActionDisabledReason(selectedAction);
         if (disabledReason) hostServices.reportError?.(new Error(disabledReason));
         else selectedAction?.run(controller);
-        toolbarMenuOpenRef.current = false;
         setMenu(null);
       } else if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
-        toolbarMenuOpenRef.current = false;
-        setMenu(null);
-      } else if (menu.source === "toolbar") {
-        toolbarMenuOpenRef.current = false;
         setMenu(null);
       }
     };
@@ -805,7 +851,6 @@ export function EditorSlashMenu({
                         return;
                       }
                       action.run(controller);
-                      toolbarMenuOpenRef.current = false;
                       setMenu(null);
                       controller.focus();
                     }}
@@ -842,8 +887,8 @@ function applySlashAction(
   applyToolbar: (controller: EditorController) => boolean,
 ): boolean {
   if (!controller) return false;
-  if (menu?.source === "toolbar") {
-    if (!focusToolbarSelection(controller, menu)) return false;
+  if (!menu) {
+    if (!focusToolbarSelection(controller)) return false;
     return applyToolbar(controller);
   }
   const trigger = getSlashTrigger(controller, menu);
@@ -859,18 +904,17 @@ function applySlashAction(
 
 function focusToolbarSelection(
   controller: ReturnType<typeof useEditorInstance>["controller"],
-  menu: SlashMenuState | null,
   allowCollaborativeStructure = false,
 ): boolean {
   if (
     !controller ||
-    menu?.source !== "toolbar" ||
     !controller.canExecute("write").allowed ||
     (!controller.canExecute("block-structure").allowed && !allowCollaborativeStructure)
   ) {
     return false;
   }
-  return controller.focusTextRange(menu.from, menu.to);
+  controller.focus();
+  return true;
 }
 
 function isInsideTable(controller: ReturnType<typeof useEditorInstance>["controller"]): boolean {

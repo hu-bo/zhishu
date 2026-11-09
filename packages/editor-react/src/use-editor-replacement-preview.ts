@@ -10,7 +10,7 @@ import { useEditorInstance } from "./context.js";
 export function useEditorReplacementPreview(
   preview: EditorReplacementPreviewData | null,
   onInvalidated: () => void,
-  actions: EditorReplacementPreviewActions = {},
+  actions: EditorReplacementPreviewActions & { waitForOriginal?: boolean } = {},
 ) {
   const { controller } = useEditorInstance();
   const callback = useRef(onInvalidated);
@@ -19,30 +19,49 @@ export function useEditorReplacementPreview(
     callback.current = onInvalidated;
     actionCallbacks.current = actions;
   }, [onInvalidated, actions]);
-  const [state, setState] = useState<{ id: string; count: number; index: number } | null>(null);
+  const [state, setState] = useState<{
+    preview: EditorReplacementPreviewData;
+    count: number;
+    index: number;
+  } | null>(null);
   const interactive = !!actions.onAccept && !!actions.onReject;
   useEffect(() => {
     if (!controller || !preview) return;
-    const count = setReplacementPreview(controller.editor, preview, {
-      disabled: actions.disabled,
-      onAccept: interactive ? (blockId) => actionCallbacks.current.onAccept?.(blockId) : undefined,
-      onReject: interactive ? (blockId) => actionCallbacks.current.onReject?.(blockId) : undefined,
-    });
-    if (count === null) {
-      callback.current();
-      return;
-    }
-    setState({ id: preview.id, count, index: 0 });
-    const release = controller.subscribe((event) => {
-      if (event.docChanged) callback.current();
-    });
-    return () => {
-      release();
-      if (!controller.isDestroyed) setReplacementPreview(controller.editor, null);
+    let active = true;
+    let installed = false;
+    const install = () => {
+      if (!active || installed || controller.isDestroyed) return;
+      const count = setReplacementPreview(controller.editor, preview, {
+        disabled: actions.disabled,
+        onAccept: interactive
+          ? (blockId) => actionCallbacks.current.onAccept?.(blockId)
+          : undefined,
+        onReject: interactive
+          ? (blockId) => actionCallbacks.current.onReject?.(blockId)
+          : undefined,
+      });
+      if (count === null) {
+        if (!actions.waitForOriginal) callback.current();
+        return;
+      }
+      installed = true;
+      setState({ preview, count, index: 0 });
     };
-  }, [controller, preview, actions.disabled, interactive]);
-  const current = state?.id === preview?.id ? state : null;
+    const release = controller.subscribe((event) => {
+      if (!event.docChanged) return;
+      if (installed) callback.current();
+      else if (actions.waitForOriginal) queueMicrotask(install);
+    });
+    install();
+    return () => {
+      active = false;
+      release();
+      if (installed && !controller.isDestroyed) setReplacementPreview(controller.editor, null);
+    };
+  }, [controller, preview, actions.disabled, actions.waitForOriginal, interactive]);
+  const current = state?.preview === preview ? state : null;
   return {
+    ready: !!current,
     count: current?.count ?? 0,
     index: current?.index ?? 0,
     navigate: (direction: number) => {

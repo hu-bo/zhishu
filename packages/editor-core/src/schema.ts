@@ -78,14 +78,15 @@ export function normalizeTiptapDocumentJSON(input: unknown): unknown {
     if (Array.isArray(record.marks)) {
       for (const mark of record.marks) {
         if (typeof mark !== "object" || mark === null || Array.isArray(mark)) continue;
-        const attrs = (mark as Record<string, unknown>).attrs;
-        if (
-          typeof attrs === "object" &&
-          attrs !== null &&
-          !Array.isArray(attrs) &&
-          Object.keys(attrs).length === 0
-        ) {
-          delete (mark as Record<string, unknown>).attrs;
+        const markRecord = mark as Record<string, unknown>;
+        const attrs = markRecord.attrs;
+        if (typeof attrs === "object" && attrs !== null && !Array.isArray(attrs)) {
+          if (markRecord.type === "link" && "href" in attrs) {
+            // The document contract stores the URL. Tiptap adds attributes for rendering.
+            markRecord.attrs = { href: attrs.href };
+          } else if (Object.keys(attrs).length === 0) {
+            delete markRecord.attrs;
+          }
         }
       }
     }

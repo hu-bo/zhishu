@@ -22,8 +22,8 @@ export async function startServer(
       ? { identityAuthenticator: options.identityAuthenticator }
       : {}),
     sessionRevoker: {
-      revokeDocumentSessions(documentId, generationId) {
-        collaborationRef.current?.revokeDocumentSessions(documentId, generationId);
+      revokeDocumentSessions(documentId, generationId, identityId) {
+        collaborationRef.current?.revokeDocumentSessions(documentId, generationId, identityId);
       },
     },
     collaborationOwner: {
@@ -61,8 +61,8 @@ export async function startServer(
     try {
       if (collaborationStarted) await collaboration?.close();
       await app.close();
-    } catch {
-      app.log.error("Server shutdown failed");
+    } catch (err) {
+      app.log.error({ err }, "Server shutdown failed");
       process.exitCode = 1;
     } finally {
       clearTimeout(deadline);
@@ -70,21 +70,36 @@ export async function startServer(
   };
   process.once("SIGINT", () => void shutdown());
   process.once("SIGTERM", () => void shutdown());
+  let phase = "collaboration-listen";
   try {
     await collaboration.listen();
     collaborationStarted = true;
+    phase = "http-listen";
     await app.listen({ port: config.PORT, host: config.HOST });
-  } catch {
-    app.log.error("Server startup failed");
-    if (!collaborationStarted) await collaboration.close().catch(() => undefined);
+  } catch (err) {
+    app.log.error(
+      {
+        err,
+        phase,
+        host: config.HOST,
+        port: config.PORT,
+        collaborationHost: config.COLLABORATION_HOST,
+        collaborationPort: config.COLLABORATION_PORT,
+      },
+      "Server startup failed",
+    );
+    if (!collaborationStarted)
+      await collaboration.close().catch((err: unknown) => {
+        app.log.error({ err }, "Collaboration cleanup after startup failure failed");
+      });
     await shutdown();
     process.exitCode = 1;
   }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  void startServer().catch(() => {
-    console.error("Server startup failed; check configuration and database availability.");
+  void startServer().catch((err: unknown) => {
+    console.error("Server initialization failed before listeners started:", err);
     process.exitCode = 1;
   });
 }

@@ -60,7 +60,7 @@
 | `dsh-user-approval`                                        | 单次工具审批                                        |
 | `dsh-session-persistence`、`dsh-session-checkpoint-policy` | 存储接口与副作用前持久化屏障                        |
 
-Node.js 支持范围跟随该依赖组合：`^22.19.0 || >=24.0.0`。当前仅在 Node.js 24.14.0 / pnpm 9.15.4 验证过依赖安装，以及基础服务、Agent Loop、审批服务的装配和释放。尚未验证真实模型、Agent 对话、数据库恢复或审批闭环。
+Node.js 支持范围跟随该依赖组合：`^22.19.0 || >=24.0.0`。2026-10-30 在 Node.js 24.14.0 / pnpm 9.15.4 重新核对实际源码和锁定发布物，完成官方 Loop 多轮流式对话、审批、持久化失败和 PostgreSQL 重启恢复验收。模型为显式确定性 adapter，真实收费 provider 与其他 Node.js 版本仍未验收。具体证据见实施记录。
 
 包与插件使用同一兼容的 Cordis/DSH 依赖组合；发布插件时声明真实 peer，验证实际解析结果，避免两份运行时产生服务或类型身份问题。具体 provider 属于宿主显式选择的依赖。
 
@@ -79,6 +79,8 @@ Node.js 支持范围跟随该依赖组合：`^22.19.0 || >=24.0.0`。当前仅�
 | `approval/request`                     | answerer 返回一次性 outcome；只有 allowed-once 允许被询问动作                     |
 
 流结束时的 committed 表示已写入原生 Session 日志，仍需经过实际 provider 的 flush，才能向产品层确认 durable。新实现使用官方当前公开的投影/读取/恢复接口，不新增对已废弃同步历史扫描 API 或上游私有文件的依赖。
+
+2026-10-30 发布物核验补充：锁定的 Loop 每发送一个原生 start/chunk/end 都会增加 `revision`，原生 `attemptId` 才标识一次模型流。当前 adapter 按 attempt 固定产品 revision，对过滤私有推理之后的 text delta 单独生成从 0 开始的连续 index。不能用原生 revision 直接判断文本流替换。Run 的持久化 `cancelRequested` 先于取消派发提交，恢复不会重新生成显式取消的请求；原生 blocked/error/max-tokens 在产品提交失败后仍恢复为失败。
 
 ## 3. 进程内运行结构
 

@@ -10,9 +10,11 @@ import {
   normalizeDocumentContent,
   TEXT_ALIGNMENTS,
   validateDocumentContent,
+  isValidMathSource,
 } from "@zhishu/document-contracts";
 import type { ContentIssue, DocumentContent } from "@zhishu/document-contracts";
 import { normalizeTiptapDocumentJSON } from "./schema.js";
+import { renderMathToHtml } from "./mathematics.js";
 
 const maxImportBytes = 2 * 1024 * 1024;
 const addressableBlockTypes = new Set([
@@ -26,6 +28,7 @@ const addressableBlockTypes = new Set([
   "taskList",
   "taskItem",
   "codeBlock",
+  "blockMath",
   "horizontalRule",
   "image",
   "pdfAttachment",
@@ -222,6 +225,10 @@ function inlineText(nodes: readonly Record<string, unknown>[] | undefined): stri
       ?.map((node) => {
         if (node.type === "text") return typeof node.text === "string" ? node.text : "";
         if (node.type === "hardBreak") return "\n";
+        if (node.type === "inlineMath")
+          return `$${String((node.attrs as Record<string, unknown>).latex)}$`;
+        if (node.type === "mention")
+          return `@${String((node.attrs as Record<string, unknown> | undefined)?.label ?? "")}`;
         if (node.type === "statusTag") {
           const attrs = node.attrs as Record<string, unknown> | undefined;
           const status = DOCUMENT_STATUSES.find((value) => value === attrs?.status) ?? "todo";
@@ -240,6 +247,8 @@ function collectMarks(value: unknown, report: MutableReport): void {
     return;
   }
   const node = value as Record<string, unknown>;
+  if (node.type === "mention")
+    addIssue(report.degraded, "mention-to-text", "纯文本仅保留提及名称，不保留成员关联。");
   if (Array.isArray(node.marks)) {
     for (const mark of node.marks) {
       if (typeof mark !== "object" || mark === null) continue;
@@ -262,6 +271,8 @@ function blockPlainText(node: Record<string, unknown>, report: MutableReport, de
   const type = node.type;
   const children = Array.isArray(node.content) ? (node.content as Record<string, unknown>[]) : [];
   if (type === "paragraph") return inlineText(children);
+  if (type === "blockMath")
+    return `$$\n${String((node.attrs as Record<string, unknown>).latex)}\n$$`;
   if (type === "heading") {
     addIssue(report.degraded, "heading-to-text", "Heading level is lost in plain text.");
     return inlineText(children);
@@ -387,6 +398,11 @@ function markdownInline(nodes: readonly JSONContent[], report: MutableReport): s
   return nodes
     .map((node) => {
       if (node.type === "hardBreak") return "  \n";
+      if (node.type === "inlineMath") {
+        if (node.marks?.length)
+          addIssue(report.degraded, "markdown-math-marks", "Markdown 仅保留行内公式的 LaTeX。");
+        return `$${String(node.attrs?.latex)}$`;
+      }
       let raw = node.text ?? "";
       if (node.type === "statusTag") {
         const status = DOCUMENT_STATUSES.find((value) => value === node.attrs?.status) ?? "todo";
@@ -397,7 +413,11 @@ function markdownInline(nodes: readonly JSONContent[], report: MutableReport): s
         );
         raw = DOCUMENT_STATUS_LABELS[status];
       }
-      if (node.type !== "text" && node.type !== "statusTag") return "";
+      if (node.type === "mention") {
+        raw = `@${String(node.attrs?.label ?? "")}`;
+        addIssue(report.degraded, "markdown-mention", "Markdown 仅保留提及名称，不保留成员关联。");
+      }
+      if (node.type !== "text" && node.type !== "statusTag" && node.type !== "mention") return "";
       const marks = node.marks ?? [];
       let text = markdownEscape(raw);
       if (marks.some((mark) => mark.type === "code")) {
@@ -439,6 +459,8 @@ function markdownBlock(node: JSONContent, report: MutableReport): string {
       return markdownInline(children, report);
     case "heading":
       return `${"#".repeat(Number(node.attrs?.level ?? 1))} ${markdownInline(children, report)}`;
+    case "blockMath":
+      return `$$\n${String(node.attrs?.latex)}\n$$`;
     case "horizontalRule":
       if (node.attrs?.label) {
         addIssue(
@@ -625,7 +647,8 @@ h1,h2,h3,h4,h5,h6{line-height:1.35;margin:1.5em 0 .6em;break-after:avoid}p{margi
 pre{padding:16px;background:#f1f5f9;border-radius:8px;overflow:auto;white-space:pre}code{font-family:"Fira Code",monospace;font-size:.9em}.tableWrapper{max-width:100%;overflow:auto}table{border-collapse:collapse;width:100%;margin:1em 0}th,td{border:1px solid #cbd5e1;padding:8px;vertical-align:top}th{background:#f8fafc}hr{border:0;border-top:1px solid #cbd5e1;margin:2em 0}img{max-width:100%}
 mark[data-highlight-color="yellow"]{background:#fef08a}mark[data-highlight-color="green"]{background:#bbf7d0}mark[data-highlight-color="blue"]{background:#bfdbfe}mark[data-highlight-color="pink"]{background:#fbcfe8}mark[data-highlight-color="purple"]{background:#e9d5ff}
 div[data-type="taskList"]{padding-left:0}div[data-type="taskList"] div[data-type="taskList"]{padding-left:1.5em}div[data-type="taskItem"]{display:flex;align-items:baseline;gap:.5em}div[data-type="taskItem"][data-checked="true"]{text-decoration:line-through;color:#64748b}
-div[data-callout-theme]{border-left:3px solid #6366f1;background:#eef2ff;padding:12px 16px;margin:1em 0;border-radius:6px}div[data-callout-theme="tip"]{border-color:#7c3aed;background:#f5f3ff}div[data-callout-theme="warning"]{border-color:#d97706;background:#fffbeb}div[data-callout-theme="success"]{border-color:#059669;background:#ecfdf5}div[data-callout-theme="danger"]{border-color:#e11d48;background:#fff1f2}div[data-divider-label]{display:flex;gap:12px;align-items:center;margin:2em 0}div[data-divider-label] hr{flex:1;margin:0}span[data-status-tag]{display:inline-block;background:#e2e8f0;border:1px solid #cbd5e1;border-radius:5px;padding:0 6px;font-size:.85em}
+div[data-callout-theme]{border-left:3px solid #6366f1;background:#eef2ff;padding:12px 16px;margin:1em 0;border-radius:6px}div[data-callout-theme="tip"]{border-color:#7c3aed;background:#f5f3ff}div[data-callout-theme="warning"]{border-color:#d97706;background:#fffbeb}div[data-callout-theme="success"]{border-color:#059669;background:#ecfdf5}div[data-callout-theme="danger"]{border-color:#e11d48;background:#fff1f2}div[data-divider-label]{display:flex;gap:12px;align-items:center;margin:2em 0}div[data-divider-label] hr{flex:1;margin:0}span[data-mention-id]{display:inline-block;color:#4338ca;background:#eef2ff;border-radius:5px;padding:0 5px;white-space:nowrap}span[data-status-tag]{display:inline-block;background:#e2e8f0;border:1px solid #cbd5e1;border-radius:5px;padding:0 6px;font-size:.85em}
+div[data-type="block-math"]{margin:1em 0;padding-block:.2em;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;break-inside:avoid}
 @page{margin:18mm}@media print{body{margin:0;padding:0;max-width:none;font-size:11pt}pre{white-space:pre-wrap;overflow:visible;overflow-wrap:anywhere}.tableWrapper{overflow:visible}table{width:100%!important;min-width:0!important;table-layout:fixed}col{width:auto!important;min-width:0!important}thead{display:table-header-group}tr,img{break-inside:avoid}a{color:inherit}h1,h2,h3{break-after:avoid}}
 </style></head><body><main><h1>${escapedTitle}</h1>${body.innerHTML}</main></body></html>`,
   };
@@ -639,8 +662,8 @@ function assignFreshBlockIds(value: unknown): void {
       typeof node.attrs === "object" && node.attrs !== null
         ? (node.attrs as Record<string, unknown>)
         : {};
-    attrs.blockId = createBlockId();
-    node.attrs = attrs;
+    // ProseMirror can reuse default attribute objects across parsed nodes.
+    node.attrs = { ...attrs, blockId: createBlockId() };
   }
   if (Array.isArray(node.content)) {
     for (const child of node.content) assignFreshBlockIds(child);
@@ -667,6 +690,12 @@ function sanitizeHtmlBody(body: HTMLElement, report: MutableReport): void {
   for (const element of elements) {
     if (!body.contains(element)) continue;
     const tag = element.localName.toLowerCase();
+    const mathType = element.getAttribute("data-type");
+    const isMath =
+      ((tag === "span" && mathType === "inline-math") ||
+        (tag === "div" && mathType === "block-math")) &&
+      isValidMathSource(element.getAttribute("data-latex") ?? "");
+    if (isMath) element.replaceChildren();
     const inTaskItem = Boolean(element.closest('div[data-type="taskItem"]'));
     const passiveTaskCheckbox =
       tag === "input" &&
@@ -703,12 +732,21 @@ function sanitizeHtmlBody(body: HTMLElement, report: MutableReport): void {
         addIssue(report.rejected, "unsafe-url-removed", "An unsafe link URL was removed.");
         element.removeAttribute(attribute.name);
       } else if (
+        (isMath && (name === "data-type" || name === "data-latex")) ||
         (tag === "div" &&
           name === "data-callout-theme" &&
           CALLOUT_THEMES.some((value) => value === attribute.value)) ||
         (tag === "div" &&
           name === "data-callout-content" &&
           element.closest("div[data-callout-theme]")) ||
+        (tag === "span" &&
+          name === "data-mention-id" &&
+          /^[A-Za-z0-9._:@-]{1,256}$/.test(attribute.value)) ||
+        (tag === "span" &&
+          name === "data-mention-label" &&
+          /^[A-Za-z0-9._:@-]{1,256}$/.test(element.getAttribute("data-mention-id") ?? "") &&
+          attribute.value.trim().length > 0 &&
+          attribute.value.length <= 80) ||
         (tag === "span" &&
           name === "data-status-tag" &&
           DOCUMENT_STATUSES.some((value) => value === attribute.value)) ||
@@ -857,12 +895,12 @@ export function importDocumentHtml(
     const pending = [parsedJson];
     while (pending.length) {
       const node = pending.pop()!;
-      if (node.type === "statusTag" && node.marks?.length) {
+      if ((node.type === "statusTag" || node.type === "mention") && node.marks?.length) {
         delete node.marks;
         addIssue(
           report.degraded,
           "status-tag-formatting",
-          "状态标签使用固定外观，不保留套用的文字格式。",
+          "状态标签与成员提及使用固定外观，不保留套用的文字格式。",
         );
       }
       if (node.content) pending.push(...node.content);
@@ -900,6 +938,18 @@ export function exportDocumentHtml(content: unknown, schema: Schema): Conversion
     const wrapper = document.createElement("div");
     const fragment = DOMSerializer.fromSchema(schema).serializeFragment(doc.content);
     wrapper.appendChild(fragment);
+    for (const formula of wrapper.querySelectorAll<HTMLElement>(
+      'span[data-type="inline-math"][data-latex], div[data-type="block-math"][data-latex]',
+    )) {
+      const latex = formula.getAttribute("data-latex")!;
+      const rendered = renderMathToHtml(latex, formula.dataset.type === "block-math");
+      if (rendered !== null) {
+        formula.innerHTML = rendered;
+      } else {
+        formula.textContent = latex;
+        addIssue(report.degraded, "html-math-to-text", "无法渲染的公式保留为 LaTeX 源码。");
+      }
+    }
     const imageBlocks = wrapper.querySelectorAll<HTMLElement>("figure[data-asset-id]");
     if (imageBlocks.length > 0) {
       addIssue(

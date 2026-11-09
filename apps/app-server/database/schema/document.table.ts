@@ -33,6 +33,9 @@ export const workspaces = pgTable(
       .notNull()
       .default("unclassified"),
     personalOwnerId: text("personal_owner_id"),
+    ownerIdentityId: text("owner_identity_id"),
+    authorizationRevision: integer("authorization_revision").notNull().default(1),
+    offlineCacheAllowed: boolean("offline_cache_allowed").notNull().default(true),
     icon: text("icon"),
     description: text("description").notNull().default(""),
     createdBy: text("created_by").notNull(),
@@ -48,31 +51,9 @@ export const workspaces = pgTable(
   ],
 );
 
-export const workspaceMembers = pgTable(
-  "workspace_members",
-  {
-    tenantId: text("tenant_id").notNull(),
-    workspaceId: text("workspace_id").notNull(),
-    identityId: text("identity_id").notNull(),
-    displayName: text("display_name").notNull(),
-    role: text("role").$type<"admin" | "editor" | "viewer">().notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    primaryKey({ columns: [table.tenantId, table.workspaceId, table.identityId] }),
-    foreignKey({
-      columns: [table.tenantId, table.workspaceId],
-      foreignColumns: [workspaces.tenantId, workspaces.id],
-      name: "workspace_members_workspace_fk",
-    }).onDelete("cascade"),
-    check("workspace_members_role_check", sql`${table.role} in ('admin', 'editor', 'viewer')`),
-  ],
-);
-
 // Directory tree of a workspace. Every workspace owns exactly one root node (parentId = null,
 // id = `cat_root_${workspaceId}`); documents always mount to a catalog node, never to another
-// document. Catalogs are workspace furniture visible to the whole tenant; document ACLs remain
-// the security boundary.
+// document. Directory and document grants share the resource_acl authorization model.
 export const catalogs = pgTable(
   "catalogs",
   {
@@ -80,6 +61,7 @@ export const catalogs = pgTable(
     id: text("id").notNull(),
     workspaceId: text("workspace_id").notNull(),
     parentId: text("parent_id"),
+    accessMode: text("access_mode").$type<"inherit" | "restricted">().notNull().default("inherit"),
     name: text("name").notNull(),
     icon: text("icon"),
     position: integer("position").notNull().default(0),
@@ -99,6 +81,7 @@ export const catalogs = pgTable(
       foreignColumns: [table.tenantId, table.id],
       name: "catalogs_parent_fk",
     }),
+    check("catalogs_access_mode_check", sql`${table.accessMode} in ('inherit', 'restricted')`),
     check("catalogs_position_check", sql`${table.position} >= 0`),
     check(
       "catalogs_parent_self_check",
@@ -148,6 +131,10 @@ export const documents = pgTable(
     tags: jsonb("tags").$type<DocumentTag[]>().notNull().default([]),
     createdBy: text("created_by").notNull(),
     status: text("status").notNull().default("active"),
+    accessMode: text("access_mode")
+      .$type<"personal" | "workspace-inherited" | "restricted">()
+      .notNull()
+      .default("restricted"),
     metadataRevision: integer("metadata_revision").notNull().default(1),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -174,6 +161,11 @@ export const documents = pgTable(
       table.id,
     ),
     check("documents_status_check", sql`${table.status} in ('active', 'archived', 'trashed')`),
+    check(
+      "documents_access_mode_check",
+      sql`${table.accessMode} in ('personal', 'workspace-inherited', 'restricted')`,
+    ),
+    index("documents_workspace_access_idx").on(table.tenantId, table.workspaceId, table.accessMode),
     check("documents_metadata_revision_check", sql`${table.metadataRevision} > 0`),
     uniqueIndex("documents_tenant_id_id_uq").on(table.tenantId, table.id),
     index("documents_tenant_created_idx").on(table.tenantId, table.createdAt, table.id),
@@ -330,39 +322,6 @@ export const documentRecents = pgTable(
   ],
 );
 
-export const documentAcl = pgTable(
-  "document_acl",
-  {
-    tenantId: text("tenant_id").notNull(),
-    documentId: text("document_id").notNull(),
-    identityId: text("identity_id").notNull(),
-    action: text("action").notNull(),
-    grantedBy: text("granted_by").notNull(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.tenantId, table.documentId],
-      foreignColumns: [documents.tenantId, documents.id],
-      name: "document_acl_tenant_document_fk",
-    }).onDelete("cascade"),
-    check(
-      "document_acl_action_check",
-      sql`${table.action} in ('read', 'write', 'comment', 'share', 'export', 'ai')`,
-    ),
-    uniqueIndex("document_acl_subject_action_uq").on(
-      table.tenantId,
-      table.documentId,
-      table.identityId,
-      table.action,
-    ),
-    index("document_acl_subject_document_idx").on(
-      table.tenantId,
-      table.identityId,
-      table.documentId,
-    ),
-  ],
-);
-
 // Public capability links for a single document. Each share record mints its own `shr_*` id used
 // in the public URL; permission tier and expiry are per-record. Anonymous visitors always get
 // read-only content; logged-in visitors can join (ACL grant per tier) via the share id.
@@ -373,6 +332,7 @@ export const documentShares = pgTable(
     id: text("id").notNull(),
     documentId: text("document_id").notNull(),
     permission: text("permission").notNull(),
+    kind: text("kind").$type<"invite" | "access">().notNull().default("invite"),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdBy: text("created_by").notNull(),
@@ -381,6 +341,8 @@ export const documentShares = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.tenantId, table.id] }),
+    uniqueIndex("document_shares_resource_uq").on(table.tenantId, table.documentId, table.id),
+    check("document_shares_kind_check", sql`${table.kind} in ('invite', 'access')`),
     foreignKey({
       columns: [table.tenantId, table.documentId],
       foreignColumns: [documents.tenantId, documents.id],
@@ -704,6 +666,213 @@ export const assetReferences = pgTable(
       table.documentId,
       table.generationId,
       table.durableSeq,
+    ),
+  ],
+);
+
+// A searchable projection of trusted authenticated identities, not an identity provider.
+export const identityProfiles = pgTable(
+  "identity_profiles",
+  {
+    tenantId: text("tenant_id").notNull(),
+    identityId: text("identity_id").notNull(),
+    displayName: text("display_name").notNull(),
+    email: text("email").notNull(),
+    active: boolean("active").notNull().default(true),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.identityId] })],
+);
+
+export const workspaceInvitations = pgTable(
+  "workspace_invitations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    role: text("role").$type<"editor" | "viewer">().notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    acceptedBy: text("accepted_by"),
+  },
+  (t) => [
+    uniqueIndex("workspace_invitations_token_uq").on(t.tokenHash),
+    index("workspace_invitations_workspace_idx").on(t.tenantId, t.workspaceId, t.createdAt),
+    foreignKey({
+      columns: [t.tenantId, t.workspaceId],
+      foreignColumns: [workspaces.tenantId, workspaces.id],
+      name: "workspace_invitations_workspace_fk",
+    }).onDelete("cascade"),
+    check("workspace_invitations_role_check", sql`${t.role} in ('editor', 'viewer')`),
+  ],
+);
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    recipientId: text("recipient_id").notNull(),
+    actorId: text("actor_id").notNull(),
+    type: text("type")
+      .$type<"comment" | "mention" | "permission" | "share" | "deleted">()
+      .notNull(),
+    eventKey: text("event_key").notNull(),
+    workspaceId: text("workspace_id"),
+    // Deliberately no document FK: deletion and revocation notices survive the resource.
+    documentId: text("document_id"),
+    message: text("message").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("notifications_recipient_event_uq").on(t.tenantId, t.recipientId, t.eventKey),
+    index("notifications_recipient_created_idx").on(t.tenantId, t.recipientId, t.createdAt, t.id),
+    index("notifications_unread_idx")
+      .on(t.tenantId, t.recipientId)
+      .where(sql`${t.readAt} is null`),
+    check(
+      "notifications_type_check",
+      sql`${t.type} in ('comment', 'mention', 'permission', 'share', 'deleted')`,
+    ),
+  ],
+);
+
+export const documentComments = pgTable(
+  "document_comments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    documentId: text("document_id").notNull(),
+    authorId: text("author_id").notNull(),
+    body: text("body").notNull(),
+    mentionIds: jsonb("mention_ids").$type<string[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.tenantId, t.documentId],
+      foreignColumns: [documents.tenantId, documents.id],
+      name: "document_comments_document_fk",
+    }).onDelete("cascade"),
+    index("document_comments_document_idx").on(t.tenantId, t.documentId, t.createdAt, t.id),
+  ],
+);
+
+// Exactly one resource FK: no polymorphic resource id without referential integrity.
+export const resourceAcl = pgTable(
+  "resource_acl",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tenantId: text("tenant_id").notNull(),
+    workspaceId: text("workspace_id"),
+    catalogId: text("catalog_id"),
+    documentId: text("document_id"),
+    sourceShareId: text("source_share_id"),
+    identityId: text("identity_id").notNull(),
+    // admin/editor/viewer are roles; legacy action grants remain lossless during migration.
+    role: text("role").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    check(
+      "resource_acl_one_resource_check",
+      sql`num_nonnulls(${t.workspaceId}, ${t.catalogId}, ${t.documentId}) = 1`,
+    ),
+    check(
+      "resource_acl_role_check",
+      sql`${t.role} in ('admin','editor','viewer','read','write','comment','share','export','ai','manage','move') and (${t.workspaceId} is null or ${t.role} in ('admin','editor','viewer'))`,
+    ),
+    foreignKey({
+      columns: [t.tenantId, t.workspaceId],
+      foreignColumns: [workspaces.tenantId, workspaces.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.tenantId, t.catalogId],
+      foreignColumns: [catalogs.tenantId, catalogs.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.tenantId, t.documentId],
+      foreignColumns: [documents.tenantId, documents.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [t.tenantId, t.documentId, t.sourceShareId],
+      foreignColumns: [documentShares.tenantId, documentShares.documentId, documentShares.id],
+    }).onDelete("cascade"),
+    check(
+      "resource_acl_source_check",
+      sql`${t.sourceShareId} is null or (${t.documentId} is not null and ${t.role} in ('read','write','comment'))`,
+    ),
+    uniqueIndex("resource_acl_workspace_subject_uq").on(t.tenantId, t.workspaceId, t.identityId),
+    uniqueIndex("resource_acl_catalog_subject_role_uq").on(
+      t.tenantId,
+      t.catalogId,
+      t.identityId,
+      t.role,
+    ),
+    uniqueIndex("resource_acl_document_subject_role_uq")
+      .on(t.tenantId, t.documentId, t.identityId, t.role)
+      .where(sql`${t.sourceShareId} is null`),
+    uniqueIndex("resource_acl_document_source_role_uq").on(
+      t.tenantId,
+      t.documentId,
+      t.identityId,
+      t.role,
+      t.sourceShareId,
+    ),
+    index("resource_acl_subject_idx").on(t.tenantId, t.identityId),
+  ],
+);
+
+// Transactional permission outbox; its ordered id is allocated under a global
+// advisory lock by the migration trigger so consumers cannot skip late commits.
+export const authorizationEvents = pgTable(
+  "authorization_events",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    tenantId: text("tenant_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    documentId: text("document_id"),
+    actorId: text("actor_id"),
+    operation: text("operation").notNull(),
+    before: jsonb("before").$type<Record<string, unknown> | null>(),
+    after: jsonb("after").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("authorization_events_workspace_idx").on(t.tenantId, t.workspaceId, t.id)],
+);
+
+// Only overrides are stored. Missing row means the versioned built-in role policy.
+export const rolePermissions = pgTable(
+  "role_permissions",
+  {
+    tenantId: text("tenant_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    resourceType: text("resource_type").$type<"space" | "catalog" | "document">().notNull(),
+    role: text("role").$type<"admin" | "editor" | "viewer">().notNull(),
+    actions: text("actions").array().notNull(),
+    createdBy: text("created_by").notNull(),
+    updatedBy: text("updated_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tenantId, t.workspaceId, t.resourceType, t.role] }),
+    foreignKey({
+      columns: [t.tenantId, t.workspaceId],
+      foreignColumns: [workspaces.tenantId, workspaces.id],
+    }).onDelete("cascade"),
+    check("role_permissions_kind_check", sql`${t.resourceType} in ('space','catalog','document')`),
+    check("role_permissions_role_check", sql`${t.role} in ('admin','editor','viewer')`),
+    check(
+      "role_permissions_actions_check",
+      sql`${t.actions} <@ array['read','write','comment','share','export','ai','manage','move']::text[]`,
     ),
   ],
 );

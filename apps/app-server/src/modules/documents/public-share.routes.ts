@@ -1,6 +1,6 @@
+import { requirePrincipal } from "../identity/principal.js";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { DomainError } from "../../shared/domain-error.js";
 import { assetAccessSchema } from "../assets/asset.schema.js";
 import { documentContentSchema, errorResponseSchema } from "./document.schema.js";
 import type { ShareService } from "./share.service.js";
@@ -91,10 +91,6 @@ export async function publicShareRoutes(
         },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.join(request.principal, request.params.shareId);
-    },
+    async (request) => service.join(requirePrincipal(request.principal), request.params.shareId),
   );
 }

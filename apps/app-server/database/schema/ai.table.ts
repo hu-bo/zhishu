@@ -29,7 +29,12 @@ export interface AiRunInput {
   request: AiTaskRequestV2;
   previousRequestIds: string[];
   sourceDocumentIds: string[];
-  sourceVersions: { documentId: string; generationId: string; durableSeq: number }[];
+  sourceVersions: {
+    documentId: string;
+    generationId: string;
+    durableSeq: number;
+    metadataRevision?: number;
+  }[];
   snapshot?: DocumentSnapshot & { generationId: string; durableSeq: number };
   evidence: EvidenceBundle;
   history: { role: "user" | "assistant"; content: string }[];

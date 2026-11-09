@@ -1,25 +1,35 @@
-import { createHash, randomUUID } from "node:crypto";
+import { stableJsonStringify } from "../../shared/stable-json.js";
+import { summarizeDocumentContent, type DocumentAssetReference } from "./document-content.js";
 import {
-  and,
-  asc,
-  desc,
-  eq,
-  gte,
-  ilike,
-  inArray,
-  isNotNull,
-  isNull,
-  lte,
-  notInArray,
-  or,
-  sql,
-} from "drizzle-orm";
+  insertProjectionOutbox,
+  insertEmptyProjectionSnapshot,
+} from "./document-projection.repository.js";
+import { lockKnowledgeTree, readKnowledgeTree } from "../../shared/knowledge-transaction.js";
+import {
+  accessRoles,
+  effectiveActions,
+  permissionActions,
+  type AccessRole,
+  type PermissionAction,
+} from "../authorization/policy.js";
+import { catalogActionSql, loadPolicyOverrides } from "../authorization/access.js";
+import { recordBodyMentionNotifications } from "./body-mentions.js";
+import { documentRecipients, insertNotifications } from "../notifications/index.js";
+import {
+  documentActionSql,
+  documentGrantActiveSql,
+  hasDocumentPermission,
+  requireDocumentManager,
+  type DocumentAccessMode,
+} from "../authorization/permissions.js";
+import { createHash, randomUUID } from "node:crypto";
+import { and, asc, desc, eq, ilike, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import type { Database } from "../../../database/index.js";
 import type { DocumentTag } from "./document.schema.js";
 import { DomainError } from "../../shared/domain-error.js";
 import type { DocumentWriteTransaction } from "../collaboration/owner.js";
-import { ensureRootCatalog } from "./catalog.repository.js";
-import { requireWorkspaceOrganizer } from "./workspace-access.js";
+import { ensureRootCatalog, workspaceNameSql } from "../catalogs/index.js";
+import { requireWorkspaceOrganizer } from "../authorization/permissions.js";
 import {
   assetReferences,
   assets,
@@ -27,25 +37,18 @@ import {
   catalogs,
   collaborationUpdates,
   documentAuditEvents,
-  documentAcl,
+  resourceAcl,
+  identityProfiles,
   documentFavorites,
   documentGenerationCheckpoints,
   documentGenerations,
   documentMigrationSnapshots,
-  documentOutbox,
   documentProjectionSnapshots,
   documentRecents,
   documentVersions,
-  documentVersionCheckpoints,
   documents,
   workspaces,
 } from "../../../database/schema/index.js";
-import {
-  documentPermissionActions,
-  type DocumentPermissionAction,
-} from "./document.permissions.js";
-
-const yjsReplayPageSize = 16;
 import {
   CURRENT_DOCUMENT_SCHEMA_VERSION,
   DOCUMENT_STATUSES,
@@ -54,13 +57,7 @@ import {
   type ContentMigrationStepSnapshot,
   type DocumentContent,
 } from "@zhishu/document-contracts";
-
-const PROJECTION_LEASE_MS = 30_000;
-const PROJECTION_MAX_ATTEMPTS = 8;
-const PROJECTION_RETRY_BASE_MS = 1_000;
-const PROJECTION_RETRY_MAX_MS = 5 * 60_000;
-const validDocumentPermissionActions = new Set<string>(documentPermissionActions);
-type DocumentAssetReference = { assetId: string; blockId: string; mediaType: string };
+const validPermissionActions = new Set<string>(permissionActions);
 
 function assetReferencesMatchReadyAssets(
   references: readonly DocumentAssetReference[],
@@ -78,61 +75,8 @@ function assetReferencesMatchReadyAssets(
   );
 }
 
-function isDocumentPermissionAction(value: string): value is DocumentPermissionAction {
-  return validDocumentPermissionActions.has(value);
-}
-
-type ProjectionSummary = { blockCount: number; textLength: number; assetCount: number };
-const emptyDocumentContent: DocumentContent = { type: "doc", content: [] };
-export type ClaimedProjectionJob = {
-  id: string;
-  leaseToken: string;
-  tenantId: string;
-  documentId: string;
-  generationId: string;
-  durableSeq: number;
-  content: DocumentContent;
-  contentHash: string;
-  summary: ProjectionSummary;
-};
-
-export function summarizeDocumentContent(content: DocumentContent): ProjectionSummary {
-  let blockCount = 0;
-  let textLength = 0;
-  let assetCount = 0;
-  const pending: unknown[] = [...content.content];
-  while (pending.length > 0) {
-    const value = pending.pop();
-    if (typeof value !== "object" || value === null || Array.isArray(value)) continue;
-    const node = value as {
-      type?: unknown;
-      text?: unknown;
-      attrs?: { blockId?: unknown };
-      content?: unknown;
-    };
-    if (typeof node.attrs?.blockId === "string") blockCount += 1;
-    if (node.type === "image" || node.type === "pdfAttachment") assetCount += 1;
-    if (node.type === "text" && typeof node.text === "string") textLength += [...node.text].length;
-    if (Array.isArray(node.content)) pending.push(...node.content);
-  }
-  return { blockCount, textLength, assetCount };
-}
-
-export function hashDocumentContent(content: DocumentContent): string {
-  return createHash("sha256").update(JSON.stringify(content)).digest("hex");
-}
-
-function stableJsonStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map((item) => stableJsonStringify(item)).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) =>
-      left < right ? -1 : left > right ? 1 : 0,
-    );
-    return `{${entries
-      .map(([key, item]) => `${JSON.stringify(key)}:${stableJsonStringify(item)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value) ?? "null";
+function isPermissionAction(value: string): value is PermissionAction {
+  return validPermissionActions.has(value);
 }
 
 type DocumentAuditAction =
@@ -208,63 +152,6 @@ async function insertMigrationSnapshots(
   );
 }
 
-type ProjectionOutboxExecutor = Pick<Database, "insert" | "update">;
-
-export async function insertProjectionOutbox(
-  executor: ProjectionOutboxExecutor,
-  input: {
-    tenantId: string;
-    documentId: string;
-    generationId: string;
-    durableSeq: number;
-    updateHash: string;
-    contentChanged: boolean;
-    content: DocumentContent;
-  },
-): Promise<void> {
-  await executor.insert(documentOutbox).values({
-    tenantId: input.tenantId,
-    documentId: input.documentId,
-    generationId: input.generationId,
-    durableSeq: input.durableSeq,
-    updateHash: input.updateHash,
-    contentChanged: input.contentChanged,
-    summary: summarizeDocumentContent(input.content),
-    snapshotContent: input.content,
-    contentHash: hashDocumentContent(input.content),
-  });
-  await executor
-    .update(documentOutbox)
-    .set({
-      status: "done",
-      processedAt: sql`CURRENT_TIMESTAMP`,
-      leaseUntil: null,
-      leaseToken: null,
-      snapshotContent: null,
-    })
-    .where(
-      and(
-        eq(documentOutbox.generationId, input.generationId),
-        sql`${documentOutbox.durableSeq} < ${input.durableSeq}`,
-        or(eq(documentOutbox.status, "pending"), eq(documentOutbox.status, "processing")),
-      ),
-    );
-}
-
-async function insertEmptyProjectionSnapshot(
-  executor: Pick<Database, "insert">,
-  input: { tenantId: string; documentId: string; generationId: string },
-): Promise<void> {
-  await executor.insert(documentProjectionSnapshots).values({
-    ...input,
-    durableSeq: 0,
-    snapshotRevision: 1,
-    content: emptyDocumentContent,
-    contentHash: hashDocumentContent(emptyDocumentContent),
-    ...summarizeDocumentContent(emptyDocumentContent),
-  });
-}
-
 const AUTOMATIC_VERSION_INTERVAL_MS = 30 * 60 * 1000;
 const MAX_AUTOMATIC_VERSIONS_PER_DOCUMENT = 50;
 
@@ -282,6 +169,14 @@ export type ActiveDocument = {
   position?: number;
   icon?: string | null;
   tags?: DocumentTag[];
+  accessMode?: DocumentAccessMode;
+  canManage?: boolean;
+  canWrite?: boolean;
+  offlineCacheAllowed?: boolean;
+  canComment?: boolean;
+  canMove?: boolean;
+  canShare?: boolean;
+  canExport?: boolean;
   createdBy: string;
   schemaVersion: number;
   extensions: Array<{ name: string; version: string; required: boolean }>;
@@ -336,6 +231,10 @@ function parseStoredActiveDocument(value: Record<string, unknown>): ActiveDocume
     position: typeof value.position === "number" ? value.position : 0,
     icon: typeof value.icon === "string" ? value.icon : null,
     tags: Array.isArray(value.tags) ? (value.tags as NonNullable<ActiveDocument["tags"]>) : [],
+    accessMode:
+      value.accessMode === "personal" || value.accessMode === "workspace-inherited"
+        ? value.accessMode
+        : "restricted",
     createdBy: value.createdBy,
     schemaVersion: value.schemaVersion,
     extensions: value.extensions as ActiveDocument["extensions"],
@@ -382,14 +281,14 @@ function parseStoredLifecycleResponse(value: Record<string, unknown>): string {
 
 function parseStoredAclResponse(value: Record<string, unknown>): {
   generationId: string;
-  actions: DocumentPermissionAction[];
+  actions: PermissionAction[];
 } {
   if (
     typeof value.generationId !== "string" ||
     !Array.isArray(value.actions) ||
     !value.actions.every(
-      (action): action is DocumentPermissionAction =>
-        typeof action === "string" && isDocumentPermissionAction(action),
+      (action): action is PermissionAction =>
+        typeof action === "string" && isPermissionAction(action),
     )
   ) {
     throw new Error("Stored document ACL idempotency response is invalid");
@@ -489,7 +388,7 @@ function loadLifecycleIdempotencyReplay(
 function loadAclIdempotencyReplay(
   tx: IdempotencyExecutor,
   input: { tenantId: string; subjectId: string; idempotency: DocumentIdempotency },
-): Promise<{ generationId: string; actions: DocumentPermissionAction[] } | null> {
+): Promise<{ generationId: string; actions: PermissionAction[] } | null> {
   return loadIdempotencyReplay(tx, input, parseStoredAclResponse);
 }
 
@@ -565,47 +464,20 @@ export type GenerationSwitchResult =
       document: ActiveDocument;
     };
 
-export type PersistedUpdate = {
-  updateHash: string;
-  updateBytes: Uint8Array;
-  durableSeq: number;
-};
-
-export type YjsCompactionTarget = {
-  documentId: string;
-  generationId: string;
-  durableSeq: number;
-  checkpointSeq: number | null;
-};
-
-export type VersionCheckpointInput = {
-  versionId: string;
-  durableSeq: number;
-  stateBytes: Uint8Array;
-};
-
 export type AclChangeResult =
   | { status: "not-found" }
   | { status: "not-owner" }
-  | { status: "updated" | "replayed"; generationId: string; actions: DocumentPermissionAction[] };
+  | { status: "updated" | "replayed"; generationId: string; actions: PermissionAction[] };
 
 export type DocumentAclEntry = {
   documentId: string;
   identityId: string;
-  actions: DocumentPermissionAction[];
+  actions: PermissionAction[];
+  role?: AccessRole;
+  grantedAt?: string;
+  displayName?: string;
+  email?: string;
 };
-
-export function hasDocumentAction(
-  granted: ReadonlySet<string>,
-  required: DocumentPermissionAction,
-): boolean {
-  if (granted.has(required)) return true;
-  if (required === "read")
-    return ["write", "comment", "export", "ai"].some((action) => granted.has(action));
-  if (required === "comment") return granted.has("write");
-  if (required === "ai") return granted.has("write");
-  return false;
-}
 
 export class DocumentRepository {
   constructor(private readonly db: Database) {}
@@ -616,316 +488,6 @@ export class DocumentRepository {
     idempotency: DocumentIdempotency;
   }): Promise<ActiveDocument | null> {
     return this.db.transaction((tx) => loadDocumentIdempotencyReplay(tx, input));
-  }
-
-  async replayYjsState(
-    input: {
-      documentId: string;
-      generationId: string;
-      targetSeq: number;
-      versionId?: string;
-    },
-    applyUpdate: (updateBytes: Uint8Array, durableSeq: number) => void,
-    onAppliedSeq?: (durableSeq: number) => void,
-  ): Promise<{ checkpointSeq: number }> {
-    let checkpointSeq = 0;
-    let checkpointBytes: Buffer | undefined;
-    if (input.versionId) {
-      const [snapshot] = await this.db
-        .select({
-          stateBytes: documentVersionCheckpoints.stateBytes,
-          stateHash: documentVersionCheckpoints.stateHash,
-        })
-        .from(documentVersionCheckpoints)
-        .innerJoin(documentVersions, eq(documentVersions.id, documentVersionCheckpoints.versionId))
-        .where(
-          and(
-            eq(documentVersionCheckpoints.versionId, input.versionId),
-            eq(documentVersions.documentId, input.documentId),
-            eq(documentVersions.generationId, input.generationId),
-            eq(documentVersions.durableSeq, input.targetSeq),
-          ),
-        )
-        .limit(1);
-      if (snapshot) {
-        if (createHash("sha256").update(snapshot.stateBytes).digest("hex") !== snapshot.stateHash) {
-          throw new Error("Version checkpoint checksum does not match");
-        }
-        checkpointSeq = input.targetSeq;
-        checkpointBytes = snapshot.stateBytes;
-      }
-    }
-    if (!checkpointBytes) {
-      const [checkpoint] = await this.db
-        .select({
-          durableSeq: documentGenerationCheckpoints.durableSeq,
-          stateBytes: documentGenerationCheckpoints.stateBytes,
-          stateHash: documentGenerationCheckpoints.stateHash,
-        })
-        .from(documentGenerationCheckpoints)
-        .where(
-          and(
-            eq(documentGenerationCheckpoints.documentId, input.documentId),
-            eq(documentGenerationCheckpoints.generationId, input.generationId),
-            lte(documentGenerationCheckpoints.durableSeq, input.targetSeq),
-          ),
-        )
-        .limit(1);
-      if (checkpoint) {
-        if (
-          createHash("sha256").update(checkpoint.stateBytes).digest("hex") !== checkpoint.stateHash
-        ) {
-          throw new Error("Generation checkpoint checksum does not match");
-        }
-        checkpointSeq = checkpoint.durableSeq;
-        checkpointBytes = checkpoint.stateBytes;
-      }
-    }
-
-    if (checkpointSeq > input.targetSeq) throw new Error("Yjs checkpoint is newer than the target");
-    if (checkpointBytes) applyUpdate(new Uint8Array(checkpointBytes), checkpointSeq);
-    onAppliedSeq?.(checkpointSeq);
-
-    let nextSeq = checkpointSeq + 1;
-    while (nextSeq <= input.targetSeq) {
-      const rows = await this.db
-        .select({
-          durableSeq: collaborationUpdates.durableSeq,
-          updateBytes: collaborationUpdates.updateBytes,
-        })
-        .from(collaborationUpdates)
-        .where(
-          and(
-            eq(collaborationUpdates.documentId, input.documentId),
-            eq(collaborationUpdates.generationId, input.generationId),
-            gte(collaborationUpdates.durableSeq, nextSeq),
-            lte(collaborationUpdates.durableSeq, input.targetSeq),
-          ),
-        )
-        .orderBy(asc(collaborationUpdates.durableSeq))
-        .limit(yjsReplayPageSize);
-      if (rows.length === 0)
-        throw new Error(`Yjs update history is incomplete at sequence ${nextSeq}`);
-      for (const row of rows) {
-        if (row.durableSeq !== nextSeq || !row.updateBytes) {
-          throw new Error(`Yjs update history is incomplete at sequence ${nextSeq}`);
-        }
-        const updateBytes = new Uint8Array(row.updateBytes);
-        applyUpdate(updateBytes, row.durableSeq);
-        onAppliedSeq?.(row.durableSeq);
-        nextSeq += 1;
-      }
-    }
-    if (nextSeq - 1 !== input.targetSeq) {
-      throw new Error("Yjs update history does not reach the requested sequence");
-    }
-    return { checkpointSeq };
-  }
-
-  async listYjsCompactionTargets(): Promise<YjsCompactionTarget[]> {
-    const rows = await this.db
-      .select({
-        documentId: documentGenerations.documentId,
-        generationId: documentGenerations.id,
-        durableSeq: documentGenerations.durableSeq,
-        checkpointSeq: documentGenerationCheckpoints.durableSeq,
-      })
-      .from(documentGenerations)
-      .leftJoin(
-        documentGenerationCheckpoints,
-        and(
-          eq(documentGenerationCheckpoints.documentId, documentGenerations.documentId),
-          eq(documentGenerationCheckpoints.generationId, documentGenerations.id),
-        ),
-      )
-      .orderBy(asc(documentGenerations.documentId), asc(documentGenerations.createdAt));
-    return rows;
-  }
-
-  async listVersionsNeedingCheckpoint(
-    generationId: string,
-    throughSeq: number,
-  ): Promise<Array<{ versionId: string; durableSeq: number }>> {
-    return this.db
-      .select({ versionId: documentVersions.id, durableSeq: documentVersions.durableSeq })
-      .from(documentVersions)
-      .leftJoin(
-        documentVersionCheckpoints,
-        eq(documentVersionCheckpoints.versionId, documentVersions.id),
-      )
-      .where(
-        and(
-          eq(documentVersions.generationId, generationId),
-          lte(documentVersions.durableSeq, throughSeq),
-          isNull(documentVersionCheckpoints.versionId),
-        ),
-      )
-      .orderBy(asc(documentVersions.durableSeq), asc(documentVersions.id));
-  }
-
-  async commitYjsCheckpoints(input: {
-    documentId: string;
-    generationId: string;
-    durableSeq: number;
-    stateBytes: Uint8Array;
-    versionCheckpoints: readonly VersionCheckpointInput[];
-  }): Promise<
-    | { status: "not-found" | "conflict" | "stale" }
-    | { status: "compacted"; prunedUpdates: number; prunedBytes: number; versionSnapshots: number }
-  > {
-    return this.db.transaction(async (tx) => {
-      const [document] = await tx
-        .select({ id: documents.id })
-        .from(documents)
-        .where(eq(documents.id, input.documentId))
-        .for("update")
-        .limit(1);
-      if (!document) return { status: "not-found" };
-
-      const [generation] = await tx
-        .select({ durableSeq: documentGenerations.durableSeq })
-        .from(documentGenerations)
-        .where(
-          and(
-            eq(documentGenerations.documentId, input.documentId),
-            eq(documentGenerations.id, input.generationId),
-          ),
-        )
-        .for("update")
-        .limit(1);
-      if (!generation) return { status: "not-found" };
-      if (generation.durableSeq !== input.durableSeq) return { status: "conflict" };
-
-      const [existingCheckpoint] = await tx
-        .select({ durableSeq: documentGenerationCheckpoints.durableSeq })
-        .from(documentGenerationCheckpoints)
-        .where(
-          and(
-            eq(documentGenerationCheckpoints.documentId, input.documentId),
-            eq(documentGenerationCheckpoints.generationId, input.generationId),
-          ),
-        )
-        .limit(1);
-      if (existingCheckpoint && existingCheckpoint.durableSeq > input.durableSeq) {
-        return { status: "conflict" };
-      }
-
-      const suppliedSnapshots = new Map(
-        input.versionCheckpoints.map((checkpoint) => [checkpoint.versionId, checkpoint]),
-      );
-      const missingVersions = await tx
-        .select({ versionId: documentVersions.id })
-        .from(documentVersions)
-        .leftJoin(
-          documentVersionCheckpoints,
-          eq(documentVersionCheckpoints.versionId, documentVersions.id),
-        )
-        .where(
-          and(
-            eq(documentVersions.generationId, input.generationId),
-            lte(documentVersions.durableSeq, input.durableSeq),
-            isNull(documentVersionCheckpoints.versionId),
-          ),
-        );
-      if (missingVersions.some((version) => !suppliedSnapshots.has(version.versionId))) {
-        return { status: "stale" };
-      }
-      if (input.versionCheckpoints.length > 0) {
-        const validVersions = await tx
-          .select({ id: documentVersions.id, durableSeq: documentVersions.durableSeq })
-          .from(documentVersions)
-          .where(
-            and(
-              eq(documentVersions.generationId, input.generationId),
-              lte(documentVersions.durableSeq, input.durableSeq),
-              inArray(
-                documentVersions.id,
-                input.versionCheckpoints.map((item) => item.versionId),
-              ),
-            ),
-          );
-        if (
-          validVersions.length !== input.versionCheckpoints.length ||
-          input.versionCheckpoints.some(
-            (snapshot) =>
-              validVersions.find((version) => version.id === snapshot.versionId)?.durableSeq !==
-              snapshot.durableSeq,
-          )
-        ) {
-          return { status: "stale" };
-        }
-      }
-
-      const createdAt = new Date();
-      if (input.versionCheckpoints.length > 0) {
-        await tx
-          .insert(documentVersionCheckpoints)
-          .values(
-            input.versionCheckpoints.map((checkpoint) => ({
-              versionId: checkpoint.versionId,
-              stateBytes: Buffer.from(checkpoint.stateBytes),
-              stateHash: createHash("sha256").update(checkpoint.stateBytes).digest("hex"),
-              createdAt,
-            })),
-          )
-          .onConflictDoNothing();
-      }
-      const stateHash = createHash("sha256").update(input.stateBytes).digest("hex");
-      await tx
-        .insert(documentGenerationCheckpoints)
-        .values({
-          documentId: input.documentId,
-          generationId: input.generationId,
-          durableSeq: input.durableSeq,
-          stateBytes: Buffer.from(input.stateBytes),
-          stateHash,
-          createdAt,
-        })
-        .onConflictDoUpdate({
-          target: [
-            documentGenerationCheckpoints.documentId,
-            documentGenerationCheckpoints.generationId,
-          ],
-          set: {
-            durableSeq: input.durableSeq,
-            stateBytes: Buffer.from(input.stateBytes),
-            stateHash,
-            createdAt,
-          },
-        });
-
-      const [prunable] = await tx
-        .select({
-          count: sql<string>`count(*)::text`,
-          bytes: sql<string>`coalesce(sum(octet_length(${collaborationUpdates.updateBytes})), 0)::text`,
-        })
-        .from(collaborationUpdates)
-        .where(
-          and(
-            eq(collaborationUpdates.documentId, input.documentId),
-            eq(collaborationUpdates.generationId, input.generationId),
-            lte(collaborationUpdates.durableSeq, input.durableSeq),
-            isNotNull(collaborationUpdates.updateBytes),
-          ),
-        );
-      await tx
-        .update(collaborationUpdates)
-        .set({ updateBytes: null })
-        .where(
-          and(
-            eq(collaborationUpdates.documentId, input.documentId),
-            eq(collaborationUpdates.generationId, input.generationId),
-            lte(collaborationUpdates.durableSeq, input.durableSeq),
-            isNotNull(collaborationUpdates.updateBytes),
-          ),
-        );
-      return {
-        status: "compacted",
-        prunedUpdates: Number(prunable?.count ?? 0),
-        prunedBytes: Number(prunable?.bytes ?? 0),
-        versionSnapshots: input.versionCheckpoints.length,
-      };
-    });
   }
 
   async listActiveForIntegrityScan(): Promise<
@@ -971,9 +533,7 @@ export class DocumentRepository {
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`document-quota:${tenantId}`}, 718267))`,
       );
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`knowledge-tree:${tenantId}`}, 718268))`,
-      );
+      await lockKnowledgeTree(tx, tenantId, ownerId);
       await tx
         .insert(workspaces)
         .values({
@@ -985,7 +545,7 @@ export class DocumentRepository {
         })
         .onConflictDoNothing();
       const [workspace] = await tx
-        .select({ id: workspaces.id })
+        .select({ id: workspaces.id, kind: workspaces.kind })
         .from(workspaces)
         .where(and(eq(workspaces.tenantId, tenantId), eq(workspaces.id, location.workspaceId)))
         .limit(1);
@@ -1002,6 +562,7 @@ export class DocumentRepository {
               eq(catalogs.tenantId, tenantId),
               eq(catalogs.id, location.catalogId),
               eq(catalogs.workspaceId, location.workspaceId),
+              catalogActionSql({ tenantId, identityId: ownerId }, "write"),
             ),
           )
           .limit(1);
@@ -1035,12 +596,23 @@ export class DocumentRepository {
           tenantId,
           title,
           createdBy: ownerId,
+          accessMode:
+            workspace.kind === "team"
+              ? "workspace-inherited"
+              : workspace.kind === "personal"
+                ? "personal"
+                : "restricted",
           workspaceId: location.workspaceId,
           catalogId,
           position: lastPosition?.value ?? 0,
         })
         .returning();
       if (!document) throw new Error("Document insert returned no row");
+      if (document.accessMode !== "workspace-inherited")
+        await tx
+          .insert(resourceAcl)
+          .values({ tenantId, documentId, identityId: ownerId, role: "admin", createdBy: ownerId });
+      await requireDocumentManager(tx, tenantId, documentId);
 
       const [generation] = await tx
         .insert(documentGenerations)
@@ -1113,6 +685,7 @@ export class DocumentRepository {
         position: document.position,
         icon: document.icon,
         tags: document.tags,
+        accessMode: document.accessMode,
         createdBy: document.createdBy,
         schemaVersion: generation.schemaVersion,
         extensions: generation.extensions,
@@ -1168,11 +741,16 @@ export class DocumentRepository {
         if (replay) return { status: "replayed", document: replay };
       }
 
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`document-quota:${input.tenantId}`}, 718267))`,
+      );
+      await lockKnowledgeTree(tx, input.tenantId, input.identityId);
       const [template] = await tx
         .select({
           id: documents.id,
           tenantId: documents.tenantId,
           createdBy: documents.createdBy,
+          accessMode: documents.accessMode,
         })
         .from(documents)
         .where(
@@ -1186,20 +764,15 @@ export class DocumentRepository {
         .limit(1);
       if (!template) return { status: "not-found" };
 
-      if (template.createdBy !== input.identityId) {
-        const grants = await tx
-          .select({ action: documentAcl.action })
-          .from(documentAcl)
-          .where(
-            and(
-              eq(documentAcl.tenantId, input.tenantId),
-              eq(documentAcl.documentId, input.templateId),
-              eq(documentAcl.identityId, input.identityId),
-            ),
-          );
-        if (!hasDocumentAction(new Set(grants.map((grant) => grant.action)), "read")) {
-          return { status: "not-found" };
-        }
+      if (
+        !(await hasDocumentPermission(
+          tx,
+          { tenantId: input.tenantId, identityId: input.identityId },
+          template.id,
+          "export",
+        ))
+      ) {
+        throw new DomainError("NOT_FOUND", "Template document is unavailable");
       }
 
       const [generation] = await tx
@@ -1226,9 +799,6 @@ export class DocumentRepository {
         return { status: "conflict" };
       }
 
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`document-quota:${input.tenantId}`}, 718267))`,
-      );
       const [tenantDocumentCount] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(documents)
@@ -1241,6 +811,11 @@ export class DocumentRepository {
       const generationId = `gen_${randomUUID()}`;
       const initialDurableSeq = input.initialUpdate ? 1 : 0;
       const copyCatalogId = await ensureRootCatalog(tx, input.tenantId, "ws_default");
+      await requireWorkspaceOrganizer(
+        tx,
+        { tenantId: input.tenantId, identityId: input.identityId },
+        "ws_default",
+      );
       const [document] = await tx
         .insert(documents)
         .values({
@@ -1252,6 +827,14 @@ export class DocumentRepository {
         })
         .returning();
       if (!document) throw new Error("Copied document insert returned no row");
+      await tx.insert(resourceAcl).values({
+        tenantId: input.tenantId,
+        documentId,
+        identityId: input.identityId,
+        role: "admin",
+        createdBy: input.identityId,
+      });
+      await requireDocumentManager(tx, input.tenantId, documentId);
 
       const [copiedGeneration] = await tx
         .insert(documentGenerations)
@@ -1322,6 +905,7 @@ export class DocumentRepository {
         position: document.position,
         icon: document.icon,
         tags: document.tags,
+        accessMode: document.accessMode,
         createdBy: document.createdBy,
         schemaVersion: copiedGeneration.schemaVersion,
         extensions: copiedGeneration.extensions,
@@ -1359,24 +943,20 @@ export class DocumentRepository {
     offset: number;
   }): Promise<{ items: DocumentListItem[]; hasMore: boolean }> {
     const owner = eq(documents.createdBy, input.identityId);
-    const readable = sql`(
-      ${owner} OR EXISTS (
-        SELECT 1 FROM document_acl da
-        WHERE da.tenant_id = ${input.tenantId}
-          AND da.document_id = ${documents.id}
-          AND da.identity_id = ${input.identityId}
-          AND da.action IN ('read', 'write', 'comment', 'export', 'ai')
-      )
-    )`;
+    const readable = documentActionSql(input, "read");
     const status =
       input.view === "trash" ? "trashed" : input.view === "archived" ? "archived" : "active";
-    const filters = [eq(documents.tenantId, input.tenantId), eq(documents.status, status)];
+    const filters = [
+      eq(documents.tenantId, input.tenantId),
+      eq(documents.status, status),
+      readable,
+    ];
     if (input.workspaceId) filters.push(eq(documents.workspaceId, input.workspaceId));
-    if (input.view === "mine" || input.view === "archived" || input.view === "trash") {
+    if (input.view === "mine") {
       filters.push(owner);
-    } else {
-      filters.push(readable);
     }
+    if (input.view === "archived" || input.view === "trash")
+      filters.push(documentActionSql(input, "manage"));
     if (input.view === "recent") filters.push(sql`${documentRecents.identityId} IS NOT NULL`);
     if (input.view === "favorites") filters.push(sql`${documentFavorites.identityId} IS NOT NULL`);
     if (input.query) filters.push(ilike(documents.title, `%${input.query}%`));
@@ -1399,22 +979,32 @@ export class DocumentRepository {
       case value->>'type'
         when 'text' then value->>'text'
         when 'horizontalRule' then value#>>'{attrs,label}'
+        when 'mention' then '@' || (value#>>'{attrs,label}')
         when 'statusTag' then case value#>>'{attrs,status}' ${statusLabels} end
       end, ' ')
       from jsonb_path_query(${documentProjectionSnapshots.content},
-        'strict $.** ? (@.type() == "object" && (@.type == "text" || @.type == "horizontalRule" || @.type == "statusTag"))') as value), ''), 160)`;
+        'strict $.** ? (@.type() == "object" && (@.type == "text" || @.type == "horizontalRule" || @.type == "statusTag" || @.type == "mention"))') as value), ''), 160)`;
     const rows = await this.db
       .select({
         id: documents.id,
         tenantId: documents.tenantId,
         title: documents.title,
         workspaceId: documents.workspaceId,
-        workspaceName: workspaces.name,
+        workspaceName: workspaceNameSql(input),
         catalogId: documents.catalogId,
         position: documents.position,
         icon: documents.icon,
         tags: documents.tags,
+        canManage: documentActionSql(input, "manage"),
+        canWrite: documentActionSql(input, "write"),
+        offlineCacheAllowed: workspaces.offlineCacheAllowed,
+        canComment: documentActionSql(input, "comment"),
+        canMove: documentActionSql(input, "move"),
+        canShare: documentActionSql(input, "share"),
+        canExport: documentActionSql(input, "export"),
+
         createdBy: documents.createdBy,
+        accessMode: documents.accessMode,
         excerpt,
         schemaVersion: documentGenerations.schemaVersion,
         extensions: documentGenerations.extensions,
@@ -1521,6 +1111,8 @@ export class DocumentRepository {
     title?: string;
     icon?: string | null;
     tags?: DocumentTag[];
+    accessMode?: DocumentAccessMode;
+    canManage?: boolean;
     requestId?: string;
     idempotency?: DocumentIdempotency;
   }): Promise<
@@ -1529,11 +1121,13 @@ export class DocumentRepository {
     | { status: "updated" | "replayed"; document: ActiveDocument }
   > {
     return this.db.transaction(async (tx) => {
+      await readKnowledgeTree(tx, input.tenantId);
       const [document] = await tx
         .select({
           id: documents.id,
           tenantId: documents.tenantId,
           createdBy: documents.createdBy,
+          accessMode: documents.accessMode,
           createdAt: documents.createdAt,
           metadataRevision: documents.metadataRevision,
         })
@@ -1548,21 +1142,15 @@ export class DocumentRepository {
         .for("update")
         .limit(1);
       if (!document) return { status: "not-found" };
-      if (document.createdBy !== input.identityId) {
-        const [writeGrant] = await tx
-          .select({ action: documentAcl.action })
-          .from(documentAcl)
-          .where(
-            and(
-              eq(documentAcl.tenantId, input.tenantId),
-              eq(documentAcl.documentId, input.documentId),
-              eq(documentAcl.identityId, input.identityId),
-              eq(documentAcl.action, "write"),
-            ),
-          )
-          .limit(1);
-        if (!writeGrant) return { status: "not-found" };
-      }
+      if (
+        !(await hasDocumentPermission(
+          tx,
+          { tenantId: input.tenantId, identityId: input.identityId },
+          input.documentId,
+          "write",
+        ))
+      )
+        return { status: "not-found" };
       if (input.idempotency) {
         const replay = await loadDocumentIdempotencyReplay(tx, {
           tenantId: input.tenantId,
@@ -1619,6 +1207,7 @@ export class DocumentRepository {
         position: updatedDocument.position,
         icon: updatedDocument.icon,
         tags: updatedDocument.tags,
+        accessMode: updatedDocument.accessMode,
         createdBy: updatedDocument.createdBy,
         schemaVersion: generation.schemaVersion,
         extensions: generation.extensions,
@@ -1650,9 +1239,7 @@ export class DocumentRepository {
     idempotency?: DocumentIdempotency;
   }): Promise<DocumentLifecycleResult> {
     return this.db.transaction(async (tx) => {
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`knowledge-tree:${input.tenantId}`}, 718268))`,
-      );
+      await lockKnowledgeTree(tx, input.tenantId, input.ownerId);
       if (input.idempotency) {
         const replay = await loadLifecycleIdempotencyReplay(tx, {
           tenantId: input.tenantId,
@@ -1662,13 +1249,25 @@ export class DocumentRepository {
         if (replay) return { status: "replayed", generationId: replay };
       }
       const [document] = await tx
-        .select({ createdBy: documents.createdBy, status: documents.status })
+        .select({
+          createdBy: documents.createdBy,
+          accessMode: documents.accessMode,
+          status: documents.status,
+        })
         .from(documents)
         .where(and(eq(documents.id, input.documentId), eq(documents.tenantId, input.tenantId)))
         .for("update")
         .limit(1);
       if (!document) return { status: "not-found" };
-      if (document.createdBy !== input.ownerId) return { status: "not-owner" };
+      if (
+        !(await hasDocumentPermission(
+          tx,
+          { tenantId: input.tenantId, identityId: input.ownerId },
+          input.documentId,
+          "manage",
+        ))
+      )
+        return { status: "not-owner" };
       const allowed = {
         archive: ["active"],
         trash: ["active", "archived"],
@@ -1688,6 +1287,24 @@ export class DocumentRepository {
         )
         .limit(1);
       if (!generation) return { status: "not-found" };
+      if (input.operation === "trash" || input.operation === "purge") {
+        const recipients = await documentRecipients(tx, input.tenantId, input.documentId);
+        await insertNotifications(
+          tx,
+          recipients.map((recipientId) => ({
+            tenantId: input.tenantId,
+            actorId: input.ownerId,
+            recipientId,
+            type: "deleted",
+            eventKey: `deleted:${randomUUID()}`,
+            documentId: input.documentId,
+            message:
+              input.operation === "purge"
+                ? "一篇与你有关的文档已被永久删除"
+                : "一篇与你有关的文档已移入回收站",
+          })),
+        );
+      }
       if (input.operation === "purge") {
         await tx.delete(documents).where(eq(documents.id, input.documentId));
       } else {
@@ -1748,6 +1365,7 @@ export class DocumentRepository {
     idempotency?: DocumentIdempotency;
   }): Promise<VersionMutationResult> {
     return this.db.transaction(async (tx) => {
+      await readKnowledgeTree(tx, input.tenantId);
       const [document] = await tx
         .select({ id: documents.id, createdBy: documents.createdBy })
         .from(documents)
@@ -1761,21 +1379,15 @@ export class DocumentRepository {
         .for("update")
         .limit(1);
       if (!document) return { status: "not-found" };
-      if (document.createdBy !== input.identityId) {
-        const [writeGrant] = await tx
-          .select({ action: documentAcl.action })
-          .from(documentAcl)
-          .where(
-            and(
-              eq(documentAcl.tenantId, input.tenantId),
-              eq(documentAcl.documentId, input.documentId),
-              eq(documentAcl.identityId, input.identityId),
-              eq(documentAcl.action, "write"),
-            ),
-          )
-          .limit(1);
-        if (!writeGrant) return { status: "not-found" };
-      }
+      if (
+        !(await hasDocumentPermission(
+          tx,
+          { tenantId: input.tenantId, identityId: input.identityId },
+          input.documentId,
+          "write",
+        ))
+      )
+        return { status: "not-found" };
       if (input.idempotency) {
         const replay = await loadVersionIdempotencyReplay(tx, {
           tenantId: input.tenantId,
@@ -1931,6 +1543,7 @@ export class DocumentRepository {
     idempotency?: DocumentIdempotency;
   }): Promise<VersionMutationResult> {
     return this.db.transaction(async (tx) => {
+      await readKnowledgeTree(tx, input.tenantId);
       const [document] = await tx
         .select({
           id: documents.id,
@@ -1942,6 +1555,7 @@ export class DocumentRepository {
           icon: documents.icon,
           tags: documents.tags,
           createdBy: documents.createdBy,
+          accessMode: documents.accessMode,
           status: documents.status,
           metadataRevision: documents.metadataRevision,
           createdAt: documents.createdAt,
@@ -1951,21 +1565,15 @@ export class DocumentRepository {
         .for("update")
         .limit(1);
       if (!document || document.status !== "active") return { status: "not-found" };
-      if (document.createdBy !== input.identityId) {
-        const [writeGrant] = await tx
-          .select({ action: documentAcl.action })
-          .from(documentAcl)
-          .where(
-            and(
-              eq(documentAcl.tenantId, input.tenantId),
-              eq(documentAcl.documentId, input.documentId),
-              eq(documentAcl.identityId, input.identityId),
-              eq(documentAcl.action, "write"),
-            ),
-          )
-          .limit(1);
-        if (!writeGrant) return { status: "not-found" };
-      }
+      if (
+        !(await hasDocumentPermission(
+          tx,
+          { tenantId: input.tenantId, identityId: input.identityId },
+          input.documentId,
+          "write",
+        ))
+      )
+        return { status: "not-found" };
       const [version] = await tx
         .select({
           id: documentVersions.id,
@@ -2118,6 +1726,7 @@ export class DocumentRepository {
         position: document.position,
         icon: document.icon,
         tags: document.tags,
+        accessMode: document.accessMode,
         createdBy: document.createdBy,
         schemaVersion: sourceGeneration.schemaVersion,
         extensions: sourceGeneration.extensions,
@@ -2183,10 +1792,12 @@ export class DocumentRepository {
     requestId?: string;
   }): Promise<"not-found" | "conflict" | "not-authorized" | "recorded"> {
     return this.db.transaction(async (tx) => {
+      await readKnowledgeTree(tx, input.tenantId);
       const [document] = await tx
         .select({
           id: documents.id,
           createdBy: documents.createdBy,
+          accessMode: documents.accessMode,
           generationId: documentGenerations.id,
           durableSeq: documentGenerations.durableSeq,
           schemaVersion: documentGenerations.schemaVersion,
@@ -2216,21 +1827,15 @@ export class DocumentRepository {
       ) {
         return "conflict";
       }
-      if (document.createdBy !== input.identityId) {
-        const grants = await tx
-          .select({ action: documentAcl.action })
-          .from(documentAcl)
-          .where(
-            and(
-              eq(documentAcl.tenantId, input.tenantId),
-              eq(documentAcl.documentId, input.documentId),
-              eq(documentAcl.identityId, input.identityId),
-            ),
-          );
-        if (!hasDocumentAction(new Set(grants.map((grant) => grant.action)), "export")) {
-          return "not-authorized";
-        }
-      }
+      if (
+        !(await hasDocumentPermission(
+          tx,
+          { tenantId: input.tenantId, identityId: input.identityId },
+          input.documentId,
+          "export",
+        ))
+      )
+        throw new DomainError("NOT_FOUND", "Document not found");
       await insertDocumentAudit(tx, {
         tenantId: input.tenantId,
         actorIdentityId: input.identityId,
@@ -2253,13 +1858,19 @@ export class DocumentRepository {
     documentId: string,
     ownerId: string,
     identityId: string,
-    actions: readonly DocumentPermissionAction[],
+    actions: readonly PermissionAction[],
     requestId?: string,
     idempotency?: DocumentIdempotency,
+    role?: AccessRole,
   ): Promise<AclChangeResult> {
     return this.db.transaction(async (tx) => {
+      await lockKnowledgeTree(tx, tenantId, ownerId);
       const [document] = await tx
-        .select({ id: documents.id, createdBy: documents.createdBy })
+        .select({
+          id: documents.id,
+          createdBy: documents.createdBy,
+          workspaceId: documents.workspaceId,
+        })
         .from(documents)
         .where(
           and(
@@ -2271,7 +1882,10 @@ export class DocumentRepository {
         .for("update")
         .limit(1);
       if (!document) return { status: "not-found" };
-      if (document.createdBy !== ownerId) return { status: "not-owner" };
+      if (
+        !(await hasDocumentPermission(tx, { tenantId, identityId: ownerId }, documentId, "manage"))
+      )
+        return { status: "not-owner" };
 
       const [generation] = await tx
         .select({ id: documentGenerations.id })
@@ -2294,26 +1908,80 @@ export class DocumentRepository {
         if (replay) return { status: "replayed", ...replay };
       }
 
-      await tx
-        .delete(documentAcl)
+      if (role)
+        actions = effectiveActions(
+          "document",
+          role,
+          await loadPolicyOverrides(tx, tenantId, document.workspaceId),
+        ).filter(isPermissionAction);
+      const grants = role ? [role] : actions;
+      const previous = await tx
+        .select()
+        .from(resourceAcl)
         .where(
           and(
-            eq(documentAcl.tenantId, tenantId),
-            eq(documentAcl.documentId, documentId),
-            eq(documentAcl.identityId, identityId),
+            eq(resourceAcl.tenantId, tenantId),
+            eq(resourceAcl.documentId, documentId),
+            eq(resourceAcl.identityId, identityId),
+            isNull(resourceAcl.sourceShareId),
           ),
         );
-      if (actions.length > 0) {
-        await tx.insert(documentAcl).values(
-          actions.map((action) => ({
+      const [profile] = await tx
+        .select()
+        .from(identityProfiles)
+        .where(
+          and(eq(identityProfiles.tenantId, tenantId), eq(identityProfiles.identityId, identityId)),
+        )
+        .limit(1);
+      if (!profile) throw new DomainError("VALIDATION_ERROR", "请选择同租户的真实成员");
+      if (
+        previous.length === grants.length &&
+        previous.every((p) => grants.some((g) => g === p.role))
+      ) {
+        if (idempotency)
+          await saveIdempotencyReplay(tx, {
+            tenantId,
+            subjectId: ownerId,
+            idempotency,
+            response: { generationId: generation.id, actions: [...actions] },
+            responseStatus: 200,
+          });
+        return { status: "updated", generationId: generation.id, actions: [...actions] };
+      }
+      await tx
+        .delete(resourceAcl)
+        .where(
+          and(
+            eq(resourceAcl.tenantId, tenantId),
+            eq(resourceAcl.documentId, documentId),
+            eq(resourceAcl.identityId, identityId),
+            isNull(resourceAcl.sourceShareId),
+          ),
+        );
+      if (grants.length > 0) {
+        await tx.insert(resourceAcl).values(
+          grants.map((action) => ({
             tenantId,
             documentId,
             identityId,
-            action,
-            grantedBy: ownerId,
+            role: action,
+            createdBy: previous.find((p) => p.role === action)?.createdBy ?? ownerId,
+            createdAt: previous.find((p) => p.role === action)?.createdAt ?? new Date(),
           })),
         );
       }
+      await requireDocumentManager(tx, tenantId, documentId);
+      await insertNotifications(tx, [
+        {
+          tenantId,
+          actorId: ownerId,
+          recipientId: identityId,
+          type: previous.length ? "permission" : "share",
+          eventKey: `acl:${randomUUID()}`,
+          documentId,
+          message: previous.length ? "你的文档权限已更新" : "有人向你分享了一篇文档",
+        },
+      ]);
       await insertDocumentAudit(tx, {
         tenantId,
         actorIdentityId: ownerId,
@@ -2343,7 +2011,7 @@ export class DocumentRepository {
   ): Promise<DocumentAclEntry[] | null> {
     return this.db.transaction(async (tx) => {
       const [document] = await tx
-        .select({ createdBy: documents.createdBy })
+        .select({ createdBy: documents.createdBy, workspaceId: documents.workspaceId })
         .from(documents)
         .where(
           and(
@@ -2353,26 +2021,65 @@ export class DocumentRepository {
           ),
         )
         .limit(1);
-      if (!document || document.createdBy !== ownerId) return null;
+      if (
+        !document ||
+        !(await hasDocumentPermission(tx, { tenantId, identityId: ownerId }, documentId, "manage"))
+      )
+        return null;
 
       const rows = await tx
-        .select({ identityId: documentAcl.identityId, action: documentAcl.action })
-        .from(documentAcl)
-        .where(and(eq(documentAcl.tenantId, tenantId), eq(documentAcl.documentId, documentId)))
-        .orderBy(asc(documentAcl.identityId), asc(documentAcl.action));
-      const grouped = new Map<string, DocumentPermissionAction[]>();
+        .select({
+          identityId: resourceAcl.identityId,
+          action: resourceAcl.role,
+          grantedAt: resourceAcl.createdAt,
+          displayName: identityProfiles.displayName,
+          email: identityProfiles.email,
+        })
+        .from(resourceAcl)
+        .innerJoin(
+          documents,
+          and(
+            eq(documents.tenantId, resourceAcl.tenantId),
+            eq(documents.id, resourceAcl.documentId),
+          ),
+        )
+        .leftJoin(
+          identityProfiles,
+          and(
+            eq(identityProfiles.tenantId, resourceAcl.tenantId),
+            eq(identityProfiles.identityId, resourceAcl.identityId),
+          ),
+        )
+        .where(
+          and(
+            eq(resourceAcl.tenantId, tenantId),
+            eq(resourceAcl.documentId, documentId),
+            documentGrantActiveSql(undefined, true, "resource_acl"),
+          ),
+        )
+        .orderBy(asc(resourceAcl.identityId), asc(resourceAcl.role));
+      const overrides = await loadPolicyOverrides(tx, tenantId, document.workspaceId);
+      const grouped = new Map<string, PermissionAction[]>();
       for (const row of rows) {
-        if (!isDocumentPermissionAction(row.action)) {
-          throw new Error("Unsupported document ACL action");
-        }
         const actions = grouped.get(row.identityId) ?? [];
-        actions.push(row.action);
-        grouped.set(row.identityId, actions);
+        actions.push(
+          ...effectiveActions("document", row.action, overrides).filter(isPermissionAction),
+        );
+        grouped.set(row.identityId, [...new Set(actions)]);
       }
       return [...grouped.entries()].map(([identityId, actions]) => ({
         documentId,
         identityId,
         actions,
+        role: accessRoles.find((role) =>
+          rows.some((r) => r.identityId === identityId && r.action === role),
+        ),
+        grantedAt: rows
+          .filter((r) => r.identityId === identityId)
+          .map((r) => r.grantedAt.toISOString())
+          .sort()[0],
+        displayName: rows.find((r) => r.identityId === identityId)?.displayName ?? identityId,
+        email: rows.find((r) => r.identityId === identityId)?.email ?? "",
       }));
     });
   }
@@ -2386,6 +2093,7 @@ export class DocumentRepository {
     idempotency?: DocumentIdempotency,
   ): Promise<AclChangeResult> {
     return this.db.transaction(async (tx) => {
+      await lockKnowledgeTree(tx, tenantId, ownerId);
       const [document] = await tx
         .select({ id: documents.id, createdBy: documents.createdBy })
         .from(documents)
@@ -2399,7 +2107,10 @@ export class DocumentRepository {
         .for("update")
         .limit(1);
       if (!document) return { status: "not-found" };
-      if (document.createdBy !== ownerId) return { status: "not-owner" };
+      if (
+        !(await hasDocumentPermission(tx, { tenantId, identityId: ownerId }, documentId, "manage"))
+      )
+        return { status: "not-owner" };
 
       const [generation] = await tx
         .select({ id: documentGenerations.id })
@@ -2422,15 +2133,29 @@ export class DocumentRepository {
         if (replay) return { status: "replayed", ...replay };
       }
 
-      await tx
-        .delete(documentAcl)
+      const removed = await tx
+        .delete(resourceAcl)
         .where(
           and(
-            eq(documentAcl.tenantId, tenantId),
-            eq(documentAcl.documentId, documentId),
-            eq(documentAcl.identityId, identityId),
+            eq(resourceAcl.tenantId, tenantId),
+            eq(resourceAcl.documentId, documentId),
+            eq(resourceAcl.identityId, identityId),
           ),
-        );
+        )
+        .returning({ identityId: resourceAcl.identityId });
+      await requireDocumentManager(tx, tenantId, documentId);
+      if (removed.length)
+        await insertNotifications(tx, [
+          {
+            tenantId,
+            actorId: ownerId,
+            recipientId: identityId,
+            type: "permission",
+            eventKey: `acl-removed:${randomUUID()}`,
+            documentId,
+            message: "你的一项文档单独授权已撤销",
+          },
+        ]);
       await insertDocumentAudit(tx, {
         tenantId,
         actorIdentityId: ownerId,
@@ -2470,8 +2195,13 @@ export class DocumentRepository {
   }): Promise<{ updateHash: string; durableSeq: number; duplicate: boolean }> {
     const sourceUpdateHash = input.sourceUpdateHash ?? input.updateHash;
     return this.db.transaction(async (tx) => {
+      await readKnowledgeTree(tx, input.tenantId);
       const [document] = await tx
-        .select({ id: documents.id, createdBy: documents.createdBy })
+        .select({
+          id: documents.id,
+          createdBy: documents.createdBy,
+          workspaceId: documents.workspaceId,
+        })
         .from(documents)
         .where(
           and(
@@ -2483,21 +2213,15 @@ export class DocumentRepository {
         .for("update")
         .limit(1);
       if (!document) throw new Error("Document authorization changed");
-      if (document.createdBy !== input.subjectId) {
-        const [writeGrant] = await tx
-          .select({ action: documentAcl.action })
-          .from(documentAcl)
-          .where(
-            and(
-              eq(documentAcl.tenantId, input.tenantId),
-              eq(documentAcl.documentId, input.documentId),
-              eq(documentAcl.identityId, input.subjectId),
-              eq(documentAcl.action, "write"),
-            ),
-          )
-          .limit(1);
-        if (!writeGrant) throw new Error("Document authorization changed");
-      }
+      if (
+        !(await hasDocumentPermission(
+          tx,
+          { tenantId: input.tenantId, identityId: input.subjectId },
+          input.documentId,
+          "write",
+        ))
+      )
+        throw new Error("Document authorization changed");
 
       const [generation] = await tx
         .select({ id: documentGenerations.id, durableSeq: documentGenerations.durableSeq })
@@ -2555,6 +2279,18 @@ export class DocumentRepository {
         .set({ durableSeq })
         .where(eq(documentGenerations.id, generation.id));
       await input.record?.(tx, durableSeq);
+
+      if (input.contentChanged)
+        await recordBodyMentionNotifications(tx, {
+          tenantId: input.tenantId,
+          documentId: input.documentId,
+          workspaceId: document.workspaceId,
+          generationId: generation.id,
+          previousSeq: generation.durableSeq,
+          durableSeq,
+          actorId: input.subjectId,
+          content: input.content,
+        });
 
       await insertProjectionOutbox(tx, {
         tenantId: input.tenantId,
@@ -2716,287 +2452,6 @@ export class DocumentRepository {
     });
   }
 
-  async claimProjectionJob(
-    now = new Date(),
-    documentId?: string,
-  ): Promise<ClaimedProjectionJob | null> {
-    return this.db.transaction(async (tx) => {
-      const [row] = await tx
-        .select()
-        .from(documentOutbox)
-        .where(
-          and(
-            or(
-              and(eq(documentOutbox.status, "pending"), lte(documentOutbox.availableAt, now)),
-              and(eq(documentOutbox.status, "processing"), lte(documentOutbox.leaseUntil, now)),
-            ),
-            ...(documentId ? [eq(documentOutbox.documentId, documentId)] : []),
-          ),
-        )
-        .orderBy(asc(documentOutbox.availableAt), asc(documentOutbox.createdAt))
-        .for("update", { skipLocked: true })
-        .limit(1);
-      if (!row) return null;
-
-      const leaseToken = randomUUID();
-      const [claimed] = await tx
-        .update(documentOutbox)
-        .set({
-          status: "processing",
-          attempts: row.attempts + 1,
-          leaseUntil: new Date(now.getTime() + PROJECTION_LEASE_MS),
-          leaseToken,
-        })
-        .where(eq(documentOutbox.id, row.id))
-        .returning();
-      if (!claimed) return null;
-      if (!claimed.snapshotContent || !claimed.contentHash) {
-        await tx
-          .update(documentOutbox)
-          .set({
-            status: "dead",
-            leaseUntil: null,
-            leaseToken: null,
-            lastErrorCode: "snapshot-payload-missing",
-          })
-          .where(eq(documentOutbox.id, claimed.id));
-        return null;
-      }
-      return {
-        id: claimed.id,
-        leaseToken,
-        tenantId: claimed.tenantId,
-        documentId: claimed.documentId,
-        generationId: claimed.generationId,
-        durableSeq: claimed.durableSeq,
-        content: claimed.snapshotContent,
-        contentHash: claimed.contentHash,
-        summary: claimed.summary,
-      };
-    });
-  }
-
-  async processProjectionJob(job: ClaimedProjectionJob, now = new Date()): Promise<boolean> {
-    return this.db.transaction(async (tx) => {
-      const [claimed] = await tx
-        .select({ id: documentOutbox.id })
-        .from(documentOutbox)
-        .where(
-          and(
-            eq(documentOutbox.id, job.id),
-            eq(documentOutbox.leaseToken, job.leaseToken),
-            eq(documentOutbox.status, "processing"),
-          ),
-        )
-        .for("update")
-        .limit(1);
-      if (!claimed) return false;
-
-      await tx
-        .insert(documentProjectionSnapshots)
-        .values({
-          tenantId: job.tenantId,
-          documentId: job.documentId,
-          generationId: job.generationId,
-          durableSeq: job.durableSeq,
-          snapshotRevision: 1,
-          content: job.content,
-          contentHash: job.contentHash,
-          ...job.summary,
-          projectedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: [
-            documentProjectionSnapshots.tenantId,
-            documentProjectionSnapshots.documentId,
-            documentProjectionSnapshots.generationId,
-          ],
-          set: {
-            durableSeq: job.durableSeq,
-            snapshotRevision: sql`${documentProjectionSnapshots.snapshotRevision} + 1`,
-            content: job.content,
-            contentHash: job.contentHash,
-            ...job.summary,
-            projectedAt: now,
-          },
-          setWhere: sql`${documentProjectionSnapshots.durableSeq} < ${job.durableSeq}`,
-        });
-      await tx
-        .update(documentOutbox)
-        .set({
-          status: "done",
-          processedAt: now,
-          leaseUntil: null,
-          leaseToken: null,
-          snapshotContent: null,
-        })
-        .where(eq(documentOutbox.id, job.id));
-      return true;
-    });
-  }
-
-  async failProjectionJob(
-    job: Pick<ClaimedProjectionJob, "id" | "leaseToken">,
-    errorCode = "projection-persist-failed",
-    now = new Date(),
-  ): Promise<"retry" | "dead" | "stale"> {
-    return this.db.transaction(async (tx) => {
-      const [row] = await tx
-        .select({ attempts: documentOutbox.attempts })
-        .from(documentOutbox)
-        .where(
-          and(
-            eq(documentOutbox.id, job.id),
-            eq(documentOutbox.leaseToken, job.leaseToken),
-            eq(documentOutbox.status, "processing"),
-          ),
-        )
-        .for("update")
-        .limit(1);
-      if (!row) return "stale";
-
-      if (row.attempts >= PROJECTION_MAX_ATTEMPTS) {
-        await tx
-          .update(documentOutbox)
-          .set({
-            status: "dead",
-            leaseUntil: null,
-            leaseToken: null,
-            lastErrorCode: errorCode,
-          })
-          .where(eq(documentOutbox.id, job.id));
-        return "dead";
-      }
-      const delay = Math.min(
-        PROJECTION_RETRY_BASE_MS * 2 ** Math.max(0, row.attempts - 1),
-        PROJECTION_RETRY_MAX_MS,
-      );
-      await tx
-        .update(documentOutbox)
-        .set({
-          status: "pending",
-          availableAt: new Date(now.getTime() + delay),
-          leaseUntil: null,
-          leaseToken: null,
-          lastErrorCode: errorCode,
-        })
-        .where(eq(documentOutbox.id, job.id));
-      return "retry";
-    });
-  }
-
-  async backfillProjectionSnapshot(input: {
-    tenantId: string;
-    documentId: string;
-    generationId: string;
-    durableSeq: number;
-    content: DocumentContent;
-    projectedAt?: Date;
-  }): Promise<boolean> {
-    const projectedAt = input.projectedAt ?? new Date();
-    const [row] = await this.db
-      .insert(documentProjectionSnapshots)
-      .values({
-        tenantId: input.tenantId,
-        documentId: input.documentId,
-        generationId: input.generationId,
-        durableSeq: input.durableSeq,
-        snapshotRevision: 1,
-        content: input.content,
-        contentHash: hashDocumentContent(input.content),
-        ...summarizeDocumentContent(input.content),
-        projectedAt,
-      })
-      .onConflictDoUpdate({
-        target: [
-          documentProjectionSnapshots.tenantId,
-          documentProjectionSnapshots.documentId,
-          documentProjectionSnapshots.generationId,
-        ],
-        set: {
-          durableSeq: input.durableSeq,
-          snapshotRevision: sql`${documentProjectionSnapshots.snapshotRevision} + 1`,
-          content: input.content,
-          contentHash: hashDocumentContent(input.content),
-          ...summarizeDocumentContent(input.content),
-          projectedAt,
-        },
-        setWhere: sql`${documentProjectionSnapshots.durableSeq} < ${input.durableSeq}`,
-      })
-      .returning({ durableSeq: documentProjectionSnapshots.durableSeq });
-    return row !== undefined;
-  }
-
-  async getProjectionQueueStatus(
-    documentId?: string,
-  ): Promise<{ pending: number; processing: number; dead: number }> {
-    const query = this.db
-      .select({
-        pending: sql<number>`count(*) filter (where ${documentOutbox.status} = 'pending')::int`,
-        processing: sql<number>`count(*) filter (where ${documentOutbox.status} = 'processing')::int`,
-        dead: sql<number>`count(*) filter (where ${documentOutbox.status} = 'dead')::int`,
-      })
-      .from(documentOutbox);
-    const [row] = documentId
-      ? await query.where(eq(documentOutbox.documentId, documentId))
-      : await query;
-    return row ?? { pending: 0, processing: 0, dead: 0 };
-  }
-
-  async loadUpdates(
-    documentId: string,
-    generationId: string,
-    maxDurableSeq?: number,
-  ): Promise<PersistedUpdate[]> {
-    const rows = await this.db
-      .select({
-        updateHash: collaborationUpdates.updateHash,
-        updateBytes: collaborationUpdates.updateBytes,
-        durableSeq: collaborationUpdates.durableSeq,
-      })
-      .from(collaborationUpdates)
-      .where(
-        and(
-          eq(collaborationUpdates.documentId, documentId),
-          eq(collaborationUpdates.generationId, generationId),
-          ...(maxDurableSeq === undefined
-            ? []
-            : [lte(collaborationUpdates.durableSeq, maxDurableSeq)]),
-        ),
-      )
-      .orderBy(asc(collaborationUpdates.durableSeq));
-    if (rows.some((row) => row.updateBytes === null)) {
-      throw new Error("Compacted Yjs history must be replayed with replayYjsState");
-    }
-    return rows.map((row) => ({
-      updateHash: row.updateHash,
-      durableSeq: row.durableSeq,
-      updateBytes: new Uint8Array(row.updateBytes as Buffer),
-    }));
-  }
-
-  async findUpdateReceipt(
-    documentId: string,
-    generationId: string,
-    updateHash: string,
-  ): Promise<{ durableSeq: number } | null> {
-    const [row] = await this.db
-      .select({ durableSeq: collaborationUpdates.durableSeq })
-      .from(collaborationUpdates)
-      .where(
-        and(
-          eq(collaborationUpdates.documentId, documentId),
-          eq(collaborationUpdates.generationId, generationId),
-          or(
-            eq(collaborationUpdates.updateHash, updateHash),
-            eq(collaborationUpdates.sourceUpdateHash, updateHash),
-          ),
-        ),
-      )
-      .limit(1);
-    return row ?? null;
-  }
-
   async switchActiveGeneration(input: {
     tenantId: string;
     documentId: string;
@@ -3017,6 +2472,7 @@ export class DocumentRepository {
     requestId?: string;
   }): Promise<GenerationSwitchResult> {
     return this.db.transaction(async (tx) => {
+      await readKnowledgeTree(tx, input.tenantId);
       const [document] = await tx
         .select({
           id: documents.id,
@@ -3028,6 +2484,7 @@ export class DocumentRepository {
           icon: documents.icon,
           tags: documents.tags,
           createdBy: documents.createdBy,
+          accessMode: documents.accessMode,
           status: documents.status,
           metadataRevision: documents.metadataRevision,
           createdAt: documents.createdAt,
@@ -3037,21 +2494,15 @@ export class DocumentRepository {
         .for("update")
         .limit(1);
       if (!document || document.status !== "active") return { status: "not-found" };
-      if (document.createdBy !== input.identityId) {
-        const [writeGrant] = await tx
-          .select({ action: documentAcl.action })
-          .from(documentAcl)
-          .where(
-            and(
-              eq(documentAcl.tenantId, input.tenantId),
-              eq(documentAcl.documentId, input.documentId),
-              eq(documentAcl.identityId, input.identityId),
-              eq(documentAcl.action, "write"),
-            ),
-          )
-          .limit(1);
-        if (!writeGrant) return { status: "not-found" };
-      }
+      if (
+        !(await hasDocumentPermission(
+          tx,
+          { tenantId: input.tenantId, identityId: input.identityId },
+          input.documentId,
+          "write",
+        ))
+      )
+        return { status: "not-found" };
 
       const [generation] = await tx
         .select({
@@ -3160,6 +2611,7 @@ export class DocumentRepository {
           position: document.position,
           icon: document.icon,
           tags: document.tags,
+          accessMode: document.accessMode,
           createdBy: document.createdBy,
           schemaVersion: input.targetSchemaVersion,
           extensions: input.extensions,
@@ -3177,31 +2629,32 @@ export class DocumentRepository {
     documentId: string,
     tenantId: string,
     identityId: string,
-    action: DocumentPermissionAction,
+    action: PermissionAction,
   ): Promise<ActiveDocument | null> {
-    const row = await this.findActiveRow(documentId, tenantId);
-    if (!row) return null;
-    if (row.createdBy === identityId) return row;
-
-    const grants = await this.db
-      .select({ action: documentAcl.action })
-      .from(documentAcl)
-      .where(
-        and(
-          eq(documentAcl.tenantId, tenantId),
-          eq(documentAcl.documentId, documentId),
-          eq(documentAcl.identityId, identityId),
-        ),
-      );
-    return hasDocumentAction(new Set(grants.map((grant) => grant.action)), action) ? row : null;
+    const row = await this.findActiveRow(documentId, tenantId, identityId);
+    if (
+      !row ||
+      !(await hasDocumentPermission(this.db, { tenantId, identityId }, documentId, action))
+    )
+      return null;
+    return row;
   }
 
   private async findActiveRow(
     documentId: string,
     tenantId: string,
+    identityId: string,
   ): Promise<ActiveDocument | null> {
     const [row] = await this.db
       .select({
+        canManage: documentActionSql({ tenantId, identityId }, "manage"),
+        canWrite: documentActionSql({ tenantId, identityId }, "write"),
+        offlineCacheAllowed: sql<boolean>`coalesce((select w.offline_cache_allowed from workspaces w where w.tenant_id = ${tenantId} and w.id = documents.workspace_id),false)`,
+        canComment: documentActionSql({ tenantId, identityId }, "comment"),
+        canMove: documentActionSql({ tenantId, identityId }, "move"),
+        canShare: documentActionSql({ tenantId, identityId }, "share"),
+        canExport: documentActionSql({ tenantId, identityId }, "export"),
+
         id: documents.id,
         tenantId: documents.tenantId,
         title: documents.title,
@@ -3211,6 +2664,7 @@ export class DocumentRepository {
         icon: documents.icon,
         tags: documents.tags,
         createdBy: documents.createdBy,
+        accessMode: documents.accessMode,
         schemaVersion: documentGenerations.schemaVersion,
         extensions: documentGenerations.extensions,
         generationId: documentGenerations.id,

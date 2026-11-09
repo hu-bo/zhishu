@@ -3,6 +3,7 @@
 官方 DSH Agent 作用域内的 writing / research / image 能力；没有自建模型循环、HTTP 服务或数据库连接。
 
 - `./writing`：installWriting、AuthoringOutputSchema、compileProposal、validateInput、hashContent、WritingInput 和编译器错误。沿用 ai-contracts/document-contracts 的引用、Block ID、目标、Hash 和提案校验。
+- `./writing/compiler`、`./errors`：纯编译、Hash 与错误入口，供 RAG 和历史兼容调用方消费，不装配 DSH 工具。`WritingExecutionPolicy` 只定义写作所需预算、授权复核与 research 可用性，不接收 LangChain 模型或 checkpointer。
 - `./research`：installResearch 与 ResearchPorts，使用宿主授权的 search/read/register/reserve；来源内容作为资料，不能作为指令。
 - `./image`：installImage 与 ImagePorts；真实 provider、预算、任务状态和私有资源存储由宿主注入。未配置 provider 时返回 unavailable，不注册创建工具。未知外部结果不盲目重发；图片保存后才记录 ready 资源引用。
 - `./contracts`：浏览器安全的能力清单、ImageJob/ImageAsset Schema 和纯验证；root 只导出能力清单，不静态加载三个服务端插件。

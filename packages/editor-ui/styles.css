@@ -1,3 +1,15 @@
+.zhishu-ui-surface .tiptap-mathematics-render[data-type="block-math"] {
+  margin-block: 1em;
+  padding-block: 0.2em;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.zhishu-ui-surface .ProseMirror[contenteditable="true"] .tiptap-mathematics-render {
+  cursor: pointer;
+}
+
 .zhishu-ui-shell .zhishu-replacement-old {
   color: var(--zhishu-editor-muted);
   opacity: 0.62;
@@ -1029,7 +1041,7 @@
 
 .zhishu-ui-toolbar button {
   flex: 0 0 auto;
-  min-height: 44px;
+  min-height: 34px;
   padding: 0 10px;
   border: 1px solid var(--zhishu-editor-border);
   border-radius: var(--zhishu-editor-radius-compact);
@@ -1639,6 +1651,7 @@
 }
 
 .zhishu-ui-toolbar-menu > summary {
+  box-sizing: border-box;
   display: inline-flex;
   min-height: 34px;
   max-width: 100%;
@@ -1717,6 +1730,12 @@
 .zhishu-ui-toolbar-menu.is-insert-menu > .zhishu-ui-toolbar-menu-panel {
   right: 0;
   left: auto;
+}
+
+.zhishu-ui-toolbar-menu.is-insert-menu > .zhishu-ui-toolbar-menu-panel {
+  max-height: min(420px, 50vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .zhishu-ui-toolbar-menu.is-ai-menu > summary {
@@ -2473,6 +2492,7 @@
 .zhishu-ui-keyboard-help summary {
   display: flex;
   align-items: center;
+  gap: 4px;
   min-height: 32px;
   padding: 6px 8px;
   border-radius: var(--zhishu-editor-radius-control);
@@ -2487,13 +2507,21 @@
   display: none;
 }
 
-.zhishu-ui-keyboard-help summary::after {
-  padding-left: 5px;
-  content: "⌄";
+.zhishu-ui-keyboard-help-chevron {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--zhishu-editor-muted);
+  transition: transform 140ms ease;
 }
 
-.zhishu-ui-keyboard-help[open] summary::after {
-  content: "⌃";
+.zhishu-ui-keyboard-help[open] .zhishu-ui-keyboard-help-chevron {
+  transform: rotate(180deg);
+}
+
+.zhishu-ui-keyboard-help summary:hover .zhishu-ui-keyboard-help-chevron,
+.zhishu-ui-keyboard-help summary:focus-visible .zhishu-ui-keyboard-help-chevron {
+  color: inherit;
 }
 
 .zhishu-ui-keyboard-help summary:hover,
@@ -2690,6 +2718,16 @@
 
   .zhishu-ui-toolbar {
     flex-wrap: wrap;
+    position: relative;
+  }
+
+  .zhishu-ui-toolbar-menu.is-insert-menu {
+    position: static;
+  }
+
+  .zhishu-ui-toolbar-menu.is-insert-menu > .zhishu-ui-toolbar-menu-panel {
+    right: auto;
+    left: 0;
   }
 
   .zhishu-ui-toolbar-formatting {
@@ -2837,6 +2875,7 @@
   }
 
   .zhishu-ui-toolbar button.zhishu-ui-toolbar-button,
+  .zhishu-ui-toolbar-menu > summary,
   .zhishu-ui-find-panel button,
   .zhishu-ui-outline button,
   .zhishu-ui-table-toolbar > summary,
@@ -2848,6 +2887,7 @@
 
   .zhishu-ui-shell :is(button, input, textarea, select),
   .zhishu-ui-shell .zhishu-ui-toolbar button.zhishu-ui-toolbar-button,
+  .zhishu-ui-shell .zhishu-ui-toolbar-menu > summary,
   .zhishu-ui-shell .zhishu-ui-outline button {
     min-height: max(var(--zhishu-editor-control-height), 44px);
   }
@@ -2974,4 +3014,112 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Member mentions share their identity color across editable and read-only content. */
+.zhishu-ui-shell span[data-mention-id] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
+  padding: 0 0.35em;
+  border-radius: 0.35em;
+  background: color-mix(
+    in srgb,
+    hsl(var(--zhishu-mention-hue, 240) 65% 52%) 15%,
+    var(--zhishu-editor-surface, white)
+  );
+  color: var(--zhishu-editor-text);
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+.zhishu-ui-shell span[data-mention-id]::before {
+  content: attr(data-mention-initial);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3em;
+  height: 1.3em;
+  border-radius: 50%;
+  background: hsl(var(--zhishu-mention-hue, 240) 58% 43%);
+  color: white;
+  font-size: 0.65em;
+  line-height: 1;
+}
+.zhishu-ui-shell span[data-mention-id].ProseMirror-selectednode {
+  outline: 2px solid var(--zhishu-editor-accent);
+}
+.zhishu-ui-mention-menu {
+  position: fixed;
+  z-index: 1002;
+  box-sizing: border-box;
+  width: min(304px, calc(100vw - 16px));
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 20%);
+  font:
+    14px/1.5 system-ui,
+    sans-serif;
+}
+.zhishu-ui-mention-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.zhishu-ui-mention-option:hover,
+.zhishu-ui-mention-option[aria-selected="true"] {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.zhishu-ui-mention-option > span:last-child {
+  min-width: 0;
+}
+.zhishu-ui-mention-option strong,
+.zhishu-ui-mention-option small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zhishu-ui-mention-option strong {
+  font-weight: 500;
+}
+.zhishu-ui-mention-option small {
+  font-size: 11px;
+  opacity: 0.65;
+}
+.zhishu-ui-mention-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.zhishu-ui-mention-feedback,
+.zhishu-ui-mention-hint {
+  margin: 4px 8px;
+  padding: 4px 0;
+  font-size: 12px;
+  opacity: 0.75;
+}
+.zhishu-ui-mention-feedback button {
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.zhishu-ui-mention-hint {
+  font-size: 11px;
 }

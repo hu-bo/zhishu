@@ -5,6 +5,8 @@ export type {
   EditorReplacementPreviewActions,
 } from "./replacement-preview.js";
 export type { BaseEditorExtensionsOptions, EditorPlaceholderOptions } from "./extensions.js";
+export type { RequestMathSource } from "./mathematics.js";
+export { renderMathToHtml } from "./mathematics.js";
 export { createEditor, EditorController, editorOperationMeta, editorOriginMeta } from "./editor.js";
 export type {
   CreateEditorOptions,
@@ -46,4 +48,6 @@ export {
   CALLOUT_THEME_LABELS,
   DOCUMENT_STATUSES,
   DOCUMENT_STATUS_LABELS,
+  MAX_LATEX_LENGTH,
 } from "@zhishu/document-contracts";
+export type { DocumentMention } from "@zhishu/document-contracts";

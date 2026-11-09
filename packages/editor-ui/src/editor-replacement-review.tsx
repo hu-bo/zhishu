@@ -4,6 +4,7 @@ import { EditorIcon } from "./editor-icon.js";
 
 export interface EditorReplacementReviewProps {
   preview: EditorReplacementPreviewData | null;
+  waitForOriginal?: boolean;
   stale?: boolean;
   busy?: boolean;
   disabled?: boolean;
@@ -16,6 +17,7 @@ export interface EditorReplacementReviewProps {
 }
 export function EditorReplacementReview({
   preview,
+  waitForOriginal,
   stale,
   busy,
   disabled,
@@ -26,8 +28,9 @@ export function EditorReplacementReview({
   onRejectBlock,
   onInvalidated,
 }: EditorReplacementReviewProps) {
-  const { count, index, navigate } = useEditorReplacementPreview(preview, onInvalidated, {
+  const { ready, count, index, navigate } = useEditorReplacementPreview(preview, onInvalidated, {
     disabled: busy || disabled || stale,
+    waitForOriginal,
     onAccept: onAcceptBlock,
     onReject: onRejectBlock,
   });
@@ -42,7 +45,7 @@ export function EditorReplacementReview({
               ? "原文已变化，请重新生成"
               : count
                 ? `${index + 1} / ${count} 处修改`
-                : preview
+                : ready
                   ? "内容一致，无需替换"
                   : "正在同步原文…"}
         </span>

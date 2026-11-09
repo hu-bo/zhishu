@@ -104,6 +104,12 @@ function collectContentBlockIds(content: DocumentContent): Set<string> {
 }
 
 function comparableObject(value: Record<string, unknown>): Record<string, unknown> {
+  // An empty Y.XmlText can survive a structural edit and serialize as an empty paragraph array.
+  if (value.type === "paragraph" && Array.isArray(value.content) && value.content.length === 0) {
+    const paragraph = { ...value };
+    delete paragraph.content;
+    return paragraph;
+  }
   if ((value.type !== "tableCell" && value.type !== "tableHeader") || !isBlock(value.attrs))
     return value;
   const attrs = { ...value.attrs };
@@ -140,7 +146,7 @@ function sameJsonValue(left: unknown, right: unknown): boolean {
 }
 
 export function sameDocumentContent(left: DocumentContent, right: DocumentContent): boolean {
-  // Inputs are validated JSON. Preserve key-order/table-default semantics without copying
+  // Inputs are validated JSON. Ignore key order and equivalent defaults without copying
   // every text string into multiple megabyte-sized canonical serializations per keystroke.
   return sameJsonValue(left, right);
 }

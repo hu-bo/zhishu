@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { ApiError } from './api-error';
-import type { ExportDocumentJson200 } from './generated/models';
+import type { ExportDocumentJson200 } from './generated/app-api.schemas';
 import {
+  authorizationCacheEpoch,
   cacheResponse,
   cachedResponse,
   currentCacheIdentity,
@@ -111,6 +112,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   const base = apiBaseUrl;
   let response: Response;
   const identity = currentCacheIdentity();
+  const cacheEpoch = authorizationCacheEpoch();
   const cacheScope = responseCacheScope(path, options);
   if (cacheScope && (!navigator.onLine || !hasVerifiedAccount())) {
     const cached = await cachedResponse(cacheScope, path);
@@ -165,13 +167,13 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   }
   if (response.status === 204) return undefined as T;
   const value: unknown = await response.json();
-  if (cacheScope) void cacheResponse(cacheScope, path, value);
+  if (cacheScope) void cacheResponse(cacheScope, path, value, cacheEpoch).catch(() => undefined);
   else if (
     identity &&
     options.method?.toUpperCase() === 'PUT' &&
     /^\/api\/documents\/doc_[A-Za-z0-9_-]+\/content$/.test(path)
   )
-    await cacheResponse(identity, path, value);
+    await cacheResponse(identity, path, value, cacheEpoch);
   return value as T;
 }
 

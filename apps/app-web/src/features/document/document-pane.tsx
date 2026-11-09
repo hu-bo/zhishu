@@ -1,15 +1,12 @@
+import { DocumentComments } from './document-comments';
 import { useCallback, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Sparkles } from 'lucide-react';
 import { useKnowledgeWorkspace } from '@/features/knowledge/workspace-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, LoaderCircle } from 'lucide-react';
-import {
-  getDocument,
-  locateDocument,
-  trashDocument,
-  updateDocumentMetadata,
-} from '@/api/generated/app-api';
+import { AlertCircle } from 'lucide-react';
+import { getDocument, trashDocument, updateDocumentMetadata } from '@/api/generated/documents';
+import { locateDocument } from '@/api/generated/knowledge';
 import { ApiError, errorMessage } from '@/api/api-error';
 import { Button } from '@/components/ui/button';
 import type { EditorCollaborationPresence } from '@zhishu/editor-react';
@@ -21,6 +18,7 @@ import {
   DocumentCollaborationEditor,
   type DocumentCollaborationSnapshot,
 } from './document-collaboration-editor';
+import { DocumentEditorLoading } from './document-editor-shell';
 import { DocumentInfoDialog } from './document-info-dialog';
 import { DocumentMetadata } from './document-metadata';
 import { DocumentShareDialog } from './document-share-dialog';
@@ -30,19 +28,19 @@ import { DocumentTransferActions } from './document-transfer-actions';
 export interface DocumentPaneProps {
   documentId: string;
   workspaceId: string;
-  rootCatalogId: string;
+  rootCatalogId?: string;
   identityKey: string;
   workspaceName: string;
-  workspaceMemberCount: number;
+  workspaceMemberCount?: number;
   canManageWorkspace: boolean;
   onlineCount: number;
-  onOpenMembers: () => void;
-  onOpenWorkspaceSettings: () => void;
-  onOpenDirectory: () => void;
+  onOpenMembers?: () => void;
+  onOpenWorkspaceSettings?: () => void;
+  onOpenDirectory?: () => void;
   onOnlineCountChange?: (count: number) => void;
   onBack: () => void;
-  onOpenCatalog: (catalogId: string) => void;
-  onAction: (action: CatalogAction) => void;
+  onOpenCatalog?: (catalogId: string) => void;
+  onAction?: (action: CatalogAction) => void;
 }
 
 /**
@@ -110,6 +108,7 @@ export function DocumentPane({
 
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [metadataOpen, setMetadataOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -145,15 +144,7 @@ export function DocumentPane({
   };
 
   if (documentQuery.isPending) {
-    return (
-      <div
-        role="status"
-        className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground"
-      >
-        <LoaderCircle size={16} className="animate-spin" aria-hidden="true" />
-        正在加载文档…
-      </div>
-    );
+    return <DocumentEditorLoading editingControls={viewMode === 'edit'} />;
   }
 
   if (documentQuery.isError || !document) {
@@ -196,10 +187,10 @@ export function DocumentPane({
               targetDocumentId: personalTarget ? documentId : undefined,
             }}
             className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-2 text-xs text-muted-foreground outline-none hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label={personalTarget ? 'AI 创作' : '讨论与创作'}
+            aria-label={personalTarget ? 'AI 改写' : '讨论与创作'}
           >
             <Sparkles size={14} />
-            <span className="hidden xl:inline">{personalTarget ? 'AI 创作' : '讨论与创作'}</span>
+            <span className="hidden xl:inline">{personalTarget ? 'AI 改写' : '讨论与创作'}</span>
           </Link>
         }
         workspaceName={workspaceName}
@@ -213,21 +204,26 @@ export function DocumentPane({
         title={document.title}
         icon={document.icon}
         canManage={document.canManage}
+        canWrite={document.canWrite}
+        canMove={document.canMove && !!onAction}
+        canShare={document.canShare || document.canManage}
         readOnlyReason={viewMode === 'read' ? '当前为阅读模式。' : readOnlyReason}
         titleSaving={titleSaving}
         onTitleSave={(nextTitle) => void saveTitle(nextTitle)}
         viewMode={viewMode}
         onViewModeToggle={toggleViewMode}
         onBack={onBack}
+        backLabel={rootCatalogId ? '返回目录浏览' : '返回文档列表'}
         onOpenWorkspaceRoot={onBack}
         onOpenCatalog={onOpenCatalog}
         onShare={() => setShareOpen(true)}
+        onComments={() => setCommentsOpen(true)}
         onVersions={() => setVersionsOpen(true)}
         onTransfer={() => setTransferOpen(true)}
         onMetadata={() => setMetadataOpen(true)}
         onInfo={() => setInfoOpen(true)}
         onMove={() =>
-          onAction({
+          onAction?.({
             kind: 'move-document',
             document: {
               id: document.id,
@@ -246,6 +242,11 @@ export function DocumentPane({
           标题保存失败：{titleError}
         </p>
       )}
+      {!document.offlineCacheAllowed && (
+        <p role="status" className="border-b px-4 py-2 text-xs text-muted-foreground">
+          此空间已关闭本机正文缓存。新的未确认更改仅在当前页面保留，请保持在线。
+        </p>
+      )}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
         <DocumentCollaborationEditor
@@ -260,11 +261,21 @@ export function DocumentPane({
         />
       </div>
 
+      <DocumentComments
+        key={documentId}
+        documentId={documentId}
+        open={commentsOpen}
+        onOpenChange={setCommentsOpen}
+        reading={viewMode === 'read'}
+      />
       <DocumentShareDialog
         open={shareOpen}
         onOpenChange={setShareOpen}
         documentId={documentId}
         canManage={document.canManage}
+        canShare={document.canShare}
+        canWrite={document.canWrite}
+        canComment={document.canComment}
       />
       <PanelDialog
         open={transferOpen}
@@ -272,7 +283,11 @@ export function DocumentPane({
         title="导入导出"
         description="在本地文件与这篇文档之间交换内容。"
       >
-        <DocumentTransferActions documentId={documentId} title={document.title} />
+        <DocumentTransferActions
+          documentId={documentId}
+          title={document.title}
+          canExport={document.canExport}
+        />
       </PanelDialog>
       <PanelDialog
         open={metadataOpen}
@@ -280,7 +295,7 @@ export function DocumentPane({
         title="图标与标签"
         description="为文档添上专属标记，让内容更容易辨认与查找。"
       >
-        <DocumentMetadata document={document} editable={document.canManage} />
+        <DocumentMetadata document={document} editable={document.canWrite} />
       </PanelDialog>
       <DocumentInfoDialog
         open={infoOpen}

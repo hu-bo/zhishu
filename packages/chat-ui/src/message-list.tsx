@@ -40,6 +40,7 @@ export function MessageList({
   messages,
   emptyState,
   messageActions,
+  renderText,
   onLoadEarlier,
   loadingEarlier = false,
   afterMessages,
@@ -47,6 +48,7 @@ export function MessageList({
   messages: readonly MessageView[];
   emptyState?: ReactNode;
   messageActions?(message: MessageView): ReactNode;
+  renderText?(text: string, message: MessageView): ReactNode;
   onLoadEarlier?(): void;
   loadingEarlier?: boolean;
   afterMessages?: ReactNode;
@@ -59,7 +61,14 @@ export function MessageList({
     const element = list.current;
     if (!element) return;
     const first = messages[0]?.id ?? "";
-    if (previous.current.first && previous.current.first !== first)
+    if (
+      !first ||
+      (previous.current.first && !messages.some((message) => message.id === previous.current.first))
+    ) {
+      following.current = true;
+      setUnread(false);
+      element.scrollTop = element.scrollHeight;
+    } else if (previous.current.first && previous.current.first !== first)
       element.scrollTop += element.scrollHeight - previous.current.height;
     else if (following.current) element.scrollTop = element.scrollHeight;
     else setUnread(true);
@@ -105,11 +114,18 @@ export function MessageList({
                   aria-label={message.role === "user" ? "你" : "助手"}
                 >
                   <span className="zhishu-chat-role">
+                    {message.role === "assistant" && <span aria-hidden="true">✦</span>}
                     {message.role === "user" ? "你" : message.role === "tool" ? "工具" : "知书助手"}
                   </span>
-                  <MessageParts parts={message.parts} />
+                  {message.parts.map((part) =>
+                    renderText && part.kind === "text" ? (
+                      <div key={part.id}>{renderText(part.text, message)}</div>
+                    ) : (
+                      <MessageParts key={part.id} parts={[part]} />
+                    ),
+                  )}
                   {message.status && <small>{message.status}</small>}
-                  {messageActions?.(message)}
+                  <div className="zhishu-chat-actions">{messageActions?.(message)}</div>
                 </article>
               ))}
           {afterMessages}

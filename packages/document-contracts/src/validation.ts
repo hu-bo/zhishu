@@ -2,6 +2,8 @@ import { Value } from "@sinclair/typebox/value";
 import {
   CURRENT_DOCUMENT_SCHEMA_VERSION,
   CALLOUT_DOCUMENT_SCHEMA_VERSION,
+  MENTION_DOCUMENT_SCHEMA_VERSION,
+  MATHEMATICS_DOCUMENT_SCHEMA_VERSION,
   DocumentBlockSchema,
   DocumentContentSchema,
   SUPPORTED_DOCUMENT_SCHEMA_VERSIONS,
@@ -52,6 +54,7 @@ const blockTypes = new Set([
   "taskList",
   "taskItem",
   "codeBlock",
+  "blockMath",
   "horizontalRule",
   "image",
   "pdfAttachment",
@@ -66,6 +69,8 @@ const allowedTypes = new Set([
   "text",
   "hardBreak",
   "statusTag",
+  "mention",
+  "inlineMath",
 ]);
 const blockChildren: Record<string, ReadonlySet<string>> = {
   doc: blockContentTypes,
@@ -140,7 +145,8 @@ function preflight(input: unknown, limits: Required<ContentLimits>): ContentIssu
       if (parentType) {
         const validBlockChild = blockChildren[parentType]?.has(record.type) ?? false;
         const validInlineChild =
-          inlineParents.has(parentType) && ["text", "hardBreak", "statusTag"].includes(record.type);
+          inlineParents.has(parentType) &&
+          ["text", "hardBreak", "statusTag", "mention", "inlineMath"].includes(record.type);
         const validCodeChild = parentType === "codeBlock" && record.type === "text";
         if (!validBlockChild && !validInlineChild && !validCodeChild) {
           issues.push(
@@ -374,6 +380,28 @@ export function validateDocumentContentForSchemaVersion(
       typeof record.attrs === "object" && record.attrs !== null && !Array.isArray(record.attrs)
         ? (record.attrs as Record<string, unknown>)
         : undefined;
+    if (
+      (record.type === "inlineMath" || record.type === "blockMath") &&
+      schemaVersion < MATHEMATICS_DOCUMENT_SCHEMA_VERSION
+    ) {
+      issues.push(
+        issue(
+          "unknown-extension",
+          path,
+          `Math formulas require document schema version ${MATHEMATICS_DOCUMENT_SCHEMA_VERSION}.`,
+          false,
+        ),
+      );
+    }
+    if (record.type === "mention" && schemaVersion < MENTION_DOCUMENT_SCHEMA_VERSION)
+      issues.push(
+        issue(
+          "unknown-extension",
+          path,
+          `Member mentions require document schema version ${MENTION_DOCUMENT_SCHEMA_VERSION}.`,
+          false,
+        ),
+      );
     if (
       schemaVersion < CALLOUT_DOCUMENT_SCHEMA_VERSION &&
       (record.type === "callout" ||

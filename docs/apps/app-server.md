@@ -1,6 +1,34 @@
 # app-server 设计规划
 
+## 当前模块边界（2026-11-01）
+
+知识库组织能力已从 `documents` 拆出，HTTP 路径与 OpenAPI operationId 保持不变。下面记录当前实现的归属，后文带日期的段落保留各阶段设计背景。
+
+| 模块            | 负责的能力                                          |
+| --------------- | --------------------------------------------------- |
+| `workspaces`    | 空间创建与资料、空间列表、成员管理                  |
+| `catalogs`      | 目录树、根目录、目录生命周期与文档定位              |
+| `knowledge`     | 文档移动、授权搜索、显式预设初始化与权限影响预览    |
+| `documents`     | 正文与元数据、文档生命周期、版本、分享及评论        |
+| `authorization` | 统一空间/文档访问判断、角色策略、治理与权限失效事件 |
+
+路由与依赖装配由各模块入口负责；不再以 `documents` 的注册函数隐式注册空间和知识库功能。跨模块访问规则从 `authorization` 的领域入口获取，避免依赖 Fastify 路由装配。实际重复的资源约束、幂等请求头、回执及目录事务协议在 `shared` 中复用；登录身份检查由 `identity/principal.ts` 统一处理。空间、目录和知识库各由单个 service 承接授权、事务与提交后会话失效，不再经过只转发参数的 service/repository 双层；业务代码不依赖 Fastify。
+
+`pnpm check` 包含模块依赖回归，约束空间、目录和授权模块不反向依赖文档编排，并检查新入口可达的运行时文件依赖无环。`pnpm --filter @react-fastify-template/app-server test:authorization` 验证权限、空间成员和幂等创建；默认使用内存 PGlite，真实 PostgreSQL 入口要求显式隔离测试库。
+
+这次调整不修改数据库表与已发布 migration，不自动执行数据库迁移；内容版本协商、事务内授权、租户隔离和协同持久化协议继续有效。
+
+HTTP 错误响应统一采用 `shared/error.schema.ts`，此前文档、目录等接口的重复定义没有可选 `details`，现在与 root handler 对齐，可返回配额上限等业务详情。路径、operationId、请求约束和成功响应不变；OpenAPI 与前端客户端同步生成。
+
+文档内部进一步划分持久化职责：`DocumentHistoryRepository` 负责 Yjs 日志重放、历史检查点与安全压缩，`DocumentProjectionRepository` 负责投影租约、发布、重试和回填；消费者直接使用对应公开 API。`DocumentRepository` 保留元数据、生命周期、版本与 durable 写入事务，正文更新、版本、附件引用、提及通知及 outbox 仍原子提交。`createDocumentService(db, config, revoker)` 在模块内组装依赖。正文统计、资产扫描与内容指纹各有统一实现，协同代次初始化统一写入编辑正文与结构状态。
+
+OpenAPI 使用同一 Zod 定义生成 `ErrorResponse` 组件，447 处响应改为共享引用，Orval 因而无需为每个接口生成重复错误类型。运行时响应不受引用调整影响；`test:architecture` 同时覆盖共享引用、可空值和错误序列化。文档持久化综合回归入口为 `pnpm --filter @react-fastify-template/app-server test:documents`，默认使用内存 PGlite。
+
+项目内可复用的重构 agent 及调用示例见 [.codex/agents](../../.codex/agents/README.md)。
+
 > 2026-10-24 实施更新：新增 writing-chat 模块与 /api/writing 命令/SSE，官方 DSH 在本 Server 进程运行；新 authoring 记录 dsh-v1，旧任务与 RAG 保留 LangChain checkpoint。migration 0034/0035 只在隔离验收数据库执行。见 [AI Chat 实施记录](../packages/ai-chat-implementation.md)。
+
+> 2026-10-30 生命周期复核：写作 resume 同样经过并发准入；超限/失败的实时订阅立即处理拒绝，不产生未处理 Promise。每个活跃写作句柄占用产品锁和原生日志锁两个专用连接，最大句柄数为 `min(AI_MAX_CONCURRENT * 2, floor((writingPool.max - 2) / 2))`，保留临时查询连接。写作模块使用独立的 `AI_MAX_CONCURRENT * 4 + 4` 连接池，与普通 API 的 DATABASE_POOL_MAX、原 AI task 锁池及 LangChain saver 分开；默认并发 4 对应 20 个写作连接和最多 8 个活跃句柄，不代表总数据库连接数仅有 20。活跃 SSE 保留其观察的句柄；最后一个订阅离开后允许空闲回收。
 
 > 2026-10-24 两类 Chat 分别装配：协作 AI 写作使用 [dsh-agent](../packages/dsh-agent.md)封装官方 Cordis/DSH，RAG Chat 的问答与检索链路继续使用 LangChain。业务模块分别维护授权、会话、持久化、HTTP/SSE 与取消/恢复契约；共用前端组件不要求共享执行器。以下旧写作 Deep Agents/LangGraph 记录作为写作迁移依据，不代表 RAG LangChain 路线退出。边界见[总方案](../packages/ai-chat-architecture.md)。
 
@@ -14,7 +42,7 @@
 
 空间角色约束新文档/目录创建、预设初始化、目录修改与移动目标；系统默认空间保持既有共享组织行为。文档读取、写入、导出、历史与协同仍遵循独立文档 ACL，添加/移除空间成员不会隐式增删文档授权。跨空间文档移动仍检查所有权、metadataRevision 和目标目录所属空间。删除目录前检查整个目录子树的所有权及文档所有权，防止将其他成员的内容级联移入回收站。
 
-`pnpm smoke:knowledge` 已扩展统一回归，覆盖空间设置、创建幂等、角色修改/移除、所有者保护、管理员越权拒绝、成员降级立即生效、跨租户拒绝、显式 ACL 保留、跨空间移动/修订冲突及安全目录删除。迁移仅在隔离测试数据库执行；实际部署先显式运行 `pnpm db:migrate`。
+`pnpm --dir apps/app-server smoke:knowledge` 已扩展统一回归，覆盖空间设置、创建幂等、角色修改/移除、所有者保护、管理员越权拒绝、成员降级立即生效、跨租户拒绝、显式 ACL 保留、跨空间移动/修订冲突及安全目录删除。迁移仅在隔离测试数据库执行；实际部署先显式运行 `pnpm --dir apps/app-server db:migrate`。
 
 状态：M2 基础实现中。文档创建、短时协同会话、PostgreSQL Yjs 更新日志、版本/资产 API 和最新 JSON 投影/outbox 已实现；真实对象存储、大文档版本恢复、完整 ACL 和其他业务仍按阶段补齐。对应 `apps/app-server`；[返回文档地图](../README.md)。本文统一维护服务端、数据业务层、协同持久化、知识库及 AI/RAG 的设计。
 
@@ -72,7 +100,7 @@ HTTP 每次请求检查权限；WS 在加入与写入处理时检查当前授权
 
 针对 2,000 员工的高频成员变更，待审要求空间/文档成员更新只改权威关系，索引使用稳定资源键，不向 Qdrant 展开名单。权限上下文和协同/生成按 tenant/workspace/document/identity 定向失效：新增权限不踢无关会话，撤销 read/write 只处理受影响主体；每次受保护操作仍重新授权，已发布的消息无法收回。当前 setAcl/removeAcl 调用整篇文档 revokeDocumentSessions，需先区分权限增减及主体再做容量验收；文档删除/代次更换仍可整体失效，多实例传播要求不能省略。
 
-已实现的 M2 权限基础：`PrincipalAuthenticator` 是可替换的身份解析端口；`AUTH_MODE=external` 可通过 `buildApp` 注入可信身份适配器，Principal 带 `tenantId`，HTTP 与协同查询同时限定租户和文档 action。宿主可导入 `startServer({ identityAuthenticator })` 启动标准 HTTP/WebSocket 服务并注入实际 provider；本仓库尚未提供生产 provider，因此未注入时 external 模式会安全失败启动。`document_acl` 记录 `read`、`write`、`comment`、`share`、`export`、`ai` 授权；所有者隐式拥有全部 action，读权限也可由写、评论、导出或 AI 权限满足，写权限包含评论权限。当前 ACL 由所有者管理，更新后关闭该文档活动代次的协同连接，要求客户端重新取 session。`GET /api/documents/:id` 检查 read 并返回主体相关的 `canManage`，`GET /api/documents/:id/acl` 仅所有者可列出授权主体，`PUT/DELETE /api/documents/:id/acl/:identityId` 检查所有权；read-only reader 可取得只读协同 ticket，协同握手按 read 检查，写入、重放和结构命令复核 write。JSON 导出要求 owner 或显式 export action，并在复核权限的事务中记 `document.exported` 审计；评论、分享委托和 AI 业务接口尚未实现。migrations `0000`–`0016` 已在知书自己的 Compose PostgreSQL（`127.0.0.1:5432/app`）执行；既有项目 smoke 已覆盖 tenant ACL、只读 session、撤权、文档生命周期及版本恢复，导入导出路由仍待专项运行验收。另一个共享 PostgreSQL 实例未被更改。
+已实现的 M2 权限基础：`PrincipalAuthenticator` 是可替换的身份解析端口；`AUTH_MODE=external` 可通过 `buildApp` 注入可信身份适配器，Principal 带 `tenantId`，HTTP 与协同查询同时限定租户和文档 action。宿主可导入 `startServer({ identityAuthenticator })` 启动标准 HTTP/WebSocket 服务并注入实际 provider；本仓库尚未提供生产 provider，因此未注入时 external 模式会安全失败启动。`document_acl` 记录 `read`、`write`、`comment`、`share`、`export`、`ai` 授权；所有者隐式拥有全部 action，读权限也可由写、评论、导出或 AI 权限满足，写权限包含评论权限。当前 ACL 由所有者或继承文档的空间管理员管理，更新后关闭该文档活动代次的协同连接，要求客户端重新取 session。`GET /api/documents/:id` 检查 read 并返回主体相关的 `canManage`，`GET /api/documents/:id/acl` 由文档管理权限控制授权主体列表，`PUT/DELETE /api/documents/:id/acl/:identityId` 检查文档管理权限；read-only reader 可取得只读协同 ticket，协同握手按 read 检查，写入、重放和结构命令复核 write。JSON 导出要求 owner 或显式 export action，并在复核权限的事务中记 `document.exported` 审计；评论和评论提及见第 14 节；分享委托管理仍未开放。migrations `0000`–`0016` 已在知书自己的 Compose PostgreSQL（`127.0.0.1:5432/app`）执行；既有项目 smoke 已覆盖 tenant ACL、只读 session、撤权、文档生命周期及版本恢复，导入导出路由仍待专项运行验收。另一个共享 PostgreSQL 实例未被更改。
 
 ## 4. 数据归属与关键约束
 
@@ -113,7 +141,7 @@ HTTP 每次请求检查权限；WS 在加入与写入处理时检查当前授权
 4. 提交后向客户端返回覆盖其更新的持久化回执并发布同步结果；重试相同更新返回已有结果，不重复创建业务事件。
 5. 投影 worker 将 durable update 对应的 JSON 写入每代次最新快照；未来索引任务可消费投影事件。Yjs generation 检查点用于连接恢复，版本检查点固定历史序列；裁剪只清除可由检查点重建的 update 二进制，保留序号与 hash 元数据用于幂等回执和资产外键。
 
-当前 M2 原型已实现会话认证、tenant-scoped 文档 ACL 复核、generation/schema 校验、Yjs 二进制日志、来源帧幂等键、数据库行锁序号分配、事务成功后的 stateless 回执和加载时按序重放。每个可写 Yjs 更新在落库前都会应用到临时候选 Y.Doc，将 `content` XmlFragment 转成 ProseMirror JSON，经共享 `normalizeTiptapDocumentJSON` 归一化后调用 `validateDocumentContent`；它会移除 Y-Tiptap 产生的空 Mark `attrs: {}`、`codeBlock.attrs.language: null` 和表格单元格默认跨度/空宽度/空对齐属性，其他非法节点/属性、重复 Block ID 和超出共享内容限制的更新会被拒绝。正文变更及对应的 Block/顺序 maps 现在作为同一个持久化 Yjs delta 落库。结构操作另走 `structure-operation` stateless 命令：按文档串行检查规范 JSON 树，先在候选 Y.Doc 中把 maps 状态同步回 `content` XmlFragment，再保存包含正文、maps 和操作回执的单个持久化 delta；并发使用单调 structure revision 拒绝过期命令。客户端不得直接写规范投影；结构投影失败只拒绝该操作并记录安全诊断，不终止服务进程。缺少投影或与正文失配的非空旧代次 fail closed；双向投影已由隔离 PostgreSQL/WebSocket smoke 验证。每个 Yjs 更新与 outbox 事件/摘要同事务提交；新更新会合并较旧未处理正文载荷，worker 以 PostgreSQL 行锁、租约 token 和序号条件写入最新 JSON 投影，成功后清除临时正文副本。迁移 `0010_easy_cannonball.sql` 已在项目 PostgreSQL 执行；`pnpm projection:backfill` 可为存量文档当前代次幂等构建投影，已为本地 26 个代次补齐，再次运行均报告已最新。`pnpm smoke:projection` 验证 outbox 原子性、投影和摘要、更新合并、退避重试、dead-letter 以及失败时保留最后成功快照。`/health/ready` 暴露 pending/processing/dead 数量。`document_generation_checkpoints` 保存最新可恢复 Yjs 状态，`document_version_checkpoints` 保存被裁剪前的各历史版本状态；`pnpm maintenance:compact-updates -- --apply` 先复放并验序，再在锁定文档/代次的单事务中写入检查点、SHA-256 并将前缀 updateBytes 置空，保留 update/source hash 行供重复回执和资产引用外键使用；命令只接受项目本地 `127.0.0.1:5432/app`。协同重开、导出、复制、迁移、修复和版本读取均从 generation/version 检查点加后续增量复放；版本恢复以检查点启动新代次。压缩命令与检查点恢复仍需隔离 PostgreSQL 专项验收；历史快照存储量随保留版本数增长，索引消费者尚未实现。
+当前 M2 原型已实现会话认证、tenant-scoped 文档 ACL 复核、generation/schema 校验、Yjs 二进制日志、来源帧幂等键、数据库行锁序号分配、事务成功后的 stateless 回执和加载时按序重放。每个可写 Yjs 更新在落库前都会应用到临时候选 Y.Doc，将 `content` XmlFragment 转成 ProseMirror JSON，经共享 `normalizeTiptapDocumentJSON` 归一化后调用 `validateDocumentContent`；它会移除 Y-Tiptap 产生的空 Mark `attrs: {}`、`codeBlock.attrs.language: null` 和表格单元格默认跨度/空宽度/空对齐属性，其他非法节点/属性、重复 Block ID 和超出共享内容限制的更新会被拒绝。正文变更及对应的 Block/顺序 maps 现在作为同一个持久化 Yjs delta 落库。结构操作另走 `structure-operation` stateless 命令：按文档串行检查规范 JSON 树，先在候选 Y.Doc 中把 maps 状态同步回 `content` XmlFragment，再保存包含正文、maps 和操作回执的单个持久化 delta；并发使用单调 structure revision 拒绝过期命令。客户端不得直接写规范投影；结构投影失败只拒绝该操作并记录安全诊断，不终止服务进程。缺少投影或与正文失配的非空旧代次 fail closed；双向投影已由隔离 PostgreSQL/WebSocket smoke 验证。每个 Yjs 更新与 outbox 事件/摘要同事务提交；新更新会合并较旧未处理正文载荷，worker 以 PostgreSQL 行锁、租约 token 和序号条件写入最新 JSON 投影，成功后清除临时正文副本。迁移 `0010_easy_cannonball.sql` 已在项目 PostgreSQL 执行；`pnpm --dir apps/app-server projection:backfill` 可为存量文档当前代次幂等构建投影，已为本地 26 个代次补齐，再次运行均报告已最新。`pnpm --dir apps/app-server smoke:projection` 验证 outbox 原子性、投影和摘要、更新合并、退避重试、dead-letter 以及失败时保留最后成功快照。`/health/ready` 暴露 pending/processing/dead 数量。`document_generation_checkpoints` 保存最新可恢复 Yjs 状态，`document_version_checkpoints` 保存被裁剪前的各历史版本状态；`pnpm --dir apps/app-server maintenance:compact-updates -- --apply` 先复放并验序，再在锁定文档/代次的单事务中写入检查点、SHA-256 并将前缀 updateBytes 置空，保留 update/source hash 行供重复回执和资产引用外键使用；命令只接受项目本地 `127.0.0.1:5432/app`。协同重开、导出、复制、迁移、修复和版本读取均从 generation/version 检查点加后续增量复放；版本恢复以检查点启动新代次。压缩命令与检查点恢复仍需隔离 PostgreSQL 专项验收；历史快照存储量随保留版本数增长，索引消费者尚未实现。
 
 历史重复 Block ID 使用 `pnpm --filter @react-fastify-template/app-server maintenance:repair-block-ids` 检查；默认只扫描并 dry-run，`--document <documentId>` 可限定单篇文档。只有明确附加 `--apply` 和单一文档 ID 时才会提交修复；命令会申请与协同服务相同的 PostgreSQL advisory owner lock，服务未停止时拒绝写入。修复只接受错误全为 `duplicate-block-id` 的内容，保留首次 ID、为后续重复项生成新 ID，以 XmlFragment 正文重建结构投影，在一个事务中退休旧 generation 并创建新的当前 generation；源更新日志保留供审计/历史读取。其他内容问题、更新日志缺口或并发代次变化均 fail closed。专项 `smoke:repair-block-ids` 在本地 PostgreSQL 验证 dry-run 无副作用、内容保留、ID 唯一、投影重建和旧代次退休。
 
@@ -133,7 +161,7 @@ advisory lock 实现的是单数据库单实例约束，不包含多实例的房
 
 ## 6. 文档生命周期、版本与附件
 
-当前 documents 模块实现租户隔离的最近/我的/收藏/全部可访问列表，标题搜索、offset 分页、收藏、最近打开记录、标题 metadataRevision 条件更新、归档、回收站、恢复及所有者永久删除。归档、移入回收站、恢复和永久删除路由接受可选 `Idempotency-Key`；状态变更、审计和 24 小时回执原子提交，同键重试返回原 204，异请求返回 409。永久删除后仍可在回执有效期内重放原 204。回收站列表包含 `deletedAt`，供界面呈现移入时间；归档或移入回收站会关闭当前协同房间，回收站中的文档可恢复为 active，只有 owner 可永久删除。自动保留期限和过期清理作业尚未定义与实现。ACL 授予 read/write/comment/export/ai 的主体可进入可访问列表，但目录不暴露 tenantId 外的文档。
+当前 documents 模块实现租户隔离的最近/我的/收藏/全部可访问列表，标题搜索、offset 分页、收藏、最近打开记录、标题 metadataRevision 条件更新、归档、回收站、恢复及所有者永久删除。归档、移入回收站、恢复和永久删除路由接受可选 `Idempotency-Key`；状态变更、审计和 24 小时回执原子提交，同键重试返回原 204，异请求返回 409。永久删除后仍可在回执有效期内重放原 204。回收站列表包含 `deletedAt`，供界面呈现移入时间；归档或移入回收站会关闭当前协同房间，回收站中的文档可恢复为 active，永久删除要求文档 manage 能力。自动保留期限和过期清理作业尚未定义与实现。ACL 授予 read/write/comment/export/ai 的主体可进入可访问列表，但目录不暴露 tenantId 外的文档。
 
 JSON 导出接口为 `GET /api/documents/:id/export`，输出 `zhishu.document` v1 容器，包含标题、Schema/扩展声明和规范 JSON 正文，不含内部文档 ID；协同模式从当前 generation/durableSeq 重放 Yjs，standard 模式读取 JSON 快照，二者都在事务中复核来源修订与 export 权限并记录非正文审计。导入接口 `POST /api/documents/import` 创建新文档，校验格式、Schema、扩展、正文及 editor schema，返回完成状态或带路径、错误码、可恢复性、Block/资产计数的拒绝报告。导入接受可选 `Idempotency-Key`；成功创建、初始 Yjs 更新、投影、审计和 24 小时幂等回执在同一事务提交，同键同请求重放原文档，同键异请求返回 409。内容支持 Schema v1–v4，并在创建前执行注册的迁移步骤；旧版本不能写入 v4 新格式，成功审计保存迁移 ID、摘要与版本范围。含图片或 PDF 引用的导入会安全拒绝，因为资产 ID 受原文档/租户授权，不能直接带入新文档。正文限制为 2 MiB、20,000 个节点、64 层，导入在请求内同步完成；持久化的大任务状态与恢复仍待实现。migrations `0013_mute_mercury.sql`、`0015_sticky_tyrannus.sql` 和 `0016_gigantic_spitfire.sql` 更新审计约束并建立 standard 正文快照/资产引用存储。
 
@@ -145,7 +173,7 @@ JSON 导出接口为 `GET /api/documents/:id/export`，输出 `zhishu.document` 
 
 资产服务使用私有 S3 兼容对象存储。创建上传会话时检查文档 write ACL、文件名/MIME/声明大小和配置上限；文件通过 `application/json` Base64 API 代理上传，服务端校验 PNG/JPEG/WebP/PDF 文件签名、准确字节数并计算 SHA-256，再写入不可预测的对象键。完成接口复核对象长度、MIME 和服务端 SHA 元数据后返回 `assetId`。取消会删除对象并转为可清理状态。读取接口每次复核文档 read ACL 后返回最多 5 分钟、默认 60 秒的签名 URL；图片响应为 `Content-Disposition: inline`，PDF 保持 `attachment`。正文持久化事务提取图片/PDF Block 的 assetId/Block ID/MIME，锁定文档后复核资产属于同租户/同文档且已 ready，再按新 durableSeq 写入引用；当前头部与保留版本各自保持引用，版本恢复会把对应引用复制到新 generation。模板复制遇到图片或 PDF 会拒绝并说明暂不支持跨文档资产克隆。
 
-`pnpm assets:cleanup` 清除超时上传、失败/取消残留、长期无引用资产和硬删除文档遗留的对象及元数据，可由部署调度器周期调用。资产记录在 document 硬删除时保留到该清理命令确认对象删除，避免数据库先删行后丢失对象键。正文 Image Block 支持 PNG/JPEG/WebP，PDF 正文附件 Block 已接入 Schema、编辑器与资产引用链；2026-09-28 项目本地 MinIO/PostgreSQL 浏览器验收确认 PDF 协同插入达到 durableSeq 3；授权读取取得短时签名 URL，无身份访问返回 401；GET 返回 603 字节、application/pdf 且 SHA-256 与上传源文件一致。测试数据与临时 MinIO 实例已清理；生产 provider 和故障恢复仍待验收。Base64 代理上传上限默认 10 MiB。migration `0009_exotic_molten_man.sql` 为资产引用绑定 durableSeq，并以 Yjs update 外键保证只能引用已持久化序号。`pnpm smoke:asset-references` 在项目专用 PostgreSQL 上覆盖同文档资产校验、已存版本引用保留、恢复后的引用继承、失败事务回滚和移除图片后的引用清理，已通过。临时本地 MinIO/PostgreSQL 浏览器/API 验收确认图片上传后签名读取、错误 MIME 拒绝后上传重试成功、取消上传，以及标准历史版本对资产的保留；删除文档后清理器移除了对象和元数据。上传 API 对象写入或 complete 前对象 HEAD 失败会把会话置为可重试并返回不含供应商详情的 503；会话过期前重试仍保留租户容量预留。内容已进入 uploaded/ready 后，同 SHA-256 重试返回成功而不重复写对象，不同内容返回 409；HEAD 暂时失败时可再次调用 complete。项目 PostgreSQL HTTP 验收通过本机 S3 协议桩注入首次 403，覆盖 503、同会话重试、同内容回放、异内容冲突、complete 与 ready 后回放。协议桩只验证 API 状态转换，不代表真实 S3/MinIO 故障恢复；生产对象存储 provider 和端到端验收仍待完成。
+`pnpm --dir apps/app-server assets:cleanup` 清除超时上传、失败/取消残留、长期无引用资产和硬删除文档遗留的对象及元数据，可由部署调度器周期调用。资产记录在 document 硬删除时保留到该清理命令确认对象删除，避免数据库先删行后丢失对象键。正文 Image Block 支持 PNG/JPEG/WebP，PDF 正文附件 Block 已接入 Schema、编辑器与资产引用链；2026-09-28 项目本地 MinIO/PostgreSQL 浏览器验收确认 PDF 协同插入达到 durableSeq 3；授权读取取得短时签名 URL，无身份访问返回 401；GET 返回 603 字节、application/pdf 且 SHA-256 与上传源文件一致。测试数据与临时 MinIO 实例已清理；生产 provider 和故障恢复仍待验收。Base64 代理上传上限默认 10 MiB。migration `0009_exotic_molten_man.sql` 为资产引用绑定 durableSeq，并以 Yjs update 外键保证只能引用已持久化序号。`pnpm smoke:asset-references` 在项目专用 PostgreSQL 上覆盖同文档资产校验、已存版本引用保留、恢复后的引用继承、失败事务回滚和移除图片后的引用清理，已通过。临时本地 MinIO/PostgreSQL 浏览器/API 验收确认图片上传后签名读取、错误 MIME 拒绝后上传重试成功、取消上传，以及标准历史版本对资产的保留；删除文档后清理器移除了对象和元数据。上传 API 对象写入或 complete 前对象 HEAD 失败会把会话置为可重试并返回不含供应商详情的 503；会话过期前重试仍保留租户容量预留。内容已进入 uploaded/ready 后，同 SHA-256 重试返回成功而不重复写对象，不同内容返回 409；HEAD 暂时失败时可再次调用 complete。项目 PostgreSQL HTTP 验收通过本机 S3 协议桩注入首次 403，覆盖 503、同会话重试、同内容回放、异内容冲突、complete 与 ready 后回放。协议桩只验证 API 状态转换，不代表真实 S3/MinIO 故障恢复；生产对象存储 provider 和端到端验收仍待完成。
 
 普通文档的旧 Schema PUT 升级先校验/迁移基础内容，在同一事务创建当前格式新 generation、快照和审计记录，退休旧代次，保留旧历史的格式及内容。历史恢复也创建新代次，不回写已发布历史元数据；版本读取按来源 Schema 校验。当前写入 Schema v5，4→5 保留旧内容，迁移 `0025_bitter_tattoo.sql` 更新新代次默认格式。
 
@@ -289,7 +317,7 @@ ai_runs.status=completed 只表示生成成功。应用状态包括 pending、pa
 | `PUT/DELETE /api/documents/:id/favorite`                                       | 收藏/取消收藏                       | 当前主体必须可读；收藏与租户、主体和文档绑定                                                               |
 | `PUT /api/documents/:id/archive` / `DELETE /api/documents/:id`                 | 归档/移入回收站                     | owner 操作；切断当前协同房间；删除是可恢复状态                                                             |
 | `PUT /api/documents/:id/restore` / `DELETE /api/documents/:id/permanent`       | 恢复/永久删除                       | owner 操作；永久删除只接受回收站状态                                                                       |
-| `GET /api/documents/:id/acl` / `PUT/DELETE /api/documents/:id/acl/:identityId` | 列出、授予或撤销文档 action         | ACL 仅所有者可读取或修改；变更会关闭当前代次协同连接                                                       |
+| `GET /api/documents/:id/acl` / `PUT/DELETE /api/documents/:id/acl/:identityId` | 列出、授予或撤销文档 action         | ACL 按统一 Casbin manage 能力读取或修改；变更会关闭当前代次协同连接                                        |
 | `GET /api/documents/:id/content`                                               | 只读投影快照读取                    | 返回 generation、durableSeq 与当前正文；正文写入只经协同会话                                               |
 | `POST /api/documents/:documentId/collaboration-session`                        | 获取协同会话能力与短期 ticket       | 每个文档都已是协同代次；read ACL 可取只读 ticket；回传 generationId、durableSeq 和 compatibility           |
 | `WS /collaboration`                                                            | 增量同步/在场/回执                  | 先认证再发送文档；限制帧大小、心跳和连接数                                                                 |
@@ -335,7 +363,7 @@ WebSocket ticket 通过受保护的 HTTPS 接口取得，再在受限的认证�
 
 当前 `/health/live` 提供进程存活检查，`/health/ready` 检查数据库并返回投影任务 pending/processing/dead 汇总。每个 HTTP 请求使用服务端生成的 UUID request ID，在响应 `x-request-id` 返回；忽略客户端传入的 request ID，Fastify 请求日志使用同一 ID。`document_audit_events` 记录文档创建/复制、改名、生命周期、版本、ACL、Schema 迁移和 Block ID 修复；写入与业务变更处于同一数据库事务，详情不含正文，永久删除事件不随文档清理。协同正文变更由 Yjs 更新日志按操作者与 durableSeq 追溯，不为每个高频更新帧重复生成控制面审计事件。设置 32 字符以上的 `METRICS_BEARER_TOKEN` 后，`/metrics` 暴露 Prometheus HTTP 请求计数/延迟直方图、成功签发的协同 session ticket 数、WebSocket 连接数、已认证协同 session 数和活跃房间数；未配置时端点返回 404。指标保存在进程内，重启后重置，多实例数值不聚合；生产抓取需限制在内部网络，并配置单实例抓取或外部聚合。当前仍缺备份恢复演练、租户资源限额、数据库/资产/AI 相关指标和多实例聚合。
 
-基础配额由 `TENANT_MAX_DOCUMENTS` 控制，默认每租户 10,000 篇文档；文档创建与模板复制在事务中取得 tenant advisory lock 后计数，归档/回收站文档仍占额度，超额返回 `429 RESOURCE_LIMIT`。`TENANT_MAX_ASSET_BYTES` 默认每租户 10 GiB；上传会话创建在 tenant advisory lock 下汇总 `uploading`、`receiving`、`uploaded`、`ready`、`failed` 资产声明大小并原子预留额度，取消记录不占额度；失败记录在会话过期清理前仍保留预留额度，未清理的过期上传继续占额度，超额同样返回 429。任务并发、对象存储容量治理仍未实现。`pnpm smoke:backup-restore` 面向本 Compose 的本地 PostgreSQL：用 `pg_dump` 创建临时归档，还原到临时数据库并比较文档、Yjs 更新、投影、版本、审计和附件引用等表的行数；脚本会删除临时数据库和临时归档。该演练验证 PostgreSQL 备份可读和还原结果，不覆盖 S3 对象、向量索引、生产备份调度或 RPO/RTO。
+基础配额由 `TENANT_MAX_DOCUMENTS` 控制，默认每租户 10,000 篇文档；文档创建与模板复制在事务中取得 tenant advisory lock 后计数，归档/回收站文档仍占额度，超额返回 `429 RESOURCE_LIMIT`。`TENANT_MAX_ASSET_BYTES` 默认每租户 10 GiB；上传会话创建在 tenant advisory lock 下汇总 `uploading`、`receiving`、`uploaded`、`ready`、`failed` 资产声明大小并原子预留额度，取消记录不占额度；失败记录在会话过期清理前仍保留预留额度，未清理的过期上传继续占额度，超额同样返回 429。任务并发、对象存储容量治理仍未实现。`pnpm --dir apps/app-server smoke:backup-restore` 面向本 Compose 的本地 PostgreSQL：用 `pg_dump` 创建临时归档，还原到临时数据库并比较文档、Yjs 更新、投影、版本、审计和附件引用等表的行数；脚本会删除临时数据库和临时归档。该演练验证 PostgreSQL 备份可读和还原结果，不覆盖 S3 对象、向量索引、生产备份调度或 RPO/RTO。
 
 优雅停机先停止新会话/任务，限时完成或释放进行中的持久化工作，再关闭连接。备份需要覆盖元数据、Yjs 日志/检查点、版本与附件；向量索引可以重建但需保存模型/切分配置。正式部署前确定 RPO/RTO、备份频率、保留/删除策略并演练恢复，不能仅以“备份文件存在”验收。
 
@@ -346,3 +374,30 @@ WebSocket ticket 通过受保护的 HTTPS 接口取得，再在受限的认证�
 - M4：企业审批绑定版本，持久离线与复杂导入范围明确，多实例或外部数据源有独立故障恢复设计；备份恢复与升级迁移能按目标完成。
 
 现有格式、lint、类型、build 与离线 OpenAPI 检查继续沿用。OpenAPI 使用 3.1，以直接容纳 document-contracts 的 JSON Schema 2020-12；共享 `DocumentContent`/`DocumentBlock` 组件由该包输出并由 export script 检查，业务 REST DTO 仍由本 app 的 Zod route contract 维护。运行时验收需要真实 PostgreSQL 和协同连接，覆盖数据库失败、进程重启、旧代次更新、重复任务、跨租户访问、撤权检索、缺失引用与模型中断；不能用成功的单元测试替代这些数据闭环。
+
+## 14. 空间继承、成员邀请与通知（2026-10-30）
+
+`documents.accessMode` 支持 `personal`、`workspace-inherited`、`restricted`。新增 migration `0037_married_goblin_queen` 将既有文档保留为 restricted，原显式 ACL 不变；新增团队文档默认继承空间，个人文档默认 personal，未分类空间默认 restricted。模板副本保持 restricted，避免复制时隐式扩大访问范围。`document_acl.granted_at` 记录能力初次授予时间，保留既有能力时不重置；历史数据使用迁移执行时间，不能据此推断真实历史授权日期。
+
+继承仅对 team 空间中的当前成员或空间所有者生效；viewer 可读，editor 可读写、评论和 AI 使用，owner/admin 还可分享、导出和管理继承文档。文档创建者保留隐式所有权，显式 ACL 与继承能力取并集。移除成员撤销继承，不删除单独授权或所有权；系统默认空间也要求实际成员身份，不再将非成员默认为 editor。HTTP、目录/列表/计数、搜索、协同 ticket/持久化写入及 AI 资料读取共享 `document-access.ts` 策略。成员变更、模式切换、文档或目录移动/删除后活动会话重新鉴权；成员及单独授权调整只关闭受影响主体的会话，模式切换和目录移动等资源范围变化重新校验整篇文档会话。AI 写入仍限本人个人空间；当前 RAG 保留 document 键，通过实时授权资料集过滤及末次复核，不在本轮更换向量键布局。
+
+新增公开接口由 Zod contract、离线 OpenAPI 与 Orval 同步生成：
+
+- `PATCH /api/documents/:documentId/access`：提交 accessMode 和 metadataRevision；修订冲突返回 409，个人/团队模式须符合所在空间类型。跨空间移动时不合法的继承/个人模式降为 restricted，移动到另一团队时继承目标团队。
+- `GET /api/auth/directory?q=姓名或邮箱&documentId=可选`：租户内已认证身份目录，最多 20 条；提供 documentId 时仅返回当前有文档读取权限的候选。目录只投影可信身份资料，不引入新的身份认证源；外部身份至少登录一次后可搜索，mock 身份在开发登录时初始化。
+- `GET/POST /api/knowledge/workspaces/:workspaceId/invitations`、`DELETE .../invitations/:invitationId`：团队管理员创建、列出和撤销邀请；角色仅 viewer/editor，默认 viewer，7 天有效，一位用户使用。原始随机 token 仅创建时返回，数据库保存 SHA-256 摘要；列表不返回 token。
+- `POST /api/invitations/inspect` 与 `/accept`：token 放请求体，同租户已登录用户确认后接受；锁定邀请和空间成员变更，确保并发只有一人成功，同一人重试幂等，已有成员不降级，被移除后不能复用旧链接重新加入；接受时复核邀请创建者仍有管理权。
+- `GET /api/documents/:documentId/comments`、`POST .../comments`、`DELETE .../comments/:commentId`：文档级平铺评论，读取需 read、发送需 comment，作者可删除自己的评论。客户端生成评论 UUID，重试不重复写入/通知；每条最多 5000 字符、10 位真实且有 read 权限的提及对象。正文节点提及见下节，块级评论锚定和评论线程后续再做。
+- `GET /api/notifications`、`POST /api/notifications/:notificationId/read`、`POST /api/notifications/read-all`：仅当前用户可读取/标记，返回未读总数和游标分页。评论、评论提及、单独分享/权限与成员关系变化、文档/目录删除在业务事务内写通知；事件与接收者唯一约束去重，不通知操作者本人。通知不保存正文或文档标题，读取时复核链接可访问性，撤权/删除后显示不可访问，永久删除不级联删除通知。站内轮询首版，不提供邮件、推送或 SSE。
+
+验证入口：`pnpm --dir apps/app-server smoke:community` 要求显式提供名称含 smoke/test/qa 的隔离 DATABASE_URL，在该库应用 migration 并验证权限矩阵、协同写入撤权、邀请并发/重试/过期/撤销、评论提及、通知私有性与去重。实际部署须另行显式运行 `pnpm --dir apps/app-server db:migrate`，普通启动不会执行迁移。
+
+### 正文提及通知与 v6 兼容（2026-10-31）
+
+应用目录候选沿用当前文档 read 过滤。协同正文保存事务按精确的前一 durableSeq，从未处理 outbox 或已发布快照读取基线；只向新增 blockId/identityId 组合中的真实、同租户且仍有 read 权限的成员写入 mention 通知，同次修改对同一成员最多一条（每次最多 100 位新接收者）。通知与正文 durable 写入原子提交，重复 update、普通文字/名称变化和事务失败不会重复提醒；不发给自己或无权限成员，也不自动授予权限。保留历史或导入的失效主体引用，不阻止后续正文编辑。导入、模板复制、版本恢复及 Schema 迁移不重新发送历史提及。v5 → v6 迁移保留正文，新旧客户端按原有 Schema 版本协商隔离写入，保存重开和历史读取均走现有内容合约。
+
+`pnpm --dir apps/app-server smoke:community` 同时覆盖 v6 校验/格式转换、旧版拒绝、正文提及通知、投影延迟/已发布基线、重复更新、回滚、跨租户和撤权过滤。
+
+## Casbin 权限重构
+
+当前统一授权表、角色策略、管理界面与兼容边界见 [Casbin 授权实现](../authorization.md)。此前章节对 `workspace_members/document_acl` 的描述属于旧实现；migration 0038 将其合并为 `resource_acl`，角色覆盖配置存储在 `role_permissions`。

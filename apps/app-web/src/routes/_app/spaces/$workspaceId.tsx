@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { createFileRoute, Link, useRouterState } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
@@ -12,8 +12,9 @@ import {
   Users,
   Settings,
 } from 'lucide-react';
-import { locateDocument } from '@/api/generated/app-api';
+import { locateDocument } from '@/api/generated/knowledge';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { DocumentEditorLoading } from '@/features/document/document-editor-shell';
 import { DocumentPane } from '@/features/document/document-pane';
 import { CatalogActionDialogs, type CatalogAction } from '@/features/knowledge/catalog-dialogs';
 import { CatalogBrowsePanel } from '@/features/knowledge/catalog-browse-panel';
@@ -107,7 +108,8 @@ export function SpaceDetailPageView({
   onOpenCatalog,
   onCanonicalizeDocument,
 }: SpaceDetailPageViewProps) {
-  const { workspaces, identityKey, enabled, loading, failed, refreshWorkspaces } =
+  const navigate = useNavigate();
+  const { workspaces, identityKey, enabled, authPending, loading, failed, refreshWorkspaces } =
     useKnowledgeWorkspace();
   const [action, setAction] = useState<CatalogAction | null>(null);
   const [mobileTreeOpen, setMobileTreeOpen] = useState(false);
@@ -140,20 +142,44 @@ export function SpaceDetailPageView({
   const closeDocument = () => onCloseDocument(browseCatalogId);
   const openCatalog = onOpenCatalog;
 
-  if (!enabled)
-    return (
-      <div className="p-8 text-center text-sm text-muted-foreground">请登录后访问空间与文档。</div>
-    );
-
-  if (loading) {
+  if (loading || (!enabled && authPending)) {
+    if (docParam) return <DocumentEditorLoading />;
     return (
       <div
         role="status"
         className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground"
       >
         <LoaderCircle className="animate-spin" size={16} aria-hidden="true" />
-        正在加载空间…
+        {enabled ? '正在加载空间…' : '正在确认登录状态…'}
       </div>
+    );
+  }
+
+  if (!enabled)
+    return (
+      <div className="p-8 text-center text-sm text-muted-foreground">请登录后访问空间与文档。</div>
+    );
+
+  if (docParam && !workspace) {
+    return (
+      <main className="flex h-full min-h-0 min-w-0 overflow-hidden">
+        <DocumentPane
+          key={docParam}
+          documentId={docParam}
+          workspaceId={workspaceId}
+          identityKey={identityKey}
+          workspaceName="与我共享"
+          canManageWorkspace={false}
+          onlineCount={onlineCount}
+          onOnlineCountChange={setOnlineCount}
+          onBack={() =>
+            void navigate({
+              to: '/documents',
+              search: { view: 'all', sort: 'updated', direction: 'desc', limit: 20, offset: 0 },
+            })
+          }
+        />
+      </main>
     );
   }
 
@@ -229,9 +255,8 @@ export function SpaceDetailPageView({
           >
             <Users size={15} />
             <span className="hidden sm:inline">成员</span>
-            <span className="text-xs">{workspace.memberCount}</span>
             {onlineCount > 0 && (
-              <span className="text-xs text-muted-foreground">{onlineCount} 位在线</span>
+              <span className="text-xs text-muted-foreground">{onlineCount}</span>
             )}
           </Button>
           {workspace.canManage && (

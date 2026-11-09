@@ -50,9 +50,15 @@ export interface EditorLinkEditorProps {
   messages?: Partial<EditorLinkEditorMessages>;
   className?: string;
   openRequest?: number;
+  hideTrigger?: boolean;
 }
 
-export function EditorLinkEditor({ messages, className, openRequest }: EditorLinkEditorProps) {
+export function EditorLinkEditor({
+  messages,
+  className,
+  openRequest,
+  hideTrigger = false,
+}: EditorLinkEditorProps) {
   const { controller } = useEditorInstance();
   const editable = useEditorSelector((state) => state.isEditable);
   const errorId = useId();
@@ -63,10 +69,11 @@ export function EditorLinkEditor({ messages, className, openRequest }: EditorLin
   const previousOpenRequestRef = useRef(openRequest ?? 0);
   const openRef = useRef<() => void>(() => {});
   const labels = { ...defaultMessages, ...messages };
+  const isOpen = draft !== null;
 
   useEffect(() => {
-    if (draft) displayTextRef.current?.focus();
-  }, [draft]);
+    if (isOpen) displayTextRef.current?.focus();
+  }, [isOpen]);
 
   useEffect(() => {
     if (openRequest === undefined || previousOpenRequestRef.current === openRequest) return;
@@ -79,7 +86,7 @@ export function EditorLinkEditor({ messages, className, openRequest }: EditorLin
 
   const open = () => {
     if (!controller.canExecute("write").allowed) return;
-    if (editor.isActive("link")) editor.chain().focus().extendMarkRange("link").run();
+    if (editor.isActive("link")) editor.chain().extendMarkRange("link").run();
     const { from, to } = editor.state.selection;
     const text = editor.state.doc.textBetween(from, to, "");
     const href = editor.isActive("link") ? String(editor.getAttributes("link").href ?? "") : "";
@@ -174,20 +181,22 @@ export function EditorLinkEditor({ messages, className, openRequest }: EditorLin
 
   return (
     <div className="zhishu-ui-link-editor">
-      <button
-        type="button"
-        className={className ? `zhishu-ui-link-trigger ${className}` : "zhishu-ui-link-trigger"}
-        aria-label={labels.label}
-        aria-haspopup="dialog"
-        aria-expanded={draft !== null}
-        disabled={!editable}
-        title={editable ? labels.label : (controller.readonlyReason ?? labels.label)}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={open}
-      >
-        <EditorIcon name="link" />
-        <span className="zhishu-ui-visually-hidden">{labels.label}</span>
-      </button>
+      {!hideTrigger && (
+        <button
+          type="button"
+          className={className ? `zhishu-ui-link-trigger ${className}` : "zhishu-ui-link-trigger"}
+          aria-label={labels.label}
+          aria-haspopup="dialog"
+          aria-expanded={isOpen}
+          disabled={!editable}
+          title={editable ? labels.label : (controller.readonlyReason ?? labels.label)}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={open}
+        >
+          <EditorIcon name="link" />
+          <span className="zhishu-ui-visually-hidden">{labels.label}</span>
+        </button>
+      )}
       {draft && (
         <form
           className="zhishu-ui-link-dialog"
@@ -260,7 +269,7 @@ export function EditorLinkEditor({ messages, className, openRequest }: EditorLin
 
 function validateHref(value: string): string | undefined {
   const href = value.trim();
-  if (!href || /\s/.test(href)) return undefined;
+  if (!href || href.length > 2048 || /\s/.test(href)) return undefined;
   try {
     const url = new URL(href);
     if (url.protocol === "http:" || url.protocol === "https:") {

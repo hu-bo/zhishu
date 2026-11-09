@@ -1,5 +1,5 @@
 import { createAiEventValidator, type AiTaskEventV2 } from '@zhishu/ai-contracts';
-import type { StartAiChatBody } from '@/api/generated/models';
+import type { StartAiChatBody } from '@/api/generated/app-api.schemas';
 import { apiBaseUrl, getAccessToken } from '@/api/transport';
 import { ApiError } from '@/api/api-error';
 import { sseData } from '@/api/sse';
@@ -24,7 +24,11 @@ export async function consumeRagTask(
       value && typeof value === 'object' && 'code' in value && typeof value.code === 'string'
         ? value.code
         : 'HTTP_ERROR';
-    throw new ApiError(response.status, code, '问答暂未受理，请查询原请求或重新选择资料');
+    const message =
+      value && typeof value === 'object' && 'message' in value && typeof value.message === 'string'
+        ? value.message
+        : '问答暂未受理，请查询原请求或重新选择资料';
+    throw new ApiError(response.status, code, message);
   }
   if (!response.headers.get('content-type')?.includes('text/event-stream')) return;
   const validator = createAiEventValidator({

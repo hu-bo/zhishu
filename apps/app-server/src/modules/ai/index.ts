@@ -15,6 +15,9 @@ import { WritingService } from "../writing-chat/writing.service.js";
 import { writingRoutes } from "../writing-chat/writing.routes.js";
 import { WritingImages } from "../writing-chat/writing.image.js";
 import { AssetObjectStorage } from "../assets/asset-storage.js";
+import { createRagClients, ragConfiguration } from "../rag/rag.config.js";
+import { RagRepository } from "../rag/rag.repository.js";
+import { RagService } from "../rag/rag.service.js";
 
 export async function aiModule(
   app: FastifyInstance,
@@ -65,8 +68,14 @@ export async function aiModule(
     connectionTimeoutMillis: 5000,
     query_timeout: 15000,
   });
-  writingPool.on("error", () => app.log.error("Writing storage connection failed"));
+  writingPool.on("error", (err) => app.log.error({ err }, "Writing storage connection failed"));
   const documentAccess = new AiDocumentAccess(app.db, owner);
+  const ragClients = exportMode ? null : createRagClients(config);
+  const rag = ragClients
+    ? new RagService(new RagRepository(app.dbPool), documentAccess, ragClients, config, (code) =>
+        app.log.error({ code }, "Document vector indexing failed"),
+      )
+    : undefined;
   const imageStorage =
     !exportMode &&
     config.ASSET_STORAGE_ENDPOINT &&
@@ -90,6 +99,8 @@ export async function aiModule(
     leases,
     config,
     writing,
+    rag,
+    ragConfiguration(config).reason,
   );
   let timer: ReturnType<typeof setInterval> | undefined, maintenance: Promise<void> | undefined;
   if (!exportMode) {
@@ -97,12 +108,13 @@ export async function aiModule(
       if (model) await saver.getTuple({ configurable: { thread_id: "__readiness__" } });
       await service.maintain();
       await writing.repository.recoverOrphans();
+      rag?.start();
       timer = setInterval(() => {
         if (!maintenance) {
           maintenance = service
             .maintain()
-            .catch(() => {
-              app.log.error("AI task maintenance failed");
+            .catch((err: unknown) => {
+              app.log.error({ err }, "AI task maintenance failed");
             })
             .finally(() => {
               maintenance = undefined;
@@ -113,6 +125,7 @@ export async function aiModule(
     });
     app.addHook("preClose", async () => {
       if (timer) clearInterval(timer);
+      await rag?.close();
       await service.close();
       await writing.close();
       if (maintenance) await maintenance;

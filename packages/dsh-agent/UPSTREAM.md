@@ -24,6 +24,14 @@ the published package exports, not local source paths. DeepSeek Harness dependen
 MIT licensing; their copyright notices and license obligations remain with those dependencies.
 This file records provenance and does not assign a new license to the enclosing project.
 
+2026-10-30 published-package audit: `dsh-agent-loop@0.2.1-rc.2` increments its native
+assistant frame `revision` on every start/chunk/end, while `attemptId` identifies the model
+attempt. The adapter keeps one product revision per native attempt and assigns a dense
+public-text index after filtering reasoning and other private chunks. Native positions
+are not forwarded as if they were product text-stream positions. The incremental projection
+also folds public `agent/inbox/spliced` facts to correlate claimed input whose pre-step
+was blocked before a `user/message` could be appended.
+
 # 来源与许可证记录
 
 本包由知书仓库独立实现，不依赖 Nova 仓库，不复制其他应用的 agent/harness 实现。

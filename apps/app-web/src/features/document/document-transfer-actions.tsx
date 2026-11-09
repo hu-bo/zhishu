@@ -2,8 +2,8 @@ import { useRef, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Download, LoaderCircle, Upload } from 'lucide-react';
-import { exportDocumentJson, importDocumentJson } from '@/api/generated/app-api';
-import type { ImportDocumentJsonBody } from '@/api/generated/models';
+import { exportDocumentJson, importDocumentJson } from '@/api/generated/documents';
+import type { ImportDocumentJsonBody } from '@/api/generated/app-api.schemas';
 import { errorMessage } from '@/api/api-error';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -92,7 +92,9 @@ function transferError(cause: unknown): string {
 export function DocumentTransferActions({
   documentId,
   title,
+  canExport,
 }: {
+  canExport: boolean;
   documentId: string;
   title: string;
 }) {
@@ -106,6 +108,7 @@ export function DocumentTransferActions({
     useState<PendingLossConfirmation | null>(null);
 
   const exportFile = async (format: ExportFormat) => {
+    if (!canExport) return;
     setBusy('export');
     setError(null);
     setNotice(null);
@@ -151,12 +154,14 @@ export function DocumentTransferActions({
   };
 
   const printSavedDocument = async () => {
+    if (!canExport) return;
     const preview = window.open('', '_blank');
     if (!preview) {
       setError('浏览器阻止了打印窗口，请允许弹出窗口后重试。');
       return;
     }
     preview.opener = null;
+    if (!canExport) return;
     setBusy('export');
     setError(null);
     try {
@@ -281,6 +286,7 @@ export function DocumentTransferActions({
       return pending.body ? performImport(pending.body, pending.losses) : false;
     }
     if (!pending.format || pending.content === undefined) return false;
+    if (!canExport) return;
     setBusy('export');
     setError(null);
     try {
@@ -302,7 +308,11 @@ export function DocumentTransferActions({
         导出已保存的内容，或将本地文件导入为一篇新文档。
       </p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 [&>button]:h-12 [&>button]:w-full [&>button]:justify-start">
-        <Button variant="outline" disabled={busy !== null} onClick={() => void exportFile('json')}>
+        <Button
+          variant="outline"
+          disabled={!canExport || busy !== null}
+          onClick={() => void exportFile('json')}
+        >
           {busy === 'export' ? (
             <LoaderCircle className="animate-spin" aria-hidden="true" />
           ) : (
@@ -310,18 +320,30 @@ export function DocumentTransferActions({
           )}
           导出 JSON
         </Button>
-        <Button variant="outline" disabled={busy !== null} onClick={() => void exportFile('html')}>
+        <Button
+          variant="outline"
+          disabled={!canExport || busy !== null}
+          onClick={() => void exportFile('html')}
+        >
           导出 HTML
         </Button>
-        <Button variant="outline" disabled={busy !== null} onClick={() => void exportFile('txt')}>
+        <Button
+          variant="outline"
+          disabled={!canExport || busy !== null}
+          onClick={() => void exportFile('txt')}
+        >
           导出文本
         </Button>
-        <Button variant="outline" disabled={busy !== null} onClick={() => void exportFile('md')}>
+        <Button
+          variant="outline"
+          disabled={!canExport || busy !== null}
+          onClick={() => void exportFile('md')}
+        >
           导出 Markdown
         </Button>
         <Button
           variant="outline"
-          disabled={busy !== null}
+          disabled={!canExport || busy !== null}
           onClick={() => void printSavedDocument()}
         >
           打印 / PDF

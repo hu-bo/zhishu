@@ -1,5 +1,7 @@
 # 协作 AI 写作 Chat 与 DSH 插件架构方案
 
+2026-11-09 应用目标已更新为统一 Chat 与 skills 的零新增表方案，允许破坏性 API/Schema 重构，详见 [AI 问答、创作与对外问答站技术设计](../apps/ai-assistant-and-public-qa.md)。该方案规划重命名既有会话与分享表、统一 ai_runs，并复用 resource_acl 保存来源绑定。本文关于 WritingChat/RagChat 分离的目标作为历史设计依据。
+
 实际进展：2026-10-24 已接入官方 DSH 写作、独立 LangChain RagChat、共享 chat-ui、持久化/审批/HTTP/SSE 和 writing/research/image。具体实现与验证边界见 [实施记录](ai-chat-implementation.md)。下文保留原目标设计，不能将全部阶段表视为已验收。
 
 **原设计时状态（已由上方实施更新覆盖）**：2026-10-24 设计方案，功能尚未实现。本文规划协作 AI 写作 Chat；RAG Chat 继续使用 LangChain，两者复用 chat-ui 基础组件。包级规范见 [chat-contracts](chat-contracts.md)、[chat-ui](chat-ui.md)、[dsh-agent](dsh-agent.md)、[ai-plugins](ai-plugins.md)，两个业务封装见 [app-web](../apps/app-web.md#ai-chat-业务组件库)。[返回文档地图](../README.md)。

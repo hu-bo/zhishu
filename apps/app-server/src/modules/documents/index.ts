@@ -1,7 +1,12 @@
+import type { Database } from "../../../database/index.js";
+import { DocumentHistoryRepository } from "./document-history.repository.js";
+import { createCatalogService } from "../catalogs/index.js";
 import type { FastifyInstance } from "fastify";
 import {
   CURRENT_DOCUMENT_SCHEMA_VERSION,
   CALLOUT_DOCUMENT_SCHEMA_VERSION,
+  MENTION_DOCUMENT_SCHEMA_VERSION,
+  MATHEMATICS_DOCUMENT_SCHEMA_VERSION,
   LEGACY_DOCUMENT_SCHEMA_VERSION,
   SUPPORTED_DOCUMENT_SCHEMA_VERSIONS,
   TABLE_DOCUMENT_SCHEMA_VERSION,
@@ -13,25 +18,35 @@ import {
 } from "@zhishu/document-contracts";
 import type { ContentMigration, ContentValidationResult } from "@zhishu/document-contracts";
 import type { AppConfig } from "../../config.js";
-import { CatalogRepository } from "./catalog.repository.js";
-import { catalogRoutes } from "./catalog.routes.js";
-import { CatalogService } from "./catalog.service.js";
 import { DocumentRepository } from "./document.repository.js";
 import { documentRoutes } from "./document.routes.js";
 import { DocumentService } from "./document.service.js";
-import type { CollaborationSessionRevoker } from "./document.service.js";
-import { KnowledgeRepository } from "./knowledge.repository.js";
-import { KnowledgeService } from "./knowledge.service.js";
-import { knowledgeRoutes } from "./knowledge.routes.js";
+import type { CollaborationSessionRevoker } from "../collaboration/session-revoker.js";
 import { AssetObjectStorage } from "../assets/asset-storage.js";
 import { publicShareRoutes } from "./public-share.routes.js";
 import { ShareRepository } from "./share.repository.js";
 import { ShareService } from "./share.service.js";
 import { shareRoutes } from "./share.routes.js";
+import { DocumentCommunityService } from "./document-community.service.js";
+import { documentCommunityRoutes } from "./document-community.routes.js";
 
 export const currentSchemaVersion = CURRENT_DOCUMENT_SCHEMA_VERSION;
 export { AiDocumentAccess } from "./ai-document-access.js";
 const contentMigrations: readonly ContentMigration[] = [
+  {
+    id: "document-schema-v6-to-v7-mathematics",
+    summary: "Preserve content while enabling LaTeX formulas.",
+    fromSchemaVersion: MENTION_DOCUMENT_SCHEMA_VERSION,
+    toSchemaVersion: MATHEMATICS_DOCUMENT_SCHEMA_VERSION,
+    migrate: (content) => content,
+  },
+  {
+    id: "document-schema-v5-to-v6-mentions",
+    summary: "Preserve content while enabling inline member mentions.",
+    fromSchemaVersion: CALLOUT_DOCUMENT_SCHEMA_VERSION,
+    toSchemaVersion: MENTION_DOCUMENT_SCHEMA_VERSION,
+    migrate: (content) => content,
+  },
   {
     id: "document-schema-v1-to-v2-task-list",
     summary: "Preserve existing content while enabling recursive task lists.",
@@ -72,12 +87,13 @@ function validateMigrationSource(content: unknown, schemaVersion: number): Conte
 }
 
 export function createDocumentService(
-  repository: DocumentRepository,
+  db: Database,
   config: AppConfig,
   sessionRevoker: CollaborationSessionRevoker,
 ): DocumentService {
   return new DocumentService(
-    repository,
+    new DocumentRepository(db),
+    new DocumentHistoryRepository(db),
     {
       tokenSecret: config.COLLABORATION_TOKEN_SECRET,
       sessionTtlSeconds: config.COLLABORATION_SESSION_TTL_SECONDS,
@@ -101,15 +117,13 @@ export async function documentsModule(
   exportMode = false,
 ): Promise<void> {
   const repository = new DocumentRepository(app.db);
-  const service = createDocumentService(repository, config, sessionRevoker);
+  const service = createDocumentService(app.db, config, sessionRevoker);
   await app.register(async (scope) => documentRoutes(scope, service), { prefix: "/documents" });
-  const knowledge = new KnowledgeService(
-    new KnowledgeRepository(app.db),
-    config.TENANT_MAX_DOCUMENTS,
-  );
-  await app.register(async (scope) => knowledgeRoutes(scope, knowledge), { prefix: "/knowledge" });
-  const catalogs = new CatalogService(new CatalogRepository(app.db));
-  await app.register(async (scope) => catalogRoutes(scope, catalogs), { prefix: "/knowledge" });
+  const community = new DocumentCommunityService(app.db, sessionRevoker);
+  await app.register(async (scope) => documentCommunityRoutes(scope, community), {
+    prefix: "/documents",
+  });
+  const catalogs = createCatalogService(app.db, sessionRevoker);
   // Anonymous share readers need presigned asset URLs; mirror the assetsModule storage gate.
   const shareStorage =
     config.ASSET_STORAGE_ENDPOINT &&
@@ -125,3 +139,18 @@ export async function documentsModule(
   await app.register(async (scope) => shareRoutes(scope, shares), { prefix: "/documents" });
   await app.register(async (scope) => publicShareRoutes(scope, shares));
 }
+
+export {
+  insertProjectionOutbox,
+  DocumentProjectionRepository,
+} from "./document-projection.repository.js";
+export { DocumentHistoryRepository } from "./document-history.repository.js";
+export {
+  hashDocumentContent,
+  summarizeDocumentContent,
+  collectAssetReferences,
+} from "./document-content.js";
+export { createCollaborationStateFromContent } from "../collaboration/document-state.js";
+
+export { DocumentRepository } from "./document.repository.js";
+export { DocumentProjectionWorker } from "./projection-worker.js";

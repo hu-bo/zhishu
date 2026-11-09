@@ -29,7 +29,7 @@ function AiRoute() {
     );
   return (
     <AiCreationPage
-      key={identityKey}
+      key={JSON.stringify([identityKey, search.sourceWorkspaceId, search.contextDocumentId])}
       initialTargetDocumentId={search.targetDocumentId}
       contextDocumentId={search.contextDocumentId}
       sourceWorkspaceId={search.sourceWorkspaceId}

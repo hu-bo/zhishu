@@ -21,6 +21,7 @@ const names = [
   "chat-ui",
   "dsh-agent",
   "ai-plugins",
+  "ai-runtime",
 ];
 for (const name of names)
   await run(process.execPath, [pnpm, "pack", "--pack-destination", packs], {
@@ -76,15 +77,22 @@ await writeFile(
   `import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Chat, Composer, type MessageView } from '@zhishu/chat-ui';
-import { isSubmitChatMessage } from '@zhishu/chat-contracts';
+import { isSubmitChatMessage, isApprovalDecision, applyChatSnapshot } from '@zhishu/chat-contracts';
 import { manifests, isImageJob } from '@zhishu/ai-plugins/contracts';
 import { installWriting } from '@zhishu/ai-plugins/writing';
 import { installResearch } from '@zhishu/ai-plugins/research';
 import { installImage } from '@zhishu/ai-plugins/image';
+import { hashContent as compilerHash } from '@zhishu/ai-plugins/writing/compiler';
+import { AiRuntimeError } from '@zhishu/ai-plugins/errors';
+import { createChatRuntime } from '@zhishu/ai-runtime/chat';
+import { hashContent } from '@zhishu/ai-runtime/policy';
+import type { createAuthoringRuntime } from '@zhishu/ai-runtime/legacy-authoring';
 import type { RuntimeOptions } from '@zhishu/dsh-agent';
 const messages: MessageView[] = [{ id:'one', role:'assistant',parts:[{id:'p',kind:'text',text:'独立安装'}] }];
-const html = renderToStaticMarkup(<Chat messages={messages} composer={<Composer value="" onValueChange={()=>{}} onSubmit={()=>{}}/>}/>);
-if (!html.includes('独立安装') || !isSubmitChatMessage({clientMessageId:'m',idempotencyKey:'k',text:'hello'}) || !isImageJob({id:'i',status:'unknown'}) || manifests.length !== 3) throw new Error('consumer failed');
+const html = renderToStaticMarkup(<Chat messages={messages} composer={<Composer value="" maxLength={8000} onValueChange={()=>{}} onSubmit={()=>{}}/>}/>);
+if (compilerHash('policy') !== hashContent('policy') || new AiRuntimeError('MODEL_FAILED').code !== 'MODEL_FAILED' || typeof createChatRuntime !== 'function' || !html.toLowerCase().includes('maxlength="8000"')) throw new Error('public subpath consumer failed');
+type LegacyFactory = typeof createAuthoringRuntime; const legacyType: LegacyFactory | undefined = undefined; void legacyType;
+if (!html.includes('独立安装') || !isSubmitChatMessage({clientMessageId:'m',idempotencyKey:'k',text:'hello'}) || !isApprovalDecision({approvalId:'a',decisionId:'d',decision:'allow-once'}) || typeof applyChatSnapshot !== 'function' || !isImageJob({id:'i',status:'unknown'}) || manifests.length !== 3) throw new Error('consumer failed');
 const configure:RuntimeOptions['setup']=(ctx)=>{void installWriting;void installResearch;void installImage;void ctx;};void configure;
 `,
 );

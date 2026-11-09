@@ -34,6 +34,17 @@ export function registerErrorHandlers(app: FastifyInstance): void {
                         ? 503
                         : 400;
       if (status === 401) reply.header("www-authenticate", "Bearer");
+      if ((status === 401 || status === 403 || status === 404) && request.principal)
+        request.log.info(
+          {
+            event: "authorization-denied",
+            tenantId: request.principal.tenantId,
+            actorId: request.principal.identityId,
+            operation: request.routeOptions.url,
+            code: error.code,
+          },
+          "Protected operation rejected",
+        );
       return reply.code(status).send({
         code: error.code,
         message: error.message,

@@ -1,3 +1,4 @@
+import { NotificationBell } from '@/features/notifications/notification-bell';
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useBlocker, useRouterState } from '@tanstack/react-router';
 import {
@@ -18,8 +19,8 @@ import {
   Monitor,
   X,
 } from 'lucide-react';
-import { getCurrentUser, mockLogin, mockLogout, useListMockUsers } from '@/api/generated/app-api';
-import type { MockLogin200User } from '@/api/generated/models';
+import { getCurrentUser, mockLogin, mockLogout, useListMockUsers } from '@/api/generated/identity';
+import type { MockLogin200User } from '@/api/generated/app-api.schemas';
 import {
   Menu as MenuRoot,
   MenuContent,
@@ -382,9 +383,13 @@ export function AppShell() {
     },
   });
   const [user, setUser] = useState<MockLogin200User | null>(null);
+  const [authInitializing, setAuthInitializing] = useState(
+    () => !!getAccessToken() || !navigator.onLine || import.meta.env.DEV,
+  );
   const [authError, setAuthError] = useState<string | null>(null);
   const [authFeedback, setAuthFeedback] = useState<string | null>(null);
   const [authBusyAction, setAuthBusyAction] = useState<'login' | 'logout' | null>(null);
+  const authPending = authInitializing || authBusyAction === 'login';
   const [sidebarExpanded, setSidebarExpanded] = useState(
     () =>
       readPreference<'true' | 'false'>('zhishu.sidebar-expanded', 'true', ['true', 'false']) ===
@@ -428,41 +433,42 @@ export function AppShell() {
   useEffect(() => {
     const cleanup = initializeOfflineState();
     let active = true;
-    if (!getAccessToken()) {
-      if (!navigator.onLine) {
-        void readOfflineAccount().then(async (account) => {
+    const restoreUser = async () => {
+      if (getAccessToken()) {
+        try {
+          const principal = await getCurrentUser();
+          if (!active) return;
+          void rememberAccount(principal, true);
+          setUser(principal);
+        } catch {
+          if (active) setAccessToken(undefined);
+        }
+      } else if (!navigator.onLine) {
+        try {
+          const account = await readOfflineAccount();
           if (!active || !account) return;
           await rememberAccount(account, false);
           if (active) setUser(account);
-        });
+        } catch {
+          if (active) setAuthError('无法读取本机登录信息，请联网后重试。');
+        }
       } else if (import.meta.env.DEV) {
         // Dev convenience: sign in as the default mock user without a button.
-        void mockLogin({})
-          .then(async (session) => {
-            if (!active) return;
-            await rememberAccount(session.user, true);
-            setAccessToken(session.accessToken);
-            if (active) setUser(session.user);
-          })
-          .catch(() => {
-            if (active) setAuthError('开发环境自动登录失败，请确认后端服务已启动后再试。');
-          });
-      }
-      return () => {
-        active = false;
-        cleanup();
-      };
-    }
-    void getCurrentUser()
-      .then((principal) => {
-        if (active) {
-          void rememberAccount(principal, true);
-          setUser(principal);
+        try {
+          const session = await mockLogin({});
+          if (!active) return;
+          await rememberAccount(session.user, true);
+          if (!active) return;
+          setAccessToken(session.accessToken);
+          setUser(session.user);
+        } catch {
+          if (active) setAuthError('开发环境自动登录失败，请确认后端服务已启动后再试。');
         }
-      })
-      .catch(() => {
-        setAccessToken(undefined);
-      });
+      }
+    };
+    void restoreUser().finally(() => {
+      if (active) setAuthInitializing(false);
+    });
     return () => {
       active = false;
       cleanup();
@@ -545,7 +551,7 @@ export function AppShell() {
   };
 
   return (
-    <KnowledgeWorkspaceProvider user={user}>
+    <KnowledgeWorkspaceProvider user={user} authPending={authPending}>
       <div className="flex h-dvh min-h-[100dvh] overflow-hidden bg-background text-foreground">
         <a href="#main-content" className="sr-only z-50 bg-card p-4 focus:not-sr-only focus:fixed">
           跳转到主要内容
@@ -587,6 +593,7 @@ export function AppShell() {
               </div>
               <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
                 <GlobalSearch />
+                {user && <NotificationBell />}
                 <MenuRoot>
                   <MenuTrigger
                     render={
@@ -625,10 +632,10 @@ export function AppShell() {
                     <Button
                       size="sm"
                       onClick={() => void signIn()}
-                      disabled={authBusyAction !== null}
+                      disabled={authPending || authBusyAction === 'logout'}
                     >
                       <LogIn aria-hidden="true" />
-                      {authBusyAction === 'login' ? '正在连接…' : '重新登录'}
+                      {authPending ? '正在连接…' : '重新登录'}
                     </Button>
                   )
                 ) : user ? (
@@ -651,7 +658,9 @@ export function AppShell() {
                     </Button>
                   </>
                 ) : (
-                  <span className="text-xs text-muted-foreground">请通过宿主完成身份认证</span>
+                  <span className="text-xs text-muted-foreground">
+                    {authPending ? '正在确认登录状态…' : '请通过宿主完成身份认证'}
+                  </span>
                 )}
               </div>
             </header>

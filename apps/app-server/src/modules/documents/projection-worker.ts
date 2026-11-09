@@ -1,4 +1,4 @@
-import { DocumentRepository } from "./document.repository.js";
+import { DocumentProjectionRepository } from "./document-projection.repository.js";
 
 const IDLE_POLL_INTERVAL_MS = 1_000;
 const BUSY_POLL_INTERVAL_MS = 100;
@@ -10,8 +10,8 @@ export class DocumentProjectionWorker {
   private running: Promise<void> | undefined;
 
   constructor(
-    private readonly repository: DocumentRepository,
-    private readonly logFailure: () => void,
+    private readonly repository: DocumentProjectionRepository,
+    private readonly logFailure: (error: unknown) => void,
   ) {}
 
   start(): void {
@@ -51,12 +51,12 @@ export class DocumentProjectionWorker {
         this.lastBatchHadWork = true;
         try {
           await this.repository.processProjectionJob(job);
-        } catch {
+        } catch (error) {
+          this.logFailure(error);
           await this.repository.failProjectionJob(job);
-          this.logFailure();
         }
-      } catch {
-        this.logFailure();
+      } catch (error) {
+        this.logFailure(error);
         return;
       }
     }

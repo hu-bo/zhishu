@@ -3,7 +3,7 @@ import { sql } from "../../../database/index.js";
 import type { FastifyInstance } from "fastify";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { DocumentRepository } from "../documents/document.repository.js";
+import { DocumentProjectionRepository } from "../documents/index.js";
 import type { OperationsMetrics } from "./operations-metrics.js";
 
 export async function healthRoutes(
@@ -12,6 +12,7 @@ export async function healthRoutes(
   metricsBearerToken?: string,
 ): Promise<void> {
   const typed = app.withTypeProvider<ZodTypeProvider>();
+  const projections = new DocumentProjectionRepository(app.db);
   typed.get(
     "/health/live",
     {
@@ -43,7 +44,7 @@ export async function healthRoutes(
     },
     async () => {
       await app.db.execute(sql`select 1`);
-      const documentProjection = await new DocumentRepository(app.db).getProjectionQueueStatus();
+      const documentProjection = await projections.getProjectionQueueStatus();
       return { status: "ok" as const, documentProjection };
     },
   );

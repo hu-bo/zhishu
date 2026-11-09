@@ -6,6 +6,7 @@ import { SessionId } from "@deepseek-ai/dsh-session";
 import type { ApprovalOutcome } from "@deepseek-ai/dsh-user-approval";
 import {
   isSubmitChatMessage,
+  isApprovalDecision,
   type SubmitChatMessage,
   type Run,
   type ChatFrame,
@@ -26,7 +27,6 @@ export class DshChatSession {
   private listeners = new Set<(frame: ChatFrame) => void>();
   private answers = new Map<string, (outcome: ApprovalOutcome) => void>();
   private approvalSignals = new Map<string, AbortSignal | undefined>();
-  private cancelled = new Set<string>();
   private durable?: ChatRecord;
   private outputBytes = 0;
   private disposing?: Promise<void>;
@@ -72,6 +72,9 @@ export class DshChatSession {
         restore &&
         !!(record.engineCreated || (await ctx.get("sessionPersistence")?.stat(SessionId(id))));
       const setup = async (scope: Context, agent: AgentHandle["agent"]) => {
+        let textRevision = 0;
+        let textIndex = 0;
+        let textAttempt: string | undefined;
         scope.systemPrompt.section({
           name: "writing-safety",
           order: 0,
@@ -101,13 +104,22 @@ export class DshChatSession {
           if (run?.nativeMessageId === message.id) run.turn = turn;
         });
         scope.on("agent/assistant-stream", ({ agent: subject, frame }) => {
-          if (subject !== agent || frame.type !== "chunk") return;
+          if (subject !== agent) return;
+          if (frame.type === "start") {
+            textAttempt = frame.attemptId;
+            // The pinned release increments native revision on EVERY frame.
+            // Product revision identifies the whole attempt, not each text token.
+            textRevision = frame.revision;
+            textIndex = 0;
+            return;
+          }
+          if (frame.type !== "chunk") return;
           session!.outputBytes += Buffer.byteLength(JSON.stringify(frame.chunk));
           if (session!.outputBytes > (options.limits?.maxOutputBytes ?? 128000)) {
             agent.cancel({ kind: "hook", reason: "OUTPUT_LIMIT" });
             return;
           }
-          if (frame.chunk.type !== "text-delta") return;
+          if (frame.chunk.type !== "text-delta" || frame.attemptId !== textAttempt) return;
           const run = session!.current();
           if (run)
             session!.publish({
@@ -116,8 +128,8 @@ export class DshChatSession {
               runId: run.id,
               attempt: run.attempt,
               streamEpoch: session!.epoch,
-              revision: frame.revision,
-              index: frame.index,
+              revision: textRevision,
+              index: textIndex++,
               text: frame.chunk.text,
             });
         });
@@ -214,6 +226,9 @@ export class DshChatSession {
   private current() {
     return this.record.snapshot.runs.find((r) => r.id === this.active);
   }
+  private ensureAvailable() {
+    if (this.closed || this.broken) throw new DshRuntimeError("SESSION_UNAVAILABLE");
+  }
   private mutate<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.mutations.then(operation);
     this.mutations = result.catch(() => undefined);
@@ -245,14 +260,14 @@ export class DshChatSession {
   }
   async snapshot() {
     await this.mutations;
-    if (this.broken) throw new DshRuntimeError("SESSION_UNAVAILABLE");
+    this.ensureAvailable();
     await this.options.authorize?.(this.id);
     return structuredClone(this.durable?.snapshot ?? this.record.snapshot);
   }
   async submit(input: SubmitChatMessage) {
     if (!isSubmitChatMessage(input)) throw new DshRuntimeError("INVALID_INPUT");
     const run = await this.mutate(async () => {
-      if (this.closed || this.broken) throw new DshRuntimeError("SESSION_UNAVAILABLE");
+      this.ensureAvailable();
       await this.options.authorize?.(this.id);
       const inputHash = createHash("sha256")
         .update(JSON.stringify([input.clientMessageId, input.idempotencyKey, input.text]))
@@ -359,7 +374,7 @@ export class DshChatSession {
         this.active = undefined;
         continue;
       }
-      if (this.cancelled.has(run.id)) {
+      if (run.cancelRequested) {
         await this.mutate(async () => {
           run.status = "cancelled";
           await this.commit();
@@ -389,18 +404,21 @@ export class DshChatSession {
     const turn = run.turn === undefined ? undefined : state?.turns[run.turn];
     const reason = turn?.reason;
     if (!reason) {
-      run.status = "interrupted";
-      run.errorCode = "DELIVERY_UNCONFIRMED";
+      await this.ctx.sessions.flush(session);
+      run.status = run.cancelRequested ? "cancelled" : "interrupted";
+      run.errorCode = run.cancelRequested ? undefined : "DELIVERY_UNCONFIRMED";
       return;
     }
     const output = this.options.resultText?.(state?.records ?? [], run) ?? turn?.text ?? "";
     await this.ctx.sessions.flush(session);
     if (
       reason.kind === "completed" &&
+      !run.cancelRequested &&
       output &&
       Buffer.byteLength(output) <= (this.options.limits?.maxOutputBytes ?? 128000)
     ) {
       run.status = "completed";
+      run.errorCode = undefined;
       const id = `assistant:${run.id}`;
       this.record.snapshot.messages = this.record.snapshot.messages.filter((m) => m.id !== id);
       this.record.snapshot.messages.push({
@@ -414,13 +432,22 @@ export class DshChatSession {
       });
     } else {
       run.status =
-        reason.kind === "aborted" && reason.reason.kind === "user"
+        run.cancelRequested || (reason.kind === "aborted" && reason.reason.kind === "user")
           ? "cancelled"
           : reason.kind === "interrupted" ||
               (reason.kind === "aborted" && reason.reason.kind === "disposed")
             ? "interrupted"
             : "failed";
-      run.errorCode = reason.kind === "completed" ? "OUTPUT_REQUIRED" : reason.kind.toUpperCase();
+      run.errorCode =
+        run.status === "cancelled"
+          ? undefined
+          : reason.kind === "completed"
+            ? "OUTPUT_REQUIRED"
+            : reason.kind === "error"
+              ? reason.error.code !== "UNKNOWN" && /^[A-Z][A-Z0-9_]{0,63}$/.test(reason.error.code)
+                ? reason.error.code
+                : "ERROR"
+              : reason.kind.toUpperCase();
       if (output) {
         const id = `assistant:${run.id}`;
         this.record.snapshot.messages = this.record.snapshot.messages.filter((m) => m.id !== id);
@@ -442,8 +469,7 @@ export class DshChatSession {
     for (const run of this.record.snapshot.runs) {
       if (["running", "waiting-approval", "interrupted"].includes(run.status)) {
         await this.settle(run);
-        if (run.status !== "completed" && run.status !== "cancelled") {
-          run.status = "interrupted";
+        if (run.status === "interrupted") {
           run.errorCode = "RESTARTED";
         }
       }
@@ -452,6 +478,7 @@ export class DshChatSession {
   }
   async cancel(runId: string) {
     await this.mutate(async () => {
+      this.ensureAvailable();
       await this.options.authorize?.(this.id);
       const run = this.record.snapshot.runs.find((r) => r.id === runId);
       if (!run) throw new DshRuntimeError("NOT_FOUND");
@@ -460,7 +487,8 @@ export class DshChatSession {
         run.status = "cancelled";
         await this.commit();
       } else if (this.active === runId) {
-        this.cancelled.add(runId);
+        run.cancelRequested = true;
+        await this.commit();
         this.handle.agent.cancel({ kind: "user" });
       }
     });
@@ -472,9 +500,15 @@ export class DshChatSession {
   }
   async resume(runId: string) {
     await this.mutate(async () => {
+      this.ensureAvailable();
       await this.options.authorize?.(this.id);
       const run = this.record.snapshot.runs.find((r) => r.id === runId);
       if (!run || run.status !== "interrupted") throw new DshRuntimeError("NOT_RESUMABLE");
+      if (
+        this.record.snapshot.runs.filter((r) => !terminal(r)).length >=
+        (this.options.limits?.maxQueued ?? 4)
+      )
+        throw new DshRuntimeError("QUEUE_FULL");
       // No automatic replay of an action whose external effects may be unknown.
       if (
         run.turn !== undefined &&
@@ -489,12 +523,15 @@ export class DshChatSession {
         throw new DshRuntimeError("BUDGET_EXCEEDED");
       run.attempt++;
       run.status = "queued";
+      run.errorCode = undefined;
       await this.commit();
     });
     this.kick();
   }
   async decide(input: ApprovalDecision) {
+    if (!isApprovalDecision(input)) throw new DshRuntimeError("INVALID_INPUT");
     await this.mutate(async () => {
+      this.ensureAvailable();
       await this.options.authorize?.(this.id);
       const approval = this.record.snapshot.approvals.find((a) => a.id === input.approvalId);
       if (!approval) throw new DshRuntimeError("NOT_FOUND");
@@ -505,7 +542,7 @@ export class DshChatSession {
       if (
         approval.status !== "pending" ||
         this.closed ||
-        this.cancelled.has(approval.runId) ||
+        this.record.snapshot.runs.find((r) => r.id === approval.runId)?.cancelRequested ||
         this.approvalSignals.get(approval.id)?.aborted ||
         this.current()?.id !== approval.runId ||
         this.current()?.attempt !== approval.attempt ||
@@ -521,6 +558,7 @@ export class DshChatSession {
     });
   }
   async *observe(signal: AbortSignal): AsyncGenerator<ChatFrame> {
+    this.ensureAvailable();
     if (this.listeners.size >= 8) throw new DshRuntimeError("SUBSCRIBER_LIMIT");
     const queue: ChatFrame[] = [];
     let wake: (() => void) | undefined;

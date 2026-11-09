@@ -1,10 +1,11 @@
 import { createContext, useContext } from 'react';
-import type { ListKnowledgeWorkspaces200Item } from '@/api/generated/models';
+import type { ListKnowledgeWorkspaces200Item } from '@/api/generated/app-api.schemas';
 
 export type WorkspaceContextValue = {
   workspaces: ListKnowledgeWorkspaces200Item[];
   identityKey: string;
   enabled: boolean;
+  authPending: boolean;
   loading: boolean;
   failed: boolean;
   refreshWorkspaces: () => void;

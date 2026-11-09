@@ -9,7 +9,7 @@ import {
   documentProjectionSnapshots,
   documents,
 } from "../../database/schema/index.js";
-import { DocumentRepository } from "../modules/documents/document.repository.js";
+import { DocumentRepository, DocumentProjectionRepository } from "../modules/documents/index.js";
 import type { DocumentContent } from "@zhishu/document-contracts";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -25,6 +25,7 @@ assert.ok(
 const pool = createPool({ connectionString: databaseUrl, max: 2 });
 const db = createDatabase(pool);
 const repository = new DocumentRepository(db);
+const projections = new DocumentProjectionRepository(db);
 const token = randomUUID();
 const tenantId = `projection-smoke-${token}`;
 const ownerId = `projection-smoke-${token}`;
@@ -98,9 +99,9 @@ try {
   assert.deepEqual(pendingOutbox.summary, { blockCount: 2, textLength: 5, assetCount: 1 });
   assert.deepEqual(pendingOutbox.snapshotContent, firstContent);
 
-  const projectionJob = await repository.claimProjectionJob(new Date(Date.now() + 1_000));
+  const projectionJob = await projections.claimProjectionJob(new Date(Date.now() + 1_000));
   assert.ok(projectionJob);
-  assert.equal(await repository.processProjectionJob(projectionJob), true);
+  assert.equal(await projections.processProjectionJob(projectionJob), true);
   const [snapshot] = await db
     .select()
     .from(documentProjectionSnapshots)
@@ -167,14 +168,14 @@ try {
   let failureStatus: "retry" | "dead" | "stale" = "stale";
   for (let attempt = 1; attempt <= 8; attempt += 1) {
     const future = new Date(Date.now() + attempt * 600_000);
-    const job = await repository.claimProjectionJob(future, documentId);
+    const job = await projections.claimProjectionJob(future, documentId);
     assert.ok(job, `projection retry ${attempt} should be claimable`);
-    failureStatus = await repository.failProjectionJob(job, "projection-smoke-failure", future);
+    failureStatus = await projections.failProjectionJob(job, "projection-smoke-failure", future);
     assert.equal(failureStatus, attempt === 8 ? "dead" : "retry");
   }
   assert.equal(failureStatus, "dead");
 
-  const queue = await repository.getProjectionQueueStatus(documentId);
+  const queue = await projections.getProjectionQueueStatus(documentId);
   assert.equal(queue.pending, 0);
   assert.equal(queue.processing, 0);
   assert.equal(queue.dead, 1);

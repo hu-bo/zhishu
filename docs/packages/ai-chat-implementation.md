@@ -1,5 +1,9 @@
 # AI Chat 实施记录（2026-10-24）
 
+> 2026-10-30 知识检索新增了应用索引 Worker 和空间/文档向量问答。配置启用后 RagChat 的 grounded 请求使用 query Embedding → Qdrant → 当前 ACL/版本复核 → LangGraph 回答；未配置时 UI 明确禁用知识问答。原显式文档上下文 API 保留兼容。详见 [本轮验收记录](../ai-knowledge-verification.md)。
+
+> 2026-10-30 已依据当前源码重新核验并修复生命周期及实时预览问题，见文末复核记录。10-24 的验收属于历史记录，不能当作本轮所有环境已经再次验收。
+
 本记录区分实际代码、确定性验收和需要真实 provider 的验收。原架构文档中的阶段表继续作为目标清单，不表示每项均已完成。
 
 ## 已接入的调用链
@@ -64,3 +68,47 @@ image 使用独立 AI_IMAGE_MODEL / AI_IMAGE_API_KEY / 可选 AI_IMAGE_BASE_URL�
 - Playwright：实际应用两轮写作、RAG 来源引用、往返切换草稿隔离、输入法组合期间 Enter、刷新恢复，以及 390×844 深色移动端检查通过。截图在 `output/playwright/ai-chat-*-final.png`。清洁加载没有运行时错误；沿用界面仍有 3 条 HeroUI PressResponder 警告。开发时并行生成客户端会产生临时 HMR 404，完成生成后重新加载并验收。
 
 本次只在自建一次性数据库执行新增 migration，未部署或迁移现有业务数据库。仓库原有未提交工作保留；包保持 private，技术独立消费验收不代表已经发布或取得项目对外许可。
+
+## 旧逻辑收敛（2026-10-24）
+
+- 删除原 `ai-client.ts`、`ai-message-card.tsx`。`proposal-client` 只发送 authoring，`proposal-result` 只渲染提案和审阅动作；共享 Chat/MessageParts 负责消息外壳，Composer/AttachmentList 负责输入、输入法、发送/停止和资料标签，MessageList 负责滚动。
+- 删除创作页的旧 Chat 创建/重新生成分支、自有 SSE 分帧、消息滚动和输入法事件，以及新任务中重复保存的 token 预览、阶段文案。删除与 intent 重叠的 mode 状态，research 成为明确的写作动作。结果从已保存的任务读取；旧未完成预览仍可兼容读取。
+- 本轮 `features/ai` 全目录由 2124 行降至 1879 行，主页面由 1275 行降至 1100 行。保留的逻辑是文档选择/创建、权限与版本捕获、提案请求、协同审阅、冲突和 durable ack；没有通过拆分文件转移行数。
+- 新提案缓存写入 `writing-proposals-v2`。旧混合缓存保持原样只读：提案只恢复 authoring，RagChat 在全局问答入口恢复旧 Chat 引用，并独立写入自己的缓存。新 HTTP 请求不能把另一业务的任务用作 previousRequestIds；显式转写作继续创建新请求并重新授权。
+- DSH 未装配时直接失败，禁止静默回退。LangChain 写作图仅在恢复历史任务时动态加载，应用不再调用它的 generate。新写作使用精简 WritingExecutionPolicy，AuthoringInput 复用 WritingInput；RAG、历史写作、编译器和错误均有独立公开子路径。
+- smoke 脚本现在要求显式 `AI_TEST_ADMIN_DATABASE_URL`，支持无数据库副作用的 `--help`；未知参数在连接前失败。本轮一次误传 `--help` 曾导致旧脚本连接默认地址，创建测试库被数据库权限拒绝，没有产生变更；后续测试全部使用自建一次性 PostgreSQL。
+
+本轮验证：16 项契约/插件/运行时测试通过且无跳过，包含真实 PostgreSQL checkpoint；扩展应用 smoke 验证新写作 DSH、跨业务历史拒绝、旧图完成后产品中断的恢复不再次调用模型，并重跑原 RAG、提案接受、取消、重启和持久化失败。浏览器验证共享提案组件的输入法、生成、差异、接受、整篇替换、旧混合缓存分别恢复到两类业务，以及移动端深色布局。没有收费模型调用，也没有修改业务数据库。
+
+完整 `pnpm check` 通过，包含 lint、类型、全部应用/包/示例构建、OpenAPI 与 Orval 漂移；`pnpm check:ai-packages` 扩展至 7 个包，验证新公开子路径和 Composer maxLength 的独立消费。浏览器清洁加载没有运行时错误，仍可见原 HeroUI/linkify 警告。旧 task API 的 supportsTokenPreview 已改为 false，当前提案交付完整保存结果；WritingChat 自身的实时文本流保持原有协议。
+
+## 源码复核与补齐（2026-10-30）
+
+本轮开始时已存在完整度较高的四个包、两个应用业务组件、DSH/PostgreSQL/HTTP/SSE 和插件实现，以及未提交的旧写作逻辑收敛。本轮保留这些改动，以真实源码及执行结果核验，没有重新搭包骨架，也没有迁移 RAG 引擎。
+
+重新阅读本地官方 Agent Loop、Session、Persistence、Tools、LLM、Approval 和官方 testkit，并核对已安装的锁定发布包公开入口/声明。直接运行 `kernel-probe.mjs`，验证两轮真实官方 Loop 的输入、流、原生 turn 完成和独立句柄释放。确定性 adapter 只用于显式测试，没有收费调用。
+
+实际修复：
+
+- 发布包的原生 revision 每 frame 增长，原实现直接透传会把每段文本当作新流；现在按原生 attempt 固定产品 revision，并对过滤私有推理后的公开文本生成连续 index。WritingChat 处理重复、旧 revision、缺前缀和断档；不完整预览等待保存后的完整消息。
+- 完整 HTTP 快照按 cursor 单调合并，较慢的命令/查询响应不再回退已经收到的 SSE 状态；确认消息和 Run 不允许被后续快照无声移除。共享契约新增 applyChatSnapshot、isApprovalDecision、可选 cancelRequested，并自动更新 OpenAPI/Orval。
+- 显式取消先持久化意图，再调用官方 Agent.cancel；重启不会把该请求恢复成生成。原生已明确的 blocked/error/max-tokens 保持失败。投影通过公开 inbox splice 关联在 user/message 之前就被拒绝或失败的输入。
+- 已释放会话拒绝命令；runtime 关闭屏障重新检查异步授权后的 attach，防止 shutdown 后建立孤立句柄。resume 也检查队列及应用并发准入。
+- 实时订阅立即处理拒绝，超限不会产生未处理 Promise。活跃 SSE 保留其观察句柄，最后一个订阅离开后才允许空闲回收；客户端发送受理后重新建立订阅。浏览器发现的“空闲后第二轮已保存但不再更新界面”窗口据此修复。
+- 写作句柄数同时受实际写作连接池约束，预留临时查询连接；保留原本独立的 writing pool、任务锁池与 LangChain saver。界面明确区分失败、取消、中断与已保存，审批提交期间禁用按钮并沿用原 decisionId 重试。
+
+兼容处理：cancelRequested 为可选 JSON 字段，不需要数据库 migration；旧记录缺省为未请求取消。原生投影 stateVersion 从 1 升到 2，通过官方日志重放重建。旧客户端仍可忽略可选字段，新客户端遇到旧文本索引缺口时等待完整结果。协议继续使用 v1 完整快照，没有改写已发布 migration。旧写作 checkpoint、v1/v2 task 结果与 RAG LangChain 兼容路径保留；没有跨引擎恢复。
+
+本轮验证：
+
+- `pnpm test:ai`：38 项通过、0 跳过，包括 10 项真实官方 DSH 内核测试、真实 PostgreSQL PostgresSaver、Qdrant 1.17.1 和 2 项应用预览/SSE 分帧测试。覆盖新增终态恢复、关闭竞态、文本索引、旧快照、丢帧及分片 UTF-8/CRLF；模型和 Embedding 为显式测试 adapter。
+- 应用 smoke：真实 HTTP/SSE/WebSocket、写作/研究提案、权限/来源撤销、原 RAG checkpoint 和取消、逐段/重复接受、协同冲突及 durable ack、跨进程恢复、产品终态事务失败均通过。另覆盖第 9 个订阅超限、私有推理过滤、连接预算和模拟空闲维护后的订阅保留/句柄恢复。
+- `pnpm check:ai-packages`：7 个 tarball 在隔离目录独立安装并消费，公开类型、CSS、SSR、插件入口和官方多轮 Loop 通过。
+- `pnpm check`：最终退出 0，格式、lint、类型、全部包/应用/示例构建、离线 OpenAPI 与 Orval 漂移检查通过。
+- Playwright：两轮写作、RAG 有来源答案、写作/问答草稿往返隔离、刷新恢复、组合输入期间不提交和 390×844 亮暗主题通过；截图 `output/playwright/ai-chat-20261030-*.png`。清洁页面无运行时错误，仍有原 HeroUI PressResponder 警告。生成客户端/构建期间触发过开发 HMR 失效，生成结束后清洁加载复核。
+
+日志位于 `output/qa/ai-tests-20261030.log`、`ai-smoke-20261030-final.log`、`ai-check-20261030-final.log` 和 `ai-consumer-20261030.log`。首轮仓库检查检出契约生成漂移，已由 OpenAPI/Orval 更新；随后测试脚本的一处推导类型错误已修复，最终完整检查通过。
+
+本轮 PostgreSQL、Qdrant 均为单独启动的本机测试实例，只迁移随机 `zhishu_ai_test_*` 数据库，不访问现有业务库。没有使用项目模型凭据或进行收费调用。图片真实 HTTP adapter、任务、审批和私有存储代码保留；本轮未重新运行需要 MinIO 的图片落盘分支，也未验收真实收费图片账户。互联网研究、全库向量问答接入、生产多实例路由/高负载及不配合取消的外部 provider 仍不标为已验收；7 个包保持 private，未发布 registry。
+
+当前写作重连由界面“重新连接”或下一次消息受理触发，自动退避重连仍是后续目标。图片目前仅提供授权预览，参考图、更多尺寸和直接插入正文继续按原能力边界保留为后续工作。

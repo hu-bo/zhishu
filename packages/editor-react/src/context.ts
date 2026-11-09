@@ -4,6 +4,7 @@ import type { Anchor, OperationBatch } from "@zhishu/document-contracts";
 import type { EditorStore } from "./store.js";
 
 export interface EditorHostServices {
+  searchMembers?: (query: string, signal: AbortSignal) => Promise<readonly EditorMentionMember[]>;
   confirmExternalLink?: (href: string) => boolean;
   openExternalLink?: (href: string) => void | Promise<void>;
   requestUpload?: (file: File, signal: AbortSignal) => Promise<EditorUploadResult>;
@@ -19,6 +20,13 @@ export interface EditorHostServices {
     action: EditorAIAction;
     selection: EditorTextSelection | null;
   }) => void | Promise<void>;
+}
+
+export interface EditorMentionMember {
+  identityId: string;
+  displayName: string;
+  email?: string;
+  title?: string;
 }
 
 export interface EditorTextSelection {

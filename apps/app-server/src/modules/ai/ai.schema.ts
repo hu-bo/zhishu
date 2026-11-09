@@ -71,6 +71,10 @@ export const chatBodySchema = z
     protocolVersion: z.literal(2),
     request: z.custom<ChatRequest>((value) => validateChatRequest(value).success),
     sourceDocumentIds: sources,
+    sourceWorkspaceId: z
+      .string()
+      .regex(/^ws_[A-Za-z0-9_-]{1,64}$/)
+      .optional(),
   })
   .strict();
 export const reviewBodySchema = z
@@ -153,6 +157,7 @@ export const aiCapabilitiesSchema = z
     reason: z.string().nullable(),
     supportsTokenPreview: z.boolean(),
     chatDelivery: z.literal("complete-result"),
+    knowledge: z.object({ enabled: z.boolean(), reason: z.string().nullable() }).strict(),
   })
   .strict();
 export const aiDocumentContextSchema: z.ZodType<AiDocumentContextView> = z

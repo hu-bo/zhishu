@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createCollaborationSession } from '@/api/generated/app-api';
-import type { CreateCollaborationSessionBody, GetDocument200 } from '@/api/generated/models';
+import { createCollaborationSession } from '@/api/generated/collaboration';
+import { getDocumentContent } from '@/api/generated/documents';
+import { searchIdentityDirectory } from '@/api/generated/identity';
+import type {
+  CreateCollaborationSessionBody,
+  GetDocument200,
+  GetDocumentContent200,
+} from '@/api/generated/app-api.schemas';
 import { errorMessage } from '@/api/api-error';
 import {
   createDocumentDraftExport,
@@ -22,6 +28,7 @@ import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import * as Y from 'yjs';
 import { DocumentVersionsPanel } from './document-versions-panel';
 import { DocumentEditorShell } from './document-editor-shell';
+import { useDocumentFormulaDialog } from './document-formula-dialog';
 import { PanelDialog } from '@/components/ui/panel-dialog';
 import { createDocumentAssetServices } from './document-asset-services';
 import { currentCacheIdentity, useOfflineState, writeScopedRecord } from '@/features/offline/cache';
@@ -81,6 +88,7 @@ function UnconfirmedChangesProbe({
       )
         return;
       const pendingUpdates = session.getPendingUpdateBytes();
+      if (!document.offlineCacheAllowed) return;
       if (pendingUpdates.length && pendingRevision.current === null)
         pendingRevision.current = session.getStructureRevision();
       if (!pendingUpdates.length) pendingRevision.current = null;
@@ -212,12 +220,22 @@ export function DocumentCollaborationEditor({
   const [accessTokenRevision, setAccessTokenRevision] = useState(0);
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
   const [failure, setFailure] = useState<SessionFailure | null>(null);
+  const [preview, setPreview] = useState<{
+    key: string;
+    content: NonNullable<GetDocumentContent200['content']>;
+  } | null>(null);
   const extensionsKey = JSON.stringify(
     document.extensions.map(({ name, version, required }) => ({ name, version, required })),
   );
   const sessionKey = `${document.id}:${document.generationId}:${document.schemaVersion}:${accessTokenRevision}:${attempt}`;
+  const { requestMathSource, formulaDialog } = useDocumentFormulaDialog(sessionKey);
+  const [editorError, setEditorError] = useState<{ key: string; message: string }>();
   const currentSession = activeSession?.key === sessionKey ? activeSession : null;
   const currentFailure = failure?.key === sessionKey ? failure : null;
+  const previewKey = JSON.stringify([identity, sessionKey]);
+  const previewContent = preview?.key === previewKey ? preview.content : undefined;
+  const shouldLoadPreview =
+    offline.online && offline.verified && !currentSession && !currentFailure;
   const sessionEligible = offline.verified && (offline.online || currentSession !== null);
   const readOnlyReason =
     (!offline.online || !offline.verified) &&
@@ -248,6 +266,26 @@ export function DocumentCollaborationEditor({
   }, [identity, document.id]);
 
   useEffect(() => () => assetServices.dispose(), [assetServices]);
+
+  useEffect(() => {
+    if (!shouldLoadPreview) return;
+    // The snapshot is for display only. The live editor starts from the synced Y.Doc.
+    const request = new AbortController();
+    void getDocumentContent(document.id, { signal: request.signal })
+      .then((snapshot) => {
+        if (
+          !request.signal.aborted &&
+          snapshot.documentId === document.id &&
+          snapshot.generationId === document.generationId &&
+          snapshot.schemaVersion === document.schemaVersion &&
+          snapshot.content
+        ) {
+          setPreview({ key: previewKey, content: snapshot.content });
+        }
+      })
+      .catch(() => undefined);
+    return () => request.abort();
+  }, [document.id, document.generationId, document.schemaVersion, previewKey, shouldLoadPreview]);
 
   useEffect(() => {
     const unsubscribe = subscribeAccessToken(() =>
@@ -309,9 +347,10 @@ export function DocumentCollaborationEditor({
           });
           await collaboration.waitUntilSynced();
           if (!active) return;
-          const cached = identity
-            ? await readCollaborationCheckpoint(identity, document.id).catch(() => null)
-            : null;
+          const cached =
+            identity && document.offlineCacheAllowed
+              ? await readCollaborationCheckpoint(identity, document.id).catch(() => null)
+              : null;
           if (!active) return;
           let checkpointKey = `${document.id}:${info.generationId}:${currentTabId()}`;
           if (cached?.value.pendingUpdates.length) {
@@ -343,6 +382,7 @@ export function DocumentCollaborationEditor({
             checkpointKey,
           };
           setActiveSession(nextSession);
+          setPreview(null);
           onStatusChange?.({
             documentId: document.id,
             generationId: info.generationId,
@@ -392,6 +432,7 @@ export function DocumentCollaborationEditor({
       documentId: document.id,
       generationId: currentSession.info.generationId,
       collaborative: true,
+      requestMathSource,
       collaborationStructure: {
         mode: 'disabled' as const,
         isRemoteTransaction: (transaction: { getMeta(key: unknown): unknown }) =>
@@ -401,11 +442,20 @@ export function DocumentCollaborationEditor({
           ),
       },
     };
-  }, [currentSession, document.id]);
+  }, [currentSession, document.id, requestMathSource]);
 
-  const editorHostServices = assetServices.hostServices;
+  const editorHostServices = useMemo(
+    () => ({
+      ...assetServices.hostServices,
+      reportError: (error: Error) => setEditorError({ key: sessionKey, message: error.message }),
+      searchMembers: (query: string, signal: AbortSignal) =>
+        searchIdentityDirectory({ q: query, documentId: document.id }, { signal }),
+    }),
+    [assetServices.hostServices, document.id, sessionKey],
+  );
 
   if (
+    document.offlineCacheAllowed &&
     (!offline.online || !offline.verified) &&
     !currentSession &&
     cachedCheckpoint?.value.content
@@ -464,31 +514,26 @@ export function DocumentCollaborationEditor({
     );
   }
 
-  if (!currentSession || !editorOptions) {
-    return (
-      <section
-        className="rounded-2xl border bg-card px-6 py-10 text-center text-sm text-muted-foreground"
-        role="status"
-        aria-live="polite"
-      >
-        正在申请会话并同步正文…
-      </section>
-    );
-  }
-
   return (
     <EditorProvider
       instanceKey={sessionKey}
-      options={editorOptions}
+      options={
+        editorOptions ?? {
+          documentId: document.id,
+          generationId: document.generationId,
+          content: shouldLoadPreview ? previewContent : undefined,
+        }
+      }
+      loading={!currentSession && !(shouldLoadPreview && previewContent)}
       nodeViews={defaultEditorNodeViews}
-      collaboration={currentSession.session}
-      hostServices={editorHostServices}
-      editable={!currentSession.info.readOnly && viewMode === 'edit'}
+      collaboration={currentSession?.session}
+      hostServices={currentSession ? editorHostServices : undefined}
+      editable={!!currentSession && !currentSession.info.readOnly && viewMode === 'edit'}
       onUpdate={() => {
-        if (hasUnconfirmedChanges()) onDocumentInput?.();
+        if (currentSession && hasUnconfirmedChanges()) onDocumentInput?.();
       }}
       readOnlyReason={
-        currentSession.info.readOnly
+        currentSession?.info.readOnly
           ? '你有权查看这篇文档，但没有编辑权限。'
           : viewMode === 'read'
             ? '当前为阅读模式。'
@@ -496,7 +541,18 @@ export function DocumentCollaborationEditor({
       }
     >
       <div className="flex h-full min-h-0 flex-col">
-        {recoveryConflict?.value.content && (
+        {editorError?.key === sessionKey && (
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-3 border-b px-4 py-2 text-sm"
+          >
+            <span>{editorError.message}</span>
+            <button type="button" className="underline" onClick={() => setEditorError(undefined)}>
+              关闭
+            </button>
+          </div>
+        )}
+        {currentSession && recoveryConflict?.value.content && (
           <div
             role="alert"
             className="flex shrink-0 flex-wrap items-center gap-3 rounded-xl border bg-secondary p-3 text-sm"
@@ -528,33 +584,41 @@ export function DocumentCollaborationEditor({
             </button>
           </div>
         )}
-        <UnconfirmedChangesProbe
-          sessionKey={sessionKey}
-          document={document}
-          session={currentSession.session}
-          sessionInfo={currentSession.info}
-          checkpointKey={currentSession.checkpointKey}
-          recovery={recoveryConflict}
-        />
+        {currentSession && (
+          <UnconfirmedChangesProbe
+            sessionKey={sessionKey}
+            document={document}
+            session={currentSession.session}
+            sessionInfo={currentSession.info}
+            checkpointKey={currentSession.checkpointKey}
+            recovery={recoveryConflict}
+          />
+        )}
         <DocumentEditorShell
           ariaLabel="文档协同编辑器"
-          editingControls={!currentSession.info.readOnly && viewMode === 'edit'}
-          replacementReview={replacementReview}
+          editingControls={
+            !(currentSession?.info.readOnly ?? !document.canWrite) && viewMode === 'edit'
+          }
+          loading={!currentSession}
+          replacementReview={currentSession ? replacementReview : undefined}
           onCollaborationPresenceChange={onCollaborationPresenceChange}
         />
       </div>
-      <PanelDialog
-        open={versionsOpen}
-        onOpenChange={onVersionsOpenChange}
-        title="版本历史"
-        description="回顾每一次重要修改，比较差异，找回需要的内容。"
-      >
-        <DocumentVersionsPanel
-          document={document}
-          session={currentSession.info}
-          sessionKey={sessionKey}
-        />
-      </PanelDialog>
+      {formulaDialog}
+      {currentSession && (
+        <PanelDialog
+          open={versionsOpen}
+          onOpenChange={onVersionsOpenChange}
+          title="版本历史"
+          description="回顾每一次重要修改，比较差异，找回需要的内容。"
+        >
+          <DocumentVersionsPanel
+            document={document}
+            session={currentSession.info}
+            sessionKey={sessionKey}
+          />
+        </PanelDialog>
+      )}
     </EditorProvider>
   );
 }

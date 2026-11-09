@@ -8,11 +8,12 @@ import {
   FolderPlus,
   FolderInput,
   LoaderCircle,
+  LockKeyhole,
   MoreHorizontal,
   Pencil,
   Trash2,
 } from 'lucide-react';
-import { listCatalogChildren } from '@/api/generated/app-api';
+import { listCatalogChildren } from '@/api/generated/knowledge';
 import { Button } from '@/components/ui/button';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
 import { relativeTime } from '@/lib/time';
@@ -132,13 +133,13 @@ export function CatalogBrowsePanel({
           </p>
         </div>
         <div className="ml-auto flex items-center gap-1.5">
-          {workspace.canOrganize && (
+          {workspace.canOrganize && catalog.canWrite && (
             <Button size="sm" onClick={() => onAction({ kind: 'create-document', catalogId })}>
               <FilePlus2 size={14} aria-hidden="true" />
               新建文档
             </Button>
           )}
-          {workspace.canOrganize && (
+          {workspace.canOrganize && catalog.canWrite && (
             <Button
               size="sm"
               variant="outline"
@@ -148,7 +149,7 @@ export function CatalogBrowsePanel({
               新建目录
             </Button>
           )}
-          {!isRoot && catalog.canManage && (
+          {!isRoot && (catalog.canWrite || catalog.canMove || catalog.canManage) && (
             <Menu>
               <MenuTrigger
                 render={
@@ -159,6 +160,7 @@ export function CatalogBrowsePanel({
               />
               <MenuContent align="end">
                 <MenuItem
+                  isDisabled={!catalog.canWrite}
                   onClick={() =>
                     onAction({
                       kind: 'rename-catalog',
@@ -170,6 +172,7 @@ export function CatalogBrowsePanel({
                   重命名…
                 </MenuItem>
                 <MenuItem
+                  isDisabled={!catalog.canMove}
                   onClick={() =>
                     onAction({
                       kind: 'move-catalog',
@@ -180,9 +183,18 @@ export function CatalogBrowsePanel({
                   <FolderInput size={14} aria-hidden="true" />
                   移动到…
                 </MenuItem>
+                {/* Directory ACL is deferred; connect this entry through CatalogActionDialogs later. */}
+                {catalog.canManage && (
+                  <MenuItem isDisabled>
+                    <LockKeyhole size={14} aria-hidden="true" />
+                    目录权限
+                    <span className="ml-auto text-xs">规划中</span>
+                  </MenuItem>
+                )}
                 <MenuSeparator />
                 <MenuItem
                   variant="destructive"
+                  isDisabled={!catalog.canManage}
                   onClick={() =>
                     onAction({
                       kind: 'delete-catalog',
@@ -274,7 +286,7 @@ export function CatalogBrowsePanel({
                           </span>
                         </span>
                       </button>
-                      {document.canManage && (
+                      {document.canMove && (
                         <div className="absolute top-2 right-2 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100">
                           <Menu>
                             <MenuTrigger

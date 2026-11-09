@@ -5,12 +5,12 @@ import {
   getDocumentVersionContent,
   listDocumentVersions,
   restoreDocumentVersion,
-} from '@/api/generated/app-api';
+} from '@/api/generated/documents';
 import type {
   GetDocument200,
   GetDocumentContent200,
   ListDocumentVersions200Item,
-} from '@/api/generated/models';
+} from '@/api/generated/app-api.schemas';
 import { errorMessage } from '@/api/api-error';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';

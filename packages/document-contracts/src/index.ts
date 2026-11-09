@@ -11,6 +11,10 @@ export {
   TABLE_DOCUMENT_SCHEMA_VERSION,
   TEXT_FORMATS_DOCUMENT_SCHEMA_VERSION,
   CALLOUT_DOCUMENT_SCHEMA_VERSION,
+  MENTION_DOCUMENT_SCHEMA_VERSION,
+  MATHEMATICS_DOCUMENT_SCHEMA_VERSION,
+  MAX_LATEX_LENGTH,
+  MentionSchema,
   CURRENT_DOCUMENT_SCHEMA_VERSION,
   SUPPORTED_DOCUMENT_SCHEMA_VERSIONS,
   HIGHLIGHT_COLORS,
@@ -31,6 +35,7 @@ export {
 export type {
   DocumentBlock,
   DocumentContent,
+  DocumentMention,
   DocumentOperation,
   DocumentSnapshot,
   AssetReference,
@@ -43,6 +48,9 @@ export type {
   CollaborationPresence,
   OperationBatch,
 } from "./schema.js";
+export { collectDocumentMentions } from "./mentions.js";
+export { displayLatexPattern, inlineLatexPattern, isValidMathSource } from "./latex.js";
+export type { DocumentMentionReference } from "./mentions.js";
 export {
   checkDocumentCompatibility,
   checkSnapshotCompatibility,

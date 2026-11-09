@@ -23,6 +23,7 @@ export async function createDshRuntime(options: RuntimeOptions) {
   const ctx = new Context();
   const sessions = new Map<string, Promise<DshChatSession>>();
   let closing = false;
+  let disposing: Promise<void> | undefined;
   try {
     for (const plugin of [Llm, Sessions, Projections]) await ctx.plugin(plugin);
     ctx.sessionProjections.register(chatProjection);
@@ -42,6 +43,8 @@ export async function createDshRuntime(options: RuntimeOptions) {
   const attach = async (id: string, restore: boolean) => {
     if (closing) throw new DshRuntimeError("RUNTIME_CLOSED");
     await options.authorize?.(id);
+    // Authorization may finish after shutdown has already drained the owned handles.
+    if (closing) throw new DshRuntimeError("RUNTIME_CLOSED");
     const existing = sessions.get(id);
     if (existing) return existing;
     if (sessions.size >= (options.limits?.maxSessions ?? 16))
@@ -58,14 +61,16 @@ export async function createDshRuntime(options: RuntimeOptions) {
   return {
     createSession: (id: string) => attach(id, false),
     restoreSession: (id: string) => attach(id, true),
-    async dispose() {
+    dispose() {
       closing = true;
-      const owned = await Promise.allSettled(sessions.values());
-      const results = await Promise.allSettled(
-        owned.filter((r) => r.status === "fulfilled").map((r) => r.value.dispose()),
-      );
-      await ctx.fiber.dispose();
-      if (results.some((r) => r.status === "rejected")) throw new DshRuntimeError("CLOSE_FAILED");
+      return (disposing ??= (async () => {
+        const owned = await Promise.allSettled(sessions.values());
+        const results = await Promise.allSettled(
+          owned.filter((r) => r.status === "fulfilled").map((r) => r.value.dispose()),
+        );
+        await ctx.fiber.dispose();
+        if (results.some((r) => r.status === "rejected")) throw new DshRuntimeError("CLOSE_FAILED");
+      })());
     },
   };
 }

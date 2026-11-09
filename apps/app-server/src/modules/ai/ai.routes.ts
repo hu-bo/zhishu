@@ -13,6 +13,7 @@ import {
 } from "./ai.schema.js";
 import type { AiService } from "./ai.service.js";
 import { requireAiPrincipal, streamAiTask } from "./ai.controller.js";
+import { z } from "zod";
 export async function aiRoutes(app: FastifyInstance, service: AiService) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
   const common = {
@@ -28,6 +29,46 @@ export async function aiRoutes(app: FastifyInstance, service: AiService) {
       503: errorResponseSchema,
     },
   };
+  typed.get(
+    "/indexes",
+    {
+      schema: {
+        ...common,
+        operationId: "getKnowledgeIndexStatus",
+        querystring: z
+          .object({
+            workspaceId: z
+              .string()
+              .regex(/^ws_[A-Za-z0-9_-]{1,64}$/)
+              .optional(),
+            documentIds: z
+              .string()
+              .max(280)
+              .regex(/^doc_[A-Za-z0-9_-]{1,64}(,doc_[A-Za-z0-9_-]{1,64}){0,3}$/)
+              .optional(),
+          })
+          .strict(),
+        response: {
+          ...common.response,
+          200: z
+            .object({
+              total: z.number().int(),
+              ready: z.number().int(),
+              pending: z.number().int(),
+              failed: z.number().int(),
+              errors: z.array(z.string()),
+            })
+            .strict(),
+        },
+      },
+    },
+    (request) =>
+      service.indexStatus(
+        requireAiPrincipal(request),
+        request.query.workspaceId,
+        request.query.documentIds?.split(","),
+      ),
+  );
   typed.get(
     "/capabilities",
     {

@@ -1,19 +1,14 @@
-import { and, eq } from "drizzle-orm";
+import { documentActionSql, hasDocumentPermission } from "../authorization/permissions.js";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Database } from "../../../database/index.js";
-import {
-  documentAcl,
-  documents,
-  documentGenerations,
-  workspaces,
-} from "../../../database/schema/index.js";
+import { documents, documentGenerations, workspaces } from "../../../database/schema/index.js";
 import type { AiRunInput } from "../../../database/schema/ai.table.js";
 import { prepareDocumentChunks } from "@zhishu/rag";
 import type { EvidenceBundle } from "@zhishu/ai-contracts";
 import type { CollaborationOwner } from "../collaboration/owner.js";
 import type { Principal } from "../identity/identity.types.js";
 import { DomainError } from "../../shared/domain-error.js";
-import { hasDocumentAction } from "./document.repository.js";
-import type { DocumentPermissionAction } from "./document.permissions.js";
+import type { PermissionAction } from "../authorization/policy.js";
 
 type Executor = Pick<Database, "select">;
 export class AiDocumentAccess {
@@ -21,11 +16,42 @@ export class AiDocumentAccess {
     private readonly db: Database,
     private readonly owner: CollaborationOwner,
   ) {}
+  /** Source discovery and late reads share the document access policy. */
+  async readableHeads(principal: Principal, workspaceId?: string, ids?: readonly string[]) {
+    if (ids?.length === 0) return [];
+    return this.db
+      .select({
+        documentId: documents.id,
+        workspaceId: documents.workspaceId,
+        title: documents.title,
+        metadataRevision: documents.metadataRevision,
+        generationId: documentGenerations.id,
+        durableSeq: documentGenerations.durableSeq,
+      })
+      .from(documents)
+      .innerJoin(
+        documentGenerations,
+        and(
+          eq(documentGenerations.documentId, documents.id),
+          eq(documentGenerations.status, "active"),
+        ),
+      )
+      .where(
+        and(
+          eq(documents.tenantId, principal.tenantId),
+          eq(documents.status, "active"),
+          workspaceId ? eq(documents.workspaceId, workspaceId) : undefined,
+          ids ? inArray(documents.id, [...ids]) : undefined,
+          documentActionSql(principal, "ai"),
+        ),
+      )
+      .limit(10001);
+  }
   private async authorized(
     db: Executor,
     principal: Principal,
     id: string,
-    actions: DocumentPermissionAction[],
+    actions: PermissionAction[],
     lock = false,
   ) {
     let query = db
@@ -35,6 +61,7 @@ export class AiDocumentAccess {
         workspaceId: documents.workspaceId,
         generationId: documentGenerations.id,
         durableSeq: documentGenerations.durableSeq,
+        metadataRevision: documents.metadataRevision,
         kind: workspaces.kind,
         personalOwnerId: workspaces.personalOwnerId,
       })
@@ -62,19 +89,8 @@ export class AiDocumentAccess {
     if (lock) query = query.for("share", { of: documents });
     const [row] = await query;
     if (!row) throw new DomainError("AI_ACCESS_REVOKED", "文档或资料已不可访问");
-    if (row.createdBy !== principal.identityId) {
-      const grants = await db
-        .select({ action: documentAcl.action })
-        .from(documentAcl)
-        .where(
-          and(
-            eq(documentAcl.tenantId, principal.tenantId),
-            eq(documentAcl.documentId, id),
-            eq(documentAcl.identityId, principal.identityId),
-          ),
-        );
-      const granted = new Set(grants.map((g) => g.action));
-      if (actions.some((action) => !hasDocumentAction(granted, action)))
+    for (const action of actions) {
+      if (!(await hasDocumentPermission(db, principal, id, action)))
         throw new DomainError("AI_ACCESS_REVOKED", "文档或资料授权已变化");
     }
     return row;
@@ -165,7 +181,10 @@ export class AiDocumentAccess {
       );
       if (
         checkVersions &&
-        (row.generationId !== version.generationId || row.durableSeq !== version.durableSeq)
+        (row.generationId !== version.generationId ||
+          row.durableSeq !== version.durableSeq ||
+          (version.metadataRevision !== undefined &&
+            row.metadataRevision !== version.metadataRevision))
       )
         throw new DomainError("AI_ACCESS_REVOKED", "资料已更新，请基于最新资料重新生成");
       if (forWrite && target && row.workspaceId !== target.workspaceId)
@@ -175,7 +194,12 @@ export class AiDocumentAccess {
   async verifySourceVersions(principal: Principal, versions: AiRunInput["sourceVersions"]) {
     for (const version of versions) {
       const row = await this.authorized(this.db, principal, version.documentId, ["read", "ai"]);
-      if (row.generationId !== version.generationId || row.durableSeq !== version.durableSeq)
+      if (
+        row.generationId !== version.generationId ||
+        row.durableSeq !== version.durableSeq ||
+        (version.metadataRevision !== undefined &&
+          row.metadataRevision !== version.metadataRevision)
+      )
         throw new DomainError("AI_ACCESS_REVOKED", "资料已更新，请重新选择资料");
     }
   }

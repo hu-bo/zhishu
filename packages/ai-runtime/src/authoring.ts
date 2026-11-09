@@ -91,7 +91,10 @@ export function createAuthoringRuntime(options: RuntimeOptions): AuthoringRuntim
       admitted = false;
     yield event("started", { kind: "authoring" });
     try {
-      validateInput(input, options);
+      validateInput(input, {
+        compatibility: options.compatibility,
+        researchAvailable: !!(options.researchTools && options.verifyEvidence),
+      });
       signal.throwIfAborted();
       timer = setTimeout(() => {
         timedOut = true;

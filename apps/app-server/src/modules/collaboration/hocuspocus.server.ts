@@ -1,10 +1,9 @@
+import { collectAssetReferences } from "../documents/document-content.js";
+import { DocumentHistoryRepository } from "../documents/document-history.repository.js";
+import { readDocumentContent } from "./document-state.js";
 import { createHash } from "node:crypto";
-import { prosemirrorJSONToYXmlFragment, yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
-import {
-  createEditorSchema,
-  normalizeTiptapDocumentJSON,
-  validateContentForEditor,
-} from "@zhishu/editor-core/schema";
+import { prosemirrorJSONToYXmlFragment } from "@tiptap/y-tiptap";
+import { createEditorSchema, validateContentForEditor } from "@zhishu/editor-core/schema";
 import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
 import * as Y from "yjs";
 import { Connection, Server } from "@hocuspocus/server";
@@ -158,50 +157,15 @@ export function projectDocumentContent(
   document: Y.Doc,
   schemaVersion: number = CURRENT_DOCUMENT_SCHEMA_VERSION,
 ): DocumentContent {
-  let projected: Record<string, unknown>;
+  let content: Record<string, unknown>;
   try {
-    projected = yDocToProsemirrorJSON(document, "content");
+    content = readDocumentContent(document);
   } catch {
     throw closeError("invalid-document-content");
   }
-  const normalized = normalizeTiptapDocumentJSON(projected) as Record<string, unknown>;
-  const content =
-    Array.isArray(normalized.content) || normalized.content !== undefined
-      ? normalized
-      : { ...normalized, content: [] };
   const validation = validateDocumentContentForSchemaVersion(content, schemaVersion);
   if (!validation.success) throw closeError("invalid-document-content");
   return validation.data;
-}
-
-function collectAssetReferences(
-  content: DocumentContent,
-): Array<{ assetId: string; blockId: string; mediaType: string }> {
-  const references: Array<{ assetId: string; blockId: string; mediaType: string }> = [];
-  const pending: unknown[] = [...content.content];
-  while (pending.length > 0) {
-    const value = pending.pop();
-    if (typeof value !== "object" || value === null || Array.isArray(value)) continue;
-    const block = value as {
-      type?: unknown;
-      attrs?: { assetId?: unknown; blockId?: unknown; mediaType?: unknown };
-      content?: unknown;
-    };
-    if (
-      (block.type === "image" || block.type === "pdfAttachment") &&
-      typeof block.attrs?.assetId === "string" &&
-      typeof block.attrs.blockId === "string" &&
-      typeof block.attrs.mediaType === "string"
-    ) {
-      references.push({
-        assetId: block.attrs.assetId,
-        blockId: block.attrs.blockId,
-        mediaType: block.attrs.mediaType,
-      });
-    }
-    if (Array.isArray(block.content)) pending.push(...block.content);
-  }
-  return references;
 }
 
 function writeBodyAndStructureState(
@@ -402,6 +366,7 @@ export function createCollaborationServer(
   metrics?: Pick<OperationsMetrics, "setCollaborationState">,
 ) {
   const repository = new DocumentRepository(db);
+  const history = new DocumentHistoryRepository(db);
   const allowedOrigins = new Set(config.COLLABORATION_ALLOWED_ORIGINS);
   const roomConnections = new Map<string, Set<string>>();
   const socketDocuments = new Map<string, Set<string>>();
@@ -428,9 +393,14 @@ export function createCollaborationServer(
       maxPayload: maxStatelessPayloadBytes,
     },
     quiet: true,
-    async onUpgrade({ request }) {
+    async onUpgrade({ request, socket }) {
       const origin = request.headers.origin;
-      if (origin && !allowedOrigins.has(origin)) throw closeError("origin-not-allowed");
+      if (origin && !allowedOrigins.has(origin)) {
+        socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+        // Hocuspocus 4.7 uses an empty rejection to stop upgrade handling. An Error is
+        // rethrown by its async HTTP listener and terminates the entire API process.
+        return Promise.reject();
+      }
     },
     async beforeHandleAwareness({ states, connection }) {
       if (!connection) return;
@@ -599,7 +569,7 @@ export function createCollaborationServer(
       }
       const document = new Y.Doc();
       try {
-        await repository.replayYjsState(
+        await history.replayYjsState(
           {
             documentId: key.documentId,
             generationId: key.generationId,
@@ -1064,7 +1034,7 @@ export function createCollaborationServer(
           );
           return;
         }
-        const existingReceipt = await repository.findUpdateReceipt(
+        const existingReceipt = await history.findUpdateReceipt(
           key.documentId,
           key.generationId,
           parsed.data.updateHash,
@@ -1251,7 +1221,7 @@ export function createCollaborationServer(
         const receiptKey = createHash("sha256")
           .update(`conditional:${batch.generationId}:${batch.operationId}:${requestHash}`)
           .digest("hex");
-        const previous = await repository.findUpdateReceipt(
+        const previous = await history.findUpdateReceipt(
           batch.documentId,
           batch.generationId,
           receiptKey,
@@ -1364,8 +1334,17 @@ export function createCollaborationServer(
         await releaseOwnerLock();
       }
     },
-    revokeDocumentSessions(documentId: string, generationId: string): void {
-      server.hocuspocus.closeConnections(documentNameFor(documentId, generationId));
+    revokeDocumentSessions(documentId: string, generationId: string, identityId?: string): void {
+      const name = documentNameFor(documentId, generationId);
+      if (!identityId) {
+        server.hocuspocus.closeConnections(name);
+        return;
+      }
+      const document = server.hocuspocus.documents.get(name);
+      for (const connection of document?.getConnections() ?? []) {
+        const context: CollaborationContext = connection.context;
+        if (context.collaborationSession?.subject === identityId) connection.close();
+      }
     },
     address: () => server.address,
   };

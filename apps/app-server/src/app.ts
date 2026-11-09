@@ -1,3 +1,7 @@
+import { workspacesModule } from "./modules/workspaces/index.js";
+import { catalogsModule } from "./modules/catalogs/index.js";
+import { knowledgeModule } from "./modules/knowledge/index.js";
+import { authorizationModule } from "./modules/authorization/index.js";
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import { serializerCompiler, validatorCompiler } from "fastify-type-provider-zod";
@@ -8,21 +12,26 @@ import type { OperationsMetrics as OperationsMetricsType } from "./modules/healt
 import { identityRoutes } from "./modules/identity/identity.routes.js";
 import { registerIdentityGuard } from "./modules/identity/index.js";
 import { MockIdentityService } from "./modules/identity/identity.service.js";
-import { documentsModule } from "./modules/documents/index.js";
-import { DocumentRepository } from "./modules/documents/document.repository.js";
-import { DocumentProjectionWorker } from "./modules/documents/projection-worker.js";
+import {
+  documentsModule,
+  DocumentProjectionRepository,
+  DocumentProjectionWorker,
+} from "./modules/documents/index.js";
 import { assetsModule } from "./modules/assets/index.js";
 import { projectsModule } from "./modules/projects/index.js";
 import { databasePlugin } from "./plugins/database.js";
 import { registerErrorHandlers } from "./plugins/errors.js";
 import { registerOpenApi } from "./plugins/openapi.js";
-import type { CollaborationSessionRevoker } from "./modules/documents/document.service.js";
+import type { CollaborationSessionRevoker } from "./modules/collaboration/session-revoker.js";
 import type { PrincipalAuthenticator } from "./modules/identity/identity.types.js";
 import type { CollaborationOwner } from "./modules/collaboration/owner.js";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { aiModule } from "./modules/ai/index.js";
 import { DomainError } from "./shared/domain-error.js";
+import { notificationsModule } from "./modules/notifications/index.js";
+import { invitationsModule } from "./modules/invitations/index.js";
 import type { LlmAdapter } from "@deepseek-ai/dsh-llm";
+import { AuthorizationEventWorker } from "./modules/authorization/authorization-events.js";
 
 export async function buildApp(
   config: AppConfig,
@@ -93,14 +102,18 @@ export async function buildApp(
           prefix: "/auth",
         });
         await api.register(projectsModule);
+        await api.register((scope) =>
+          authorizationModule(scope, options.sessionRevoker ?? { revokeDocumentSessions() {} }),
+        );
+        await api.register(notificationsModule);
+        await api.register(invitationsModule);
         await api.register((scope) => assetsModule(scope, config, options.exportMode));
+        const sessionRevoker = options.sessionRevoker ?? { revokeDocumentSessions() {} };
+        await api.register((scope) => workspacesModule(scope, sessionRevoker));
+        await api.register((scope) => catalogsModule(scope, sessionRevoker));
+        await api.register((scope) => knowledgeModule(scope, config, sessionRevoker));
         await api.register(async (scope) =>
-          documentsModule(
-            scope,
-            config,
-            options.sessionRevoker ?? { revokeDocumentSessions() {} },
-            options.exportMode,
-          ),
+          documentsModule(scope, config, sessionRevoker, options.exportMode),
         );
         const unavailable = async () => {
           throw new DomainError("SERVICE_UNAVAILABLE", "协同服务尚未就绪");
@@ -119,15 +132,26 @@ export async function buildApp(
       { prefix: "/api" },
     );
     if (!options.exportMode) {
-      const projectionWorker = new DocumentProjectionWorker(new DocumentRepository(app.db), () =>
-        app.log.error("Document projection task failed"),
+      const permissionWorker = new AuthorizationEventWorker(
+        app.db,
+        options.sessionRevoker ?? { revokeDocumentSessions() {} },
+        (err) =>
+          app.log.error({ err }, "Permission invalidation failed; durable events will be retried"),
+      );
+      app.addHook("onReady", async () => permissionWorker.start());
+      app.addHook("preClose", async () => permissionWorker.stop());
+      const projectionWorker = new DocumentProjectionWorker(
+        new DocumentProjectionRepository(app.db),
+        (err) => app.log.error({ err }, "Document projection task failed"),
       );
       app.addHook("onReady", async () => projectionWorker.start());
       app.addHook("preClose", async () => projectionWorker.stop());
     }
     return app;
   } catch (error) {
-    await app.close();
+    await app.close().catch((err: unknown) => {
+      app.log.error({ err }, "Application cleanup after initialization failure failed");
+    });
     throw error;
   }
 }

@@ -18,6 +18,8 @@ import CodeBlock from "@tiptap/extension-code-block";
 import Placeholder from "@tiptap/extension-placeholder";
 import { createBlockId, HIGHLIGHT_COLORS, TEXT_ALIGNMENTS } from "@zhishu/document-contracts";
 import { createBlockIndexExtension } from "./index-plugin.js";
+import { createMentionExtension } from "./mention.js";
+import { documentMathematics, type RequestMathSource } from "./mathematics.js";
 import type { EditorLimitExceededReason } from "./index-plugin.js";
 import { replacementPreviewExtension } from "./replacement-preview.js";
 import {
@@ -37,6 +39,7 @@ const blockTypes = [
   "taskList",
   "taskItem",
   "codeBlock",
+  "blockMath",
   "horizontalRule",
   "image",
   "pdfAttachment",
@@ -363,6 +366,7 @@ export interface BaseEditorExtensionsOptions {
   dividerNodeView?: NodeViewRenderer;
   statusTagNodeView?: NodeViewRenderer;
   onLinkClick?: (href: string) => void;
+  requestMathSource?: RequestMathSource;
   onLimitExceeded?: (reason: EditorLimitExceededReason) => void;
   collaborative?: boolean;
   placeholder?: EditorPlaceholderOptions | false;
@@ -617,6 +621,10 @@ export function createBaseEditorExtensions(options: BaseEditorExtensionsOptions 
     createCalloutExtension(options.calloutNodeView),
     createDividerExtension(options.dividerNodeView),
     createStatusTagExtension(options.statusTagNodeView),
+    createMentionExtension(),
+    options.requestMathSource
+      ? documentMathematics.configure({ requestSource: options.requestMathSource })
+      : documentMathematics,
     ...(placeholder ? [placeholder] : []),
     highlightMark,
     highlightKeyboardShortcuts,

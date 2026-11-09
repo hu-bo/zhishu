@@ -1,13 +1,20 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useQueries, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { Chat, ChatStatus, Composer, type MessageView } from '@zhishu/chat-ui';
 import '@zhishu/chat-ui/styles.css';
-import { cancelAiTask, getAiTask, resumeAiTask } from '@/api/generated/app-api';
+import {
+  cancelAiTask,
+  getAiTask,
+  resumeAiTask,
+  getAiCapabilities,
+  getKnowledgeIndexStatus,
+} from '@/api/generated/ai';
 import { consumeRagTask } from './transport';
 import { useOfflineState } from '@/features/offline/cache';
 import { readRecord, writeRecord, writeRecordOnPageExit } from '@/features/offline/storage';
 import { errorMessage } from '@/api/api-error';
-import type { StartAiChatBody } from '@/api/generated/models';
+import type { StartAiChatBody } from '@/api/generated/app-api.schemas';
 import { validateChatRequest } from '@zhishu/ai-contracts';
 
 function answerText(result: unknown): string {
@@ -40,7 +47,14 @@ function readQuestion(value: unknown): Question | undefined {
   if ('body' in value && value.body && typeof value.body === 'object' && 'request' in value.body) {
     const checked = validateChatRequest(value.body.request);
     if (checked.success)
-      body = { protocolVersion: 2, request: checked.data, sourceDocumentIds: value.sourceIds };
+      body = {
+        protocolVersion: 2,
+        request: checked.data,
+        sourceDocumentIds: value.sourceIds,
+        ...('sourceWorkspaceId' in value.body && typeof value.body.sourceWorkspaceId === 'string'
+          ? { sourceWorkspaceId: value.body.sourceWorkspaceId }
+          : {}),
+      };
   }
   return {
     id: value.id,
@@ -63,20 +77,95 @@ export function RagChat({
 }) {
   const offline = useOfflineState(),
     cache = useQueryClient();
-  const storageKey = JSON.stringify(['rag', identityKey, scope]);
+  const [scopeMode, setScopeMode] = useState<'documents' | 'workspace' | 'all'>(
+    sourceDocumentIds.length ? 'documents' : scope === 'all' ? 'all' : 'workspace',
+  );
+  const selectedIds = scopeMode === 'documents' ? sourceDocumentIds : [];
+  const workspaceId = scopeMode === 'workspace' && scope !== 'all' ? scope : undefined;
+  const storageKey = JSON.stringify(['rag-v2', identityKey, scope, scopeMode, selectedIds]);
+  const capabilities = useQuery({
+    queryKey: ['knowledge-capabilities', identityKey],
+    queryFn: ({ signal }) => getAiCapabilities({ signal }),
+    enabled: offline.online && offline.verified,
+  });
+  const indexStatus = useQuery({
+    queryKey: ['knowledge-index', identityKey, workspaceId, selectedIds],
+    queryFn: ({ signal }) =>
+      getKnowledgeIndexStatus(
+        { workspaceId, documentIds: selectedIds.length ? selectedIds.join(',') : undefined },
+        { signal },
+      ),
+    enabled:
+      offline.online &&
+      offline.verified &&
+      !!capabilities.data?.knowledge.enabled &&
+      (scopeMode !== 'documents' || !!selectedIds.length),
+    refetchInterval: 3000,
+    retry: false,
+  });
+  const indexReady =
+    !!indexStatus.data && indexStatus.data.pending === 0 && indexStatus.data.failed === 0;
   const [draft, setDraft] = useState(''),
     [questions, setQuestions] = useState<Question[]>([]),
-    [hydrated, setHydrated] = useState(false),
+    [hydratedKey, setHydratedKey] = useState<string | null>(null),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
+  const hydrated = hydratedKey === storageKey;
   const connection = useRef<AbortController | null>(null),
     inflight = useRef<string | null>(null);
   useEffect(() => {
     let active = true;
     if (!offline.identity) return;
     void readRecord(offline.identity, 'chat-draft', storageKey)
+      .then(async (value) => {
+        if (value || scope !== 'all') return value;
+        const legacy =
+          (await readRecord(offline.identity!, 'ai-draft', 'writing-proposals')) ??
+          (await readRecord(offline.identity!, 'ai-draft', 'current'));
+        if (
+          !legacy ||
+          typeof legacy !== 'object' ||
+          !('messages' in legacy) ||
+          !Array.isArray(legacy.messages)
+        )
+          return value;
+        return {
+          draft: '',
+          questions: legacy.messages
+            .flatMap((message: unknown) => {
+              if (
+                !message ||
+                typeof message !== 'object' ||
+                !('body' in message) ||
+                !('id' in message)
+              )
+                return [];
+              const body = message.body;
+              if (
+                !body ||
+                typeof body !== 'object' ||
+                !('request' in body) ||
+                !('sourceDocumentIds' in body)
+              )
+                return [];
+              const checked = validateChatRequest(body.request);
+              if (!checked.success || checked.data.requestId !== message.id) return [];
+              return [
+                {
+                  id: message.id,
+                  text: checked.data.message,
+                  sourceIds: body.sourceDocumentIds,
+                  body,
+                },
+              ];
+            })
+            .slice(-16),
+        };
+      })
       .then((value) => {
         if (!active) return;
+        setDraft('');
+        setQuestions([]);
         if (value && typeof value === 'object') {
           if ('draft' in value && typeof value.draft === 'string') setDraft(value.draft);
           if ('questions' in value && Array.isArray(value.questions))
@@ -87,11 +176,11 @@ export function RagChat({
                 .slice(-16),
             );
         }
-        setHydrated(true);
+        setHydratedKey(storageKey);
       })
       .catch(() => {
         if (active) {
-          setHydrated(true);
+          setHydratedKey(storageKey);
           setError('问答草稿读取失败');
         }
       });
@@ -99,7 +188,7 @@ export function RagChat({
       active = false;
       connection.current?.abort();
     };
-  }, [offline.identity, storageKey]);
+  }, [offline.identity, storageKey, scope]);
   useEffect(() => {
     if (!hydrated || !offline.identity) return;
     const timer = setTimeout(() => {
@@ -179,13 +268,20 @@ export function RagChat({
     }
   };
   const send = async () => {
-    if (busy || connection.current || !draft.trim() || !sourceDocumentIds.length) return;
+    if (
+      busy ||
+      connection.current ||
+      !draft.trim() ||
+      !indexReady ||
+      (scopeMode === 'documents' && !selectedIds.length)
+    )
+      return;
     const text = draft;
     const pendingQuestion = questions.find(
       (q) =>
         q.registered === false &&
         q.text === text &&
-        JSON.stringify(q.sourceIds) === JSON.stringify(sourceDocumentIds),
+        JSON.stringify(q.sourceIds) === JSON.stringify(selectedIds),
     );
     const id = pendingQuestion?.id ?? crypto.randomUUID();
     setBusy(true);
@@ -194,19 +290,24 @@ export function RagChat({
     inflight.current = id;
     const body: StartAiChatBody = pendingQuestion?.body ?? {
       protocolVersion: 2,
-      sourceDocumentIds: [...sourceDocumentIds],
+      sourceDocumentIds: [...selectedIds],
+      ...(workspaceId ? { sourceWorkspaceId: workspaceId } : {}),
       request: {
         kind: 'chat',
         requestId: id,
         message: text,
         responseMode: 'grounded',
-        contextRef: 'selected-documents',
+        contextRef: selectedIds.length
+          ? 'selected-documents'
+          : workspaceId
+            ? 'workspace'
+            : 'accessible-knowledge',
         previousRequestIds: questions
           .filter((_, i) => queries[i]?.data?.status === 'completed')
           .map((q) => q.id),
       },
     };
-    const q: Question = { id, text, sourceIds: [...sourceDocumentIds], registered: false, body };
+    const q: Question = { id, text, sourceIds: [...selectedIds], registered: false, body };
     setQuestions((current) =>
       current.some((item) => item.id === id)
         ? current.map((item) => (item.id === id ? q : item))
@@ -245,19 +346,59 @@ export function RagChat({
   return (
     <Chat
       messages={messages}
-      emptyState={<p>选择知识资料后提问，回答与来源保留在独立问答中。</p>}
+      emptyState={<p>向空间或所选文档提问，回答将检索已保存的正文，并附上原文引用。</p>}
       header={
-        <div className="px-4 py-2 text-xs">
-          知识问答{' '}
-          <button disabled={busy || !!active} onClick={() => setQuestions([])}>
+        <div className="zhishu-chat-header">
+          <select
+            aria-label="提问范围"
+            className="min-w-0 rounded-lg border bg-background px-2 py-1.5"
+            value={scopeMode}
+            disabled={busy || !!active}
+            onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}
+          >
+            <option value="documents" disabled={!sourceDocumentIds.length}>
+              所选文档（{sourceDocumentIds.length}）
+            </option>
+            {scope !== 'all' && <option value="workspace">当前空间</option>}
+            <option value="all">所有可访问资料</option>
+          </select>
+          <button type="button" disabled={busy || !!active} onClick={() => setQuestions([])}>
             新问答
           </button>
         </div>
       }
       status={
-        <ChatStatus error={!!error}>
+        <ChatStatus
+          error={
+            !!error || capabilities.isError || indexStatus.isError || !!indexStatus.data?.failed
+          }
+        >
           {error ||
-            (!sourceDocumentIds.length ? '请先添加知识资料' : '回答由所选资料生成，请核对来源。')}
+            (capabilities.isError
+              ? '暂时无法检查知识检索服务，请重试。'
+              : capabilities.data && !capabilities.data.knowledge.enabled
+                ? '知识问答尚未启用，请联系管理员配置知识检索服务。'
+                : '') ||
+            (indexStatus.isError
+              ? errorMessage(indexStatus.error)
+              : !indexStatus.data
+                ? '正在检查知识索引…'
+                : indexStatus.data.failed
+                  ? `有 ${indexStatus.data.failed} 篇文档向量化失败，请联系管理员检查服务，恢复后会自动重试。`
+                  : indexStatus.data.pending
+                    ? `正在向量化：${indexStatus.data.ready}/${indexStatus.data.total} 篇就绪，请稍候。`
+                    : `已索引 ${indexStatus.data.ready} 篇文档。回答附有原文引用，请核对来源。`)}
+          {(capabilities.isError || indexStatus.isError) && (
+            <button
+              className="ml-2 underline"
+              onClick={() => {
+                void capabilities.refetch();
+                void indexStatus.refetch();
+              }}
+            >
+              重试
+            </button>
+          )}
         </ChatStatus>
       }
       messageActions={(message) => {
@@ -282,16 +423,42 @@ export function RagChat({
             )}
             {task?.status === 'completed' && task.result && (
               <>
-                <button onClick={() => onUseForWriting(answerText(task.result), q.sourceIds)}>
+                <button
+                  onClick={() =>
+                    onUseForWriting(
+                      answerText(task.result),
+                      q.sourceIds.length
+                        ? q.sourceIds
+                        : 'citations' in task.result!
+                          ? [...new Set(task.result.citations.map((c) => c.source.sourceId))].slice(
+                              0,
+                              4,
+                            )
+                          : [],
+                    )
+                  }
+                >
                   用于写作
                 </button>
-                {'citations' in task.result &&
-                  task.result.citations.map((c) => (
-                    <blockquote key={c.citationId} className="my-2 border-l pl-3 text-xs">
-                      {c.quote}
-                      <span className="block text-muted-foreground">来源：{c.source.sourceId}</span>
-                    </blockquote>
-                  ))}
+                {'citations' in task.result && task.result.citations.length > 0 && (
+                  <details className="mt-2 text-xs">
+                    <summary className="cursor-pointer text-muted-foreground">
+                      查看 {task.result.citations.length} 条原文引用
+                    </summary>
+                    {task.result.citations.map((c) => (
+                      <blockquote key={c.citationId} className="my-2 border-l pl-3 text-xs">
+                        {c.quote}
+                        <Link
+                          to="/documents/$documentId"
+                          params={{ documentId: c.source.sourceId }}
+                          className="block text-muted-foreground underline"
+                        >
+                          打开来源文档
+                        </Link>
+                      </blockquote>
+                    ))}
+                  </details>
+                )}
               </>
             )}
           </>
@@ -307,7 +474,8 @@ export function RagChat({
             !hydrated ||
             !offline.online ||
             !offline.verified ||
-            !sourceDocumentIds.length ||
+            !indexReady ||
+            (scopeMode === 'documents' && !selectedIds.length) ||
             questions.length >= 16
           }
           busy={busy || !!active}

@@ -14,6 +14,18 @@ const environmentSchema = z
     DATABASE_URL: z.string().url(),
     AI_MODEL: z.string().trim().min(1).optional(),
     AI_API_KEY: z.string().min(1).optional(),
+    AI_EMBEDDING_MODEL: z.string().trim().min(1).optional(),
+    AI_EMBEDDING_API_KEY: z.string().min(1).optional(),
+    AI_EMBEDDING_BASE_URL: z.string().url().optional(),
+    AI_EMBEDDING_DIMENSIONS: z.coerce.number().int().min(1).max(65536).default(1024),
+    AI_EMBEDDING_BATCH_SIZE: z.coerce.number().int().min(1).max(128).default(10),
+    QDRANT_URL: z.string().url().optional(),
+    QDRANT_API_KEY: z.string().min(1).optional(),
+    QDRANT_COLLECTION: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{1,128}$/)
+      .default("zhishu_documents"),
+    RAG_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(60000).default(1000),
     AI_IMAGE_MODEL: z.string().trim().min(1).optional(),
     AI_IMAGE_API_KEY: z.string().min(1).optional(),
     AI_IMAGE_BASE_URL: z.string().url().optional(),

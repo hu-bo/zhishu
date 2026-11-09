@@ -15,6 +15,7 @@ export type {
   EditorCollaborationStatus,
   EditorAnchorResolution,
   EditorHostServices,
+  EditorMentionMember,
   EditorInstanceContextValue,
   EditorStructureOperationResult,
   EditorTextSelection,

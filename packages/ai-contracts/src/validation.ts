@@ -4,6 +4,7 @@ import type { Static, TSchema } from "@sinclair/typebox";
 import {
   documentContractJsonSchemas,
   applyOperationBatch,
+  MATHEMATICS_DOCUMENT_SCHEMA_VERSION,
   type DocumentSnapshot,
 } from "@zhishu/document-contracts";
 import {
@@ -65,7 +66,7 @@ export function validateAiTaskRequest(
     request.kind === "authoring" &&
     ((["rewrite", "translate"].includes(request.intent) &&
       (request.target.kind !== "blocks" || request.target.blocks.length !== 1)) ||
-      (request.intent === "research" && request.target.kind !== "document-end") ||
+      (["auto", "research"].includes(request.intent) && request.target.kind !== "document-end") ||
       (request.intent === "rewrite-document") !== (request.target.kind === "document") ||
       request.target.kind === "selection")
   )
@@ -183,9 +184,26 @@ export function validateAuthoringProposal(
 ) {
   const result = validateSchema(AuthoringProposalSchema, value);
   if (!result.success) return result;
-  const proposal = result.data,
-    request = context.request,
-    batch = proposal.operationBatch;
+  const proposal = result.data;
+  let { request } = context;
+  const batch = proposal.operationBatch;
+  if (request.intent === "auto") {
+    if (request.target.kind !== "document-end")
+      return invalid<typeof proposal>("UNSUPPORTED_TARGET");
+    if (proposal.target.kind === "document") {
+      request = { ...request, intent: "rewrite-document", target: proposal.target };
+    } else if (proposal.target.kind === "blocks") {
+      const blockId = proposal.target.blocks[0]?.blockId;
+      const block = context.snapshot.content.content.find((node) => node.attrs.blockId === blockId);
+      if (
+        proposal.target.blocks.length !== 1 ||
+        !block ||
+        !["paragraph", "heading"].includes(block.type)
+      )
+        return invalid<typeof proposal>("UNSUPPORTED_TARGET");
+      request = { ...request, intent: "rewrite", target: proposal.target };
+    }
+  }
   if (
     proposal.requestId !== request.requestId ||
     canonicalJson(proposal.document) !== canonicalJson(request.document) ||
@@ -202,6 +220,10 @@ export function validateAuthoringProposal(
   )
     return invalid<typeof proposal>("INVALID_CITATION");
   const target = request.target;
+  const allowedBlocks = ["paragraph", "heading", "codeBlock"];
+  if (context.snapshot.schemaVersion >= MATHEMATICS_DOCUMENT_SCHEMA_VERSION) {
+    allowedBlocks.push("blockMath");
+  }
   if (target.kind === "selection") return invalid<typeof proposal>("UNSUPPORTED_TARGET");
   if (target.kind === "document") {
     if (request.intent !== "rewrite-document")
@@ -239,7 +261,7 @@ export function validateAuthoringProposal(
         return invalid<typeof proposal>("UNSUPPORTED_TARGET");
       if (
         (operation.type !== "insert-block" && operation.type !== "replace-block") ||
-        !["paragraph", "heading", "codeBlock"].includes(operation.block.type)
+        !allowedBlocks.includes(operation.block.type)
       )
         return invalid<typeof proposal>("INVALID_OUTPUT");
       outputs++;
@@ -281,7 +303,7 @@ export function validateAuthoringProposal(
     }
     if (
       (operation.type === "insert-block" || operation.type === "replace-block") &&
-      !["paragraph", "heading", "codeBlock"].includes(operation.block.type)
+      !allowedBlocks.includes(operation.block.type)
     )
       return invalid<typeof proposal>("INVALID_OUTPUT");
   }

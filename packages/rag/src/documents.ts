@@ -26,9 +26,12 @@ const inlineText = (node: NativeNode): string =>
     ? (node.text ?? "")
     : node.type === "hardBreak"
       ? "\n"
-      : node.type === "statusTag"
-        ? (DOCUMENT_STATUS_LABELS[node.attrs?.status as keyof typeof DOCUMENT_STATUS_LABELS] ?? "")
-        : (node.content ?? []).map(inlineText).join("");
+      : node.type === "mention"
+        ? `@${String(node.attrs?.label ?? "")}`
+        : node.type === "statusTag"
+          ? (DOCUMENT_STATUS_LABELS[node.attrs?.status as keyof typeof DOCUMENT_STATUS_LABELS] ??
+            "")
+          : (node.content ?? []).map(inlineText).join("");
 const mdastText = (node: RootContent): string =>
   "value" in node
     ? String(node.value)

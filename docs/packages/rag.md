@@ -1,5 +1,7 @@
 # rag 设计规划
 
+> 2026-10-30 应用已接入 `modules/rag`、`document_indexes`（migration 0036）、独立 Embedding 配置、自动索引 Worker、空间/文档范围向量问答、索引状态及来源文档链接。当前沿用显式文档 ACL，以 `document:<id>` 稳定键过滤；未实施下文规划的 space/user 继承权限迁移。真实 `qwen3.8-flash` 写作 → `qwen3.7-text-embedding-flash` 1024 维索引 → 空间/文档问答已通过，覆盖引用、权限隔离、正文更新与删除。部署和验收说明见 [AI 知识问答验收记录](../ai-knowledge-verification.md)。下面保留的规划条目不代表全部已交付。
+
 > 2026-10-24 应用更新：RagChat 在 app-web 独立维护问答状态与草稿，共用 chat-ui，通过原 LangChain 问答 API 保留历史、取消与 checkpoint 恢复。检索包自身不持有 checkpoint；问答执行仍使用 LangGraph。当前页面基于授权所选资料，不将检索包能力等同于全库向量问答已接入。见 [实施记录](ai-chat-implementation.md)。
 
 > 2026-10-24 两条消费链路：RAG Chat 继续使用 LangChain 驱动问答并组合本包的检索/来源能力；协作 AI 写作的 [research 插件](ai-plugins.md#5-research调研)也可通过宿主注入本包端口。两者分别编排，写作中的 DSH Agent 不接管 RAG Chat。rag 包保持检索职责，不依赖 chat-ui 或 DSH；前端分别封装 RagChat/WritingChat，共用基础组件。

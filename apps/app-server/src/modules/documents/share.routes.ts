@@ -1,7 +1,7 @@
+import { requirePrincipal } from "../identity/principal.js";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { DomainError } from "../../shared/domain-error.js";
 import { errorResponseSchema } from "./document.schema.js";
 import type { ShareService } from "./share.service.js";
 import {
@@ -38,10 +38,8 @@ export async function shareRoutes(app: FastifyInstance, service: ShareService): 
       },
     },
     async (request, reply) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
       const share = await service.create(
-        request.principal,
+        requirePrincipal(request.principal),
         request.params.documentId,
         request.body,
       );
@@ -58,11 +56,7 @@ export async function shareRoutes(app: FastifyInstance, service: ShareService): 
         response: { ...common.response, 200: shareListSchema },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.list(request.principal, request.params.documentId);
-    },
+    async (request) => service.list(requirePrincipal(request.principal), request.params.documentId),
   );
   typed.delete(
     "/:documentId/shares/:shareId",
@@ -75,9 +69,11 @@ export async function shareRoutes(app: FastifyInstance, service: ShareService): 
       },
     },
     async (request, reply) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      await service.revoke(request.principal, request.params.documentId, request.params.shareId);
+      await service.revoke(
+        requirePrincipal(request.principal),
+        request.params.documentId,
+        request.params.shareId,
+      );
       return reply.code(204).send(null);
     },
   );

@@ -5,14 +5,21 @@ export const TASK_LIST_DOCUMENT_SCHEMA_VERSION = 2 as const;
 export const TABLE_DOCUMENT_SCHEMA_VERSION = 3 as const;
 export const TEXT_FORMATS_DOCUMENT_SCHEMA_VERSION = 4 as const;
 export const CALLOUT_DOCUMENT_SCHEMA_VERSION = 5 as const;
-export const CURRENT_DOCUMENT_SCHEMA_VERSION = CALLOUT_DOCUMENT_SCHEMA_VERSION;
+export const MENTION_DOCUMENT_SCHEMA_VERSION = 6 as const;
+export const MATHEMATICS_DOCUMENT_SCHEMA_VERSION = 7 as const;
+export const CURRENT_DOCUMENT_SCHEMA_VERSION = MATHEMATICS_DOCUMENT_SCHEMA_VERSION;
 export const SUPPORTED_DOCUMENT_SCHEMA_VERSIONS = [
   LEGACY_DOCUMENT_SCHEMA_VERSION,
   TASK_LIST_DOCUMENT_SCHEMA_VERSION,
   TABLE_DOCUMENT_SCHEMA_VERSION,
   TEXT_FORMATS_DOCUMENT_SCHEMA_VERSION,
   CALLOUT_DOCUMENT_SCHEMA_VERSION,
+  MENTION_DOCUMENT_SCHEMA_VERSION,
+  MATHEMATICS_DOCUMENT_SCHEMA_VERSION,
 ] as const;
+
+export const MAX_LATEX_LENGTH = 4096;
+const latex = Type.String({ minLength: 1, maxLength: MAX_LATEX_LENGTH, pattern: "\\S" });
 
 export const HIGHLIGHT_COLORS = ["yellow", "green", "blue", "pink", "purple"] as const;
 export const TEXT_ALIGNMENTS = ["left", "center", "right"] as const;
@@ -105,7 +112,35 @@ const statusTagNode = Type.Object(
   },
   { additionalProperties: false },
 );
-const inlineNode = Type.Union([textNode, hardBreakNode, statusTagNode]);
+export const MentionSchema = Type.Object(
+  {
+    type: Type.Literal("mention"),
+    attrs: Type.Object(
+      {
+        identityId: Type.String({ minLength: 1, maxLength: 256, pattern: "^[A-Za-z0-9._:@-]+$" }),
+        label: Type.String({ minLength: 1, maxLength: 80, pattern: "\\S" }),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+export type DocumentMention = Static<typeof MentionSchema>["attrs"];
+const inlineMathNode = Type.Object(
+  {
+    type: Type.Literal("inlineMath"),
+    attrs: Type.Object({ latex }, { additionalProperties: false }),
+    marks: Type.Optional(Type.Array(inlineMark, { maxItems: 16 })),
+  },
+  { additionalProperties: false },
+);
+const inlineNode = Type.Union([
+  textNode,
+  hardBreakNode,
+  statusTagNode,
+  MentionSchema,
+  inlineMathNode,
+]);
 const blockAttrs = Type.Object({ blockId }, { additionalProperties: false });
 const textAlignment = Type.Optional(
   Type.Union(TEXT_ALIGNMENTS.map((alignment) => Type.Literal(alignment))),
@@ -323,6 +358,13 @@ export const DocumentBlockSchema = Type.Recursive(
       TaskListSchema,
       taskItemNodeSchema,
       Type.Ref(TableSchema),
+      Type.Object(
+        {
+          type: Type.Literal("blockMath"),
+          attrs: Type.Object({ blockId, latex }, { additionalProperties: false }),
+        },
+        { additionalProperties: false },
+      ),
       Type.Object(
         {
           type: Type.Literal("horizontalRule"),

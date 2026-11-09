@@ -1,0 +1,69 @@
+.writing-markdown {
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.writing-markdown :is(p, ul, ol, blockquote, pre) {
+  margin-block: 0.6em;
+}
+.writing-markdown :is(h1, h2, h3, h4, h5, h6) {
+  margin-block: 1.1em 0.4em;
+  font-size: 1.08em;
+  font-weight: 650;
+  line-height: 1.45;
+}
+.writing-markdown :is(h1, h2) {
+  font-size: 1.23em;
+}
+.writing-markdown :is(ul, ol) {
+  padding-inline-start: 1.35em;
+}
+.writing-markdown ul {
+  list-style: disc;
+}
+.writing-markdown ol {
+  list-style: decimal;
+}
+.writing-markdown blockquote {
+  border-inline-start: 2px solid var(--border);
+  padding-inline-start: 0.85em;
+  color: var(--muted-foreground);
+}
+.writing-markdown :not(pre) > code {
+  padding: 0.12em 0.32em;
+  border-radius: 0.3em;
+  background: var(--secondary);
+  font-size: 0.88em;
+}
+.writing-markdown pre {
+  overflow: auto;
+  padding: 0.8em;
+  border-radius: 0.55em;
+  background: var(--secondary);
+}
+.writing-markdown [data-type='block-math'] {
+  margin-block: 0.6em;
+  padding-block: 0.2em;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.writing-markdown a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.writing-markdown table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+.writing-markdown :is(th, td) {
+  padding: 0.4em 0.7em;
+  border: 1px solid var(--border);
+}
+.writing-markdown > :first-child {
+  margin-top: 0;
+}
+.writing-markdown > :last-child {
+  margin-bottom: 0;
+}

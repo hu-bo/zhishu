@@ -1,12 +1,8 @@
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
-import type { DocumentSnapshot, SnapshotCompatibilityOptions } from "@zhishu/document-contracts";
-import type {
-  AiTaskEvent,
-  AuthoringRequest,
-  EvidenceBundle,
-  EvidenceItem,
-} from "@zhishu/ai-contracts";
+import type { SnapshotCompatibilityOptions } from "@zhishu/document-contracts";
+import type { WritingInput } from "@zhishu/ai-plugins/writing";
+import type { AiTaskEvent, EvidenceItem } from "@zhishu/ai-contracts";
 export interface GenerationLimits {
   timeoutMs: number;
   maxInputTokens: number;
@@ -30,16 +26,7 @@ export interface PromptPolicy {
   version: string;
   systemInstruction: string;
 }
-export interface AuthoringInput {
-  threadId: string;
-  request: AuthoringRequest;
-  snapshot: DocumentSnapshot;
-  /** Trusted application revision, independent of snapshotRevision. */
-  structureRevision: number;
-  evidence?: EvidenceBundle;
-  prompt: PromptPolicy;
-  history?: { role: "user" | "assistant"; content: string }[];
-}
+export type AuthoringInput = WritingInput;
 export interface ResearchHit {
   sourceId: string;
   title: string;

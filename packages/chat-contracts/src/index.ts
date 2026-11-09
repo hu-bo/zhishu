@@ -35,6 +35,7 @@ export const RunSchema = Type.Object({
   nativeMessageId: Type.Optional(id),
   turn: Type.Optional(Type.Integer()),
   errorCode: Type.Optional(Type.String()),
+  cancelRequested: Type.Optional(Type.Boolean()),
   modelCalls: Type.Integer(),
   createdAt: Type.String(),
 });
@@ -101,10 +102,11 @@ export const ChatLiveFrameSchema = Type.Object({
   conversationId: id,
   runId: id,
   streamEpoch: id,
-  attempt: Type.Integer(),
-  revision: Type.Integer(),
-  index: Type.Integer(),
-  text: Type.String(),
+  attempt: Type.Integer({ minimum: 1 }),
+  revision: Type.Integer({ minimum: 1 }),
+  /** Dense position among public text deltas, independent of private SDK chunks. */
+  index: Type.Integer({ minimum: 0 }),
+  text: Type.String({ maxLength: 128000 }),
 });
 export type ChatLiveFrame = Static<typeof ChatLiveFrameSchema>;
 export const ChatFrameSchema = Type.Union([
@@ -119,6 +121,9 @@ export function isChatFrame(value: unknown): value is ChatFrame {
 export function isSubmitChatMessage(value: unknown): value is SubmitChatMessage {
   return Value.Check(SubmitChatMessageSchema, value);
 }
+export function isApprovalDecision(value: unknown): value is ApprovalDecision {
+  return Value.Check(ApprovalDecisionSchema, value);
+}
 export function isChatSnapshot(value: unknown): value is ChatSnapshot {
   return Value.Check(ChatSnapshotSchema, value);
 }
@@ -128,15 +133,25 @@ export function applyChatEvent(current: ChatSnapshot, event: ChatEvent): ChatSna
   if (event.conversationId !== current.conversation.id) throw new Error("WRONG_CONVERSATION");
   if (event.snapshot.conversation.id !== event.conversationId)
     throw new Error("WRONG_CONVERSATION");
-  if (BigInt(event.sequence) === BigInt(current.cursor)) {
-    if (canonical(event.snapshot) !== canonical(current)) throw new Error("CHANGED_DUPLICATE");
-    return current;
-  }
+  if (event.snapshot.cursor !== event.sequence) throw new Error("INVALID_CURSOR");
+  if (BigInt(event.sequence) === BigInt(current.cursor))
+    return applyChatSnapshot(current, event.snapshot);
   if (BigInt(event.sequence) < BigInt(current.cursor)) return current;
   if (BigInt(event.sequence) !== BigInt(current.cursor) + 1n) throw new Error("EVENT_GAP");
-  if (event.snapshot.cursor !== event.sequence) throw new Error("INVALID_CURSOR");
+  return applyChatSnapshot(current, event.snapshot);
+}
+
+/** An authorized full snapshot may bridge a gap; a late HTTP response never rewinds SSE state. */
+export function applyChatSnapshot(current: ChatSnapshot, incoming: ChatSnapshot): ChatSnapshot {
+  if (incoming.conversation.id !== current.conversation.id) throw new Error("WRONG_CONVERSATION");
+  if (BigInt(incoming.cursor) < BigInt(current.cursor)) return current;
+  if (BigInt(incoming.cursor) === BigInt(current.cursor)) {
+    if (canonical(incoming) !== canonical(current)) throw new Error("CHANGED_DUPLICATE");
+    return current;
+  }
   for (const run of current.runs) {
-    const next = event.snapshot.runs.find((r) => r.id === run.id);
+    const next = incoming.runs.find((r) => r.id === run.id);
+    if (!next) throw new Error("RUN_REMOVED");
     if (
       next &&
       ((["completed", "failed", "cancelled"].includes(run.status) && next.status !== run.status) ||
@@ -145,11 +160,14 @@ export function applyChatEvent(current: ChatSnapshot, event: ChatEvent): ChatSna
       throw new Error("INVALID_TRANSITION");
   }
   for (const message of current.messages) {
-    const next = event.snapshot.messages.find((m) => m.id === message.id);
-    if (message.status === "committed" && next && next.text !== message.text)
+    const next = incoming.messages.find((m) => m.id === message.id);
+    if (
+      message.status === "committed" &&
+      (!next || next.status !== "committed" || next.text !== message.text)
+    )
       throw new Error("COMMITTED_MESSAGE_CHANGED");
   }
-  return event.snapshot;
+  return incoming;
 }
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;

@@ -1,6 +1,15 @@
+import {
+  catalogIdSchema,
+  workspaceIdSchema,
+  documentIdSchema,
+  emojiIconSchema as documentIconSchema,
+} from "../../shared/resource.schema.js";
+export { catalogIdSchema, documentIconSchema };
+export { errorResponseSchema } from "../../shared/error.schema.js";
+import { accessRoles, permissionActions } from "../authorization/policy.js";
+import { documentAccessModes } from "../authorization/permissions.js";
 import { z } from "zod";
 import { CURRENT_DOCUMENT_SCHEMA_VERSION } from "@zhishu/document-contracts";
-import { documentPermissionActions } from "./document.permissions.js";
 
 const extensionSchema = z
   .object({
@@ -16,18 +25,6 @@ const identityIdSchema = z
   .max(256)
   .regex(/^[A-Za-z0-9._:@-]+$/);
 
-export const documentIconSchema = z
-  .string()
-  .trim()
-  .max(32)
-  .refine((value) => {
-    const graphemes = [...new Intl.Segmenter("zh", { granularity: "grapheme" }).segment(value)];
-    return (
-      graphemes.length === 1 &&
-      /[\p{Extended_Pictographic}\p{Regional_Indicator}\u20e3]/u.test(value)
-    );
-  }, "请选择一个 Emoji 图标")
-  .nullable();
 const documentTagsSchema = z
   .array(
     z
@@ -41,15 +38,10 @@ const documentTagsSchema = z
   .refine((tags) => new Set(tags.map((tag) => tag.label)).size === tags.length, "标签名称不能重复");
 export type DocumentTag = z.infer<typeof documentTagsSchema>[number];
 
-export const catalogIdSchema = z.string().regex(/^cat_[A-Za-z0-9_-]{1,64}$/);
-
 export const createDocumentBodySchema = z
   .object({
     title: z.string().trim().min(1).max(200).default("未命名文档"),
-    workspaceId: z
-      .string()
-      .regex(/^ws_[A-Za-z0-9_-]{1,64}$/)
-      .default("ws_default"),
+    workspaceId: workspaceIdSchema.default("ws_default"),
     catalogId: catalogIdSchema.nullable().default(null),
   })
   .strict();
@@ -71,10 +63,7 @@ export const documentListQuerySchema = z
   .object({
     view: z.enum(["all", "mine", "recent", "favorites", "archived", "trash"]).default("recent"),
     q: z.string().trim().max(200).optional(),
-    workspaceId: z
-      .string()
-      .regex(/^ws_[A-Za-z0-9_-]{1,64}$/)
-      .optional(),
+    workspaceId: workspaceIdSchema.optional(),
     sort: z.enum(["recent", "updated", "created", "title"]).default("recent"),
     direction: z.enum(["asc", "desc"]).default("desc"),
     limit: z.coerce.number().int().min(1).max(100).default(20),
@@ -84,7 +73,7 @@ export const documentListQuerySchema = z
 
 export const documentSchema = z
   .object({
-    id: z.string().regex(/^doc_[A-Za-z0-9_-]{1,64}$/),
+    id: documentIdSchema,
     tenantId: z.string(),
     title: z.string(),
     workspaceId: z.string(),
@@ -100,13 +89,20 @@ export const documentSchema = z
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
     metadataRevision: z.number().int().positive(),
+    accessMode: z.enum(documentAccessModes),
     canManage: z.boolean(),
+    canWrite: z.boolean(),
+    offlineCacheAllowed: z.boolean(),
+    canComment: z.boolean(),
+    canMove: z.boolean(),
+    canShare: z.boolean(),
+    canExport: z.boolean(),
   })
   .strict();
 
 export const documentContentSchema = z
   .object({
-    documentId: z.string().regex(/^doc_[A-Za-z0-9_-]{1,64}$/),
+    documentId: documentIdSchema,
     readOnly: z.boolean(),
     schemaVersion: z.number().int().positive(),
     extensions: z.array(extensionSchema),
@@ -131,9 +127,7 @@ export const documentListSchema = z
   .object({ items: z.array(documentListItemSchema), hasMore: z.boolean() })
   .strict();
 
-export const documentParamsSchema = z
-  .object({ documentId: z.string().regex(/^doc_[A-Za-z0-9_-]{1,64}$/) })
-  .strict();
+export const documentParamsSchema = z.object({ documentId: documentIdSchema }).strict();
 
 export const copyDocumentBodySchema = z
   .object({ title: z.string().trim().min(1).max(200).default("未命名文档") })
@@ -163,7 +157,7 @@ export const restoreDocumentVersionBodySchema = z
 export const documentVersionSchema = z
   .object({
     id: versionIdSchema,
-    documentId: z.string().regex(/^doc_[A-Za-z0-9_-]{1,64}$/),
+    documentId: documentIdSchema,
     generationId: z.string().regex(/^gen_[A-Za-z0-9_-]{1,64}$/),
     name: z.string(),
     kind: z.enum(["named", "automatic"]),
@@ -177,7 +171,7 @@ export const documentVersionsSchema = z.array(documentVersionSchema);
 
 export const documentVersionContentSchema = z
   .object({
-    documentId: z.string().regex(/^doc_[A-Za-z0-9_-]{1,64}$/),
+    documentId: documentIdSchema,
     generationId: z.string().regex(/^gen_[A-Za-z0-9_-]{1,64}$/),
     schemaVersion: z.number().int().positive(),
     durableSeq: z.number().int().nonnegative(),
@@ -205,6 +199,7 @@ export const importDocumentBodySchema = z
     format: z.literal("zhishu.document"),
     formatVersion: z.literal(1),
     title: z.string().trim().min(1).max(200).default("Imported document"),
+    workspaceId: workspaceIdSchema.optional(),
     schemaVersion: z.number().int().positive(),
     extensions: z.array(extensionSchema).max(128).default([]),
     content: z.unknown(),
@@ -244,21 +239,25 @@ export const documentAclParamsSchema = documentParamsSchema.extend({
   identityId: identityIdSchema,
 });
 
-export const setDocumentAclBodySchema = z
-  .object({
-    actions: z
-      .array(z.enum(documentPermissionActions))
-      .min(1)
-      .max(documentPermissionActions.length),
-  })
-  .strict()
-  .refine((value) => new Set(value.actions).size === value.actions.length);
+export const setDocumentAclBodySchema = z.union([
+  z
+    .object({
+      actions: z.array(z.enum(permissionActions)).min(1).max(permissionActions.length),
+    })
+    .strict()
+    .refine((value) => new Set(value.actions).size === value.actions.length),
+  z.object({ role: z.enum(accessRoles) }).strict(),
+]);
 
 export const documentAclSchema = z
   .object({
     documentId: z.string(),
     identityId: identityIdSchema,
-    actions: z.array(z.enum(documentPermissionActions)),
+    actions: z.array(z.enum(permissionActions)),
+    role: z.enum(accessRoles).optional(),
+    grantedAt: z.string().datetime().optional(),
+    displayName: z.string().optional(),
+    email: z.string().optional(),
   })
   .strict();
 
@@ -287,12 +286,6 @@ export const collaborationSessionSchema = z
     capabilities: z.object({ durableAck: z.literal(true), readOnly: z.literal(true) }).strict(),
   })
   .strict();
-
-export const errorResponseSchema = z.object({
-  code: z.string(),
-  message: z.string(),
-  requestId: z.string(),
-});
 
 export type CreateDocumentInput = z.infer<typeof createDocumentBodySchema>;
 export type CopyDocumentInput = z.infer<typeof copyDocumentBodySchema>;

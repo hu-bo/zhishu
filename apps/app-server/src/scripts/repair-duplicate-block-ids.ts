@@ -3,8 +3,7 @@ import type { PoolClient } from "pg";
 import { createDatabase, createPool } from "../../database/index.js";
 import { loadConfig } from "../config.js";
 import { collaborationOwnerLock } from "../modules/collaboration/owner-lock.js";
-import { createDocumentService } from "../modules/documents/index.js";
-import { DocumentRepository } from "../modules/documents/document.repository.js";
+import { createDocumentService, DocumentRepository } from "../modules/documents/index.js";
 import type { Principal } from "../modules/identity/identity.types.js";
 
 function parseArguments(arguments_: string[]) {
@@ -40,8 +39,9 @@ async function main(): Promise<void> {
     connectionTimeoutMillis: config.DATABASE_CONNECT_TIMEOUT_MS,
     query_timeout: config.DATABASE_QUERY_TIMEOUT_MS,
   });
-  const repository = new DocumentRepository(createDatabase(pool));
-  const service = createDocumentService(repository, config, {
+  const db = createDatabase(pool);
+  const repository = new DocumentRepository(db);
+  const service = createDocumentService(db, config, {
     revokeDocumentSessions: () => undefined,
   });
   let ownerLockClient: PoolClient | undefined;

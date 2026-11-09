@@ -4,5 +4,5 @@ export {
   AuthoringOutputSchema,
   validateInput,
   compileProposal,
-} from "@zhishu/ai-plugins/writing";
-export type { AuthoringOutput } from "@zhishu/ai-plugins/writing";
+} from "@zhishu/ai-plugins/writing/compiler";
+export type { AuthoringOutput } from "@zhishu/ai-plugins/writing/compiler";

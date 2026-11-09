@@ -14,8 +14,10 @@ import {
   type DocumentContent,
 } from "@zhishu/document-contracts";
 import { exportDocumentMarkdown } from "@zhishu/editor-core/conversions";
-import { DocumentRepository } from "../modules/documents/document.repository.js";
-import { createCollaborationStateFromContent } from "../modules/documents/document.service.js";
+import {
+  DocumentProjectionRepository,
+  createCollaborationStateFromContent,
+} from "../modules/documents/index.js";
 import type { Principal } from "../modules/identity/identity.types.js";
 import type { z } from "zod";
 import { sameDocumentContent } from "../modules/collaboration/structure-operations.js";
@@ -165,16 +167,31 @@ const create = async (
   workspaceId = "ws_default",
   catalogId: string | null = null,
   identity = "owner",
-) =>
-  (
+) => {
+  const document = (
     await call("POST", "/api/documents/", { title, workspaceId, catalogId }, 201, identity)
   ).json<Document>();
+  const access = (
+    await call(
+      "PATCH",
+      `/api/documents/${document.id}/access`,
+      { accessMode: "restricted", metadataRevision: document.metadataRevision },
+      200,
+      identity,
+    )
+  ).json<{ metadataRevision: number }>();
+  return {
+    ...document,
+    accessMode: "restricted" as const,
+    metadataRevision: access.metadataRevision,
+  };
+};
 // Collaboration is the only write path now; the smoke test drives it by seeding the
 // same durable update + projection snapshot the live editor produces on save.
 const seedStory = async (document: Document, content: unknown) => {
   const updateBytes = createCollaborationStateFromContent(content as DocumentContent);
   const updateHash = createHash("sha256").update(updateBytes).digest("hex");
-  const repository = new DocumentRepository(app.db);
+  const repository = new DocumentProjectionRepository(app.db);
   await app.db.insert(collaborationUpdates).values({
     documentId: document.id,
     generationId: document.generationId,
@@ -274,6 +291,15 @@ try {
   assert.equal(workspace.rootCatalogId, `cat_root_${workspace.id}`);
   assert.equal(workspace.icon, "🧪");
   assert.equal(workspace.description, "冒烟测试空间");
+
+  // ACL/organization regression fixtures use explicit membership and restricted documents;
+  // automatic inheritance and revocation are covered by community-smoke.ts.
+  for (const id of ["owner", "reader", "outsider"]) {
+    await call("GET", "/api/auth/me", undefined, 200, id);
+    await app.db.execute(
+      sql`insert into resource_acl (tenant_id, workspace_id, identity_id, created_by, role) values (${tenantId}, 'ws_default', ${id}, ${id}, 'editor') on conflict do nothing`,
+    );
+  }
 
   // Catalog CRUD with idempotent create + replay divergence detection.
   const catalogKey = `catalog-create-${randomUUID()}`;
@@ -1019,6 +1045,7 @@ try {
     status = 200,
   ) => call("PUT", `${memberUrl}/${id}`, { role, displayName: `${id} 成员` }, status, actor);
   principals.set("admin", principal("admin"));
+  await call("GET", "/api/auth/me", undefined, 200, "admin");
   await call("PATCH", workspaceUrl, { name: "越权修改" }, 404, "outsider");
   await setMember("reader", "editor", "outsider", 404);
   await setMember("owner", "viewer", "owner", 400);
@@ -1097,7 +1124,7 @@ try {
   const removedReader = (await call("GET", "/api/knowledge/workspaces", undefined, 200, "reader"))
     .json<ManagedWorkspace[]>()
     .find((space) => space.id === managed.id);
-  assert.equal(removedReader?.canOrganize, false);
+  assert.equal(removedReader, undefined);
   await call("GET", `/api/documents/${privateDocument.id}`, undefined, 200, "reader");
   await call("DELETE", `/api/documents/${privateDocument.id}/acl/reader`, undefined, 204);
   await call("GET", `/api/documents/${privateDocument.id}`, undefined, 404, "reader");
@@ -1190,15 +1217,12 @@ try {
 
   // Membership cannot substitute for explicit ownership, even if an old/imported row exists.
   await app.db.execute(
-    sql`insert into workspace_members (tenant_id, workspace_id, identity_id, display_name, role) values (${tenantId}, ${personal.id}, 'reader', '读者', 'admin')`,
+    sql`insert into resource_acl (tenant_id, workspace_id, identity_id, created_by, role) values (${tenantId}, ${personal.id}, 'reader', '读者', 'admin')`,
   );
   const otherPersonal = (await call("GET", "/api/knowledge/workspaces", undefined, 200, "reader"))
     .json<ManagedWorkspace[]>()
     .find((row) => row.id === personal.id);
-  assert.equal(otherPersonal?.role, "viewer");
-  assert.equal(otherPersonal?.canManage, false);
-  assert.equal(otherPersonal?.canOrganize, false);
-  assert.equal(otherPersonal?.memberCount, 1);
+  assert.equal(otherPersonal, undefined);
   await call("PATCH", personalUrl, { name: "伪管理员修改" }, 404, "reader");
   await createCatalog(personal.id, { name: "伪管理员目录" }, 404, "reader");
   const personalRoster = (await call("GET", `${personalUrl}/members`)).json<

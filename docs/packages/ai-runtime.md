@@ -2,6 +2,8 @@
 
 > 2026-10-24 实施更新：新建 authoring 任务已由 app-server 转入 DSH；提案编译器迁至 ai-plugins/writing，原入口重导出兼容。RAG createChatRuntime 和旧任务 LangChain/LangGraph/checkpoint 仍实际保留，未做跨引擎转换。见 [实施记录](ai-chat-implementation.md)。
 
+> 清理更新：应用通过公开 `./chat`、`./policy` 子路径消费当前能力，仅在恢复历史写作时动态加载 `./legacy-authoring`；DSH 缺失直接失败，禁止回退或创建新的 LangChain 写作任务。AuthoringInput 复用 WritingInput，不再平行声明；新写作服务不依赖旧 RuntimeOptions。
+
 > 2026-10-24 迁移范围：只有协作 AI 写作 Chat 向官方 Cordis/DSH 迁移，规范见 [dsh-agent](dsh-agent.md)与[写作总方案](ai-chat-architecture.md)。RAG Chat 继续使用 LangChain，所需模型、问答、历史与 checkpoint 保持独立，不因写作迁移退出。本文既有实现记录继续用于历史写作兼容和实际仍被消费的能力，不能将整个 LangChain 路线视为旧引擎。
 
 2026-10-22 已实现 `rewrite-document` 整篇提案编译。显式 `document` 目标捕获全文，在最多 256 个原顶层块与输出块之间按位置保留重叠 Block ID，删除旧尾部或追加新尾部；全部原块带存在性前置条件，请求固定整文 Hash 与版本。运行时只返回提案，应用强制替换意图手动确认，正文预览由编辑器包负责。已覆盖生成不改变输入、增长/缩短/等长结果、ID 保留、目标篡改与遗漏删除拒绝。

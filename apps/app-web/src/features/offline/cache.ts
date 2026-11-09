@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { z } from 'zod';
-import type { MockLogin200User } from '@/api/generated/models';
+import type { MockLogin200User } from '@/api/generated/app-api.schemas';
 import { CURRENT_DOCUMENT_SCHEMA_VERSION } from '@zhishu/document-contracts';
 import {
   deleteRecord,
@@ -131,6 +131,23 @@ export async function cachedResponse(
   path: string,
 ): Promise<{ found: true; value: unknown } | { found: false }> {
   if (state.identity !== identity) return { found: false };
+  const cachedDocumentId = /^\/api\/documents\/(doc_[A-Za-z0-9_-]+)/.exec(path)?.[1];
+  if (cachedDocumentId) {
+    const allowed = await readRecord(
+      identity,
+      'authorization',
+      `document:${cachedDocumentId}`,
+    ).catch(() => null);
+    if (allowed !== true) return { found: false };
+  }
+  const policy = (await readRecord(identity, 'authorization', 'state').catch(() => null)) as
+    { workspaceId: string; offlineCacheAllowed: boolean; nextExpiryAt?: string | null }[] | null;
+  if (
+    policy?.some(
+      (scope) => scope.nextExpiryAt && new Date(scope.nextExpiryAt).getTime() <= Date.now(),
+    )
+  )
+    return { found: false };
   const value = await readRecord(identity, 'response', path).catch(() => null);
   if (
     !value ||
@@ -138,11 +155,55 @@ export async function cachedResponse(
     (value as { schema?: unknown }).schema !== CURRENT_DOCUMENT_SCHEMA_VERSION
   )
     return { found: false };
+  const data = (value as { data?: { workspaceId?: string; offlineCacheAllowed?: boolean } }).data;
+  if (
+    data?.offlineCacheAllowed === false ||
+    (data?.workspaceId &&
+      policy?.some((scope) => scope.workspaceId === data.workspaceId && !scope.offlineCacheAllowed))
+  )
+    return { found: false };
   notify({ cached: true });
   return { found: true, value: (value as { data: unknown }).data };
 }
-export async function cacheResponse(identity: string, path: string, data: unknown) {
+let authorizationEpoch = 0;
+let cacheWrites: Promise<unknown> = Promise.resolve();
+export function authorizationCacheEpoch() {
+  return authorizationEpoch;
+}
+export function cacheResponse(
+  identity: string,
+  path: string,
+  data: unknown,
+  epoch = authorizationEpoch,
+) {
+  const pending = cacheWrites.then(() =>
+    epoch === authorizationEpoch ? storeResponse(identity, path, data) : undefined,
+  );
+  cacheWrites = pending.catch(() => undefined);
+  return pending;
+}
+async function storeResponse(identity: string, path: string, data: unknown) {
   if (state.identity !== identity || !state.verified) return;
+  const documentId = /^\/api\/documents\/(doc_[A-Za-z0-9_-]+)/.exec(path)?.[1];
+  const record = data as {
+    offlineCacheAllowed?: boolean;
+    items?: { offlineCacheAllowed?: boolean }[];
+  };
+  if (record?.offlineCacheAllowed !== undefined && documentId) {
+    documentCachePolicies.set(`${identity}:${documentId}`, record.offlineCacheAllowed);
+    await writeRecord(
+      identity,
+      'authorization',
+      `document:${documentId}`,
+      record.offlineCacheAllowed,
+    );
+  }
+  if (documentId && documentCachePolicies.get(`${identity}:${documentId}`) !== true) {
+    await deleteRecord(identity, 'response', path).catch(() => undefined);
+    return;
+  }
+  if (Array.isArray(record?.items))
+    data = { ...record, items: record.items.filter((item) => item.offlineCacheAllowed !== false) };
   await writeRecord(identity, 'response', path, {
     schema: CURRENT_DOCUMENT_SCHEMA_VERSION,
     data,
@@ -156,6 +217,39 @@ export async function cacheResponse(identity: string, path: string, data: unknow
     await deleteRecords(identity, (entry) => stale.some((item) => item.key === entry.key)).catch(
       () => undefined,
     );
+}
+const documentCachePolicies = new Map<string, boolean>();
+
+export function synchronizeAuthorizationCache(
+  identity: string,
+  scopes: { workspaceId: string; revision: number; offlineCacheAllowed: boolean }[],
+) {
+  const pending = cacheWrites.then(() => applyAuthorizationState(identity, scopes));
+  cacheWrites = pending.catch(() => undefined);
+  return pending;
+}
+async function applyAuthorizationState(
+  identity: string,
+  scopes: { workspaceId: string; revision: number; offlineCacheAllowed: boolean }[],
+) {
+  if (state.identity !== identity) return false;
+  const previous = await readRecord(identity, 'authorization', 'state').catch(() => null);
+  const changed = JSON.stringify(previous) !== JSON.stringify(scopes);
+  if (changed) {
+    authorizationEpoch++;
+    documentCachePolicies.clear();
+    await deleteRecords(
+      identity,
+      (entry) =>
+        entry.kind === 'response' ||
+        (entry.kind === 'authorization' && entry.id.startsWith('document:')) ||
+        (entry.kind === 'collaboration' &&
+          isCollaborationCheckpoint(entry.value) &&
+          !entry.value.pendingUpdates.length),
+    );
+  }
+  await writeRecord(identity, 'authorization', 'state', scopes);
+  return changed;
 }
 export async function evictUnauthorizedResponses(identity: string, path: string, all: boolean) {
   const id = /^\/api\/documents\/(doc_[A-Za-z0-9_-]+)/.exec(path)?.[1];

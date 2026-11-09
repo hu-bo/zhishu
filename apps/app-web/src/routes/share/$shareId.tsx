@@ -7,8 +7,8 @@ import {
   getPublicShareAssetAccess,
   getPublicShareContent,
   joinShare,
-} from '@/api/generated/app-api';
-import type { GetPublicShare200 } from '@/api/generated/models';
+} from '@/api/generated/public';
+import type { GetPublicShare200 } from '@/api/generated/app-api.schemas';
 import { ApiError, errorMessage } from '@/api/api-error';
 import { getAccessToken, subscribeAccessToken } from '@/api/transport';
 import { Button, buttonVariants } from '@/components/ui/button';
@@ -75,13 +75,27 @@ function PublicSharePage() {
   useTheme();
   const { shareId } = Route.useParams();
   const navigate = useNavigate();
+  const [now, setNow] = useState(Date.now);
 
   const detail = useQuery({
     queryKey: ['public-share', shareId],
     queryFn: ({ signal }) => getPublicShare(shareId, { signal }),
     staleTime: 30_000,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: 'always',
   });
-  const active = detail.data?.state === 'active' ? detail.data : null;
+  const expiresAt = detail.data?.expiresAt;
+  useEffect(() => {
+    if (!expiresAt) return;
+    const remaining = new Date(expiresAt).getTime() - Date.now();
+    const timer = window.setTimeout(
+      () => setNow(Date.now()),
+      Math.max(0, Math.min(remaining + 10, 2_147_483_647)),
+    );
+    return () => window.clearTimeout(timer);
+  }, [expiresAt]);
+  const locallyExpired = !!expiresAt && new Date(expiresAt).getTime() <= now;
+  const active = detail.data?.state === 'active' && !locallyExpired ? detail.data : null;
   const content = useQuery({
     queryKey: ['public-share-content', shareId],
     queryFn: ({ signal }) => getPublicShareContent(shareId, { signal }),
@@ -155,7 +169,12 @@ function PublicSharePage() {
     );
   }
 
-  if (!active) return <InactiveShareCard share={detail.data} />;
+  if (!active)
+    return (
+      <InactiveShareCard
+        share={locallyExpired ? { ...detail.data, state: 'expired' } : detail.data}
+      />
+    );
 
   const document = active.document;
   const body = content.data?.content;
@@ -215,6 +234,11 @@ function PublicSharePage() {
               <p className="mt-1 text-xs text-muted-foreground">
                 更新于 {formatShareDate(document?.updatedAt)} · 链接有效期至{' '}
                 {formatShareDate(active.expiresAt)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {active.kind === 'access'
+                  ? '限时访问：链接过期或撤销后，本链接授予的权限随即失效。'
+                  : '长期邀请：接受后的权限独立保留，需由管理员在成员权限中移除。'}
               </p>
             </div>
           </div>

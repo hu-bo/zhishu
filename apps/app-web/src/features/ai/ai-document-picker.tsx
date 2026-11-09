@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Check, FileText, LoaderCircle, Search } from 'lucide-react';
-import { listDocuments } from '@/api/generated/app-api';
+import { listDocuments } from '@/api/generated/documents';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {

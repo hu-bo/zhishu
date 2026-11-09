@@ -8,9 +8,10 @@ export function useChatContext(
   identity: string | null | undefined,
   scope: string,
   sourceDocumentId?: string,
+  defaultChatKind?: ChatKind,
 ) {
   const [sourceIds, setSourceIds] = useState<string[]>(sourceDocumentId ? [sourceDocumentId] : []);
-  const [chatKind, setChatKind] = useState<ChatKind>('writing');
+  const [chatKind, setChatKind] = useState<ChatKind>(defaultChatKind ?? 'writing');
   const contextKey = JSON.stringify([identity, scope]);
   const [hydratedKey, setHydratedKey] = useState<string | null>(null);
   const hydrated = hydratedKey === contextKey;
@@ -25,7 +26,7 @@ export function useChatContext(
       .then((value) => {
         if (!active) return;
         setSourceIds(sourceDocumentId ? [sourceDocumentId] : []);
-        setChatKind('writing');
+        setChatKind(defaultChatKind ?? 'writing');
         if (!value || typeof value !== 'object') return;
         if (
           'sourceIds' in value &&
@@ -36,7 +37,11 @@ export function useChatContext(
           )
         )
           setSourceIds([...new Set(value.sourceIds as string[])]);
-        if ('chatKind' in value && ['writing', 'rag', 'proposal'].includes(String(value.chatKind)))
+        if (
+          !defaultChatKind &&
+          'chatKind' in value &&
+          ['writing', 'rag', 'proposal'].includes(String(value.chatKind))
+        )
           setChatKind(value.chatKind as ChatKind);
       })
       .catch(() => undefined)
@@ -46,7 +51,7 @@ export function useChatContext(
     return () => {
       active = false;
     };
-  }, [identity, scope, contextKey, sourceDocumentId]);
+  }, [identity, scope, contextKey, sourceDocumentId, defaultChatKind]);
   useEffect(() => {
     if (!identity || !hydrated) return;
     void writeRecord(identity, 'chat-context', scope, { sourceIds, chatKind }).catch(

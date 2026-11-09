@@ -3,14 +3,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronRight, LoaderCircle } from 'lucide-react';
 import {
   createCatalog,
-  createDocument,
   deleteCatalog,
   getCatalogDeletionImpact,
   listCatalogChildren,
   moveCatalog,
   moveKnowledgeDocument,
+  previewKnowledgeTransfer,
   updateCatalog,
-} from '@/api/generated/app-api';
+} from '@/api/generated/knowledge';
+import { createDocument } from '@/api/generated/documents';
 import { errorMessage } from '@/api/api-error';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -571,33 +572,89 @@ export function MoveCatalogDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { workspaces } = useKnowledgeWorkspace();
+  const [targetWorkspaceId, setTargetWorkspaceId] = useState(workspaceId);
+  const selectedWorkspace = workspaces.find((item) => item.id === targetWorkspaceId);
+  const [preview, setPreview] = useState<Awaited<
+    ReturnType<typeof previewKnowledgeTransfer>
+  > | null>(null);
   const [target, setTarget] = useState<string | null>(null);
   const { busy, error, run } = useSubmit();
   return (
     <FormDialog
       title={`移动目录「${catalog.name}」`}
-      description="选择新的父级目录；其子目录与文档将一并移动。"
-      submitLabel="移动到此处"
+      description="子目录与文档将一并移动。跨空间移动前请确认权限影响。"
+      submitLabel={
+        targetWorkspaceId !== workspaceId && !preview ? '预览权限影响' : '确认移动到此处'
+      }
       busy={busy}
       error={error}
       onCancel={onClose}
       onSubmit={() =>
         void run(async () => {
           if (!target) throw new Error('请选择目标目录。');
-          await moveCatalog(catalog.id, { parentId: target, beforeId: null });
-          invalidateSpaceData(queryClient, identityKey, workspaceId);
+          if (targetWorkspaceId !== workspaceId && !preview) {
+            setPreview(
+              await previewKnowledgeTransfer({
+                kind: 'catalog',
+                resourceId: catalog.id,
+                targetCatalogId: target,
+              }),
+            );
+            return;
+          }
+          await moveCatalog(catalog.id, {
+            parentId: target,
+            beforeId: null,
+            authorizationPreview: preview?.token,
+          }).catch((cause) => {
+            setPreview(null);
+            throw cause;
+          });
+          invalidateSpaceData(queryClient, identityKey);
           onClose();
         })
       }
     >
+      <label className="block space-y-2 text-sm">
+        目标空间
+        <select
+          aria-label="目录目标空间"
+          className="h-9 w-full rounded-lg border bg-background px-3"
+          value={targetWorkspaceId}
+          disabled={busy}
+          onChange={(e) => {
+            setTargetWorkspaceId(e.target.value);
+            setTarget(null);
+            setPreview(null);
+          }}
+        >
+          {workspaces
+            .filter((item) => item.canOrganize)
+            .map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+        </select>
+      </label>
       <CatalogPicker
-        workspaceId={workspaceId}
-        rootCatalogId={rootCatalogId}
+        workspaceId={targetWorkspaceId}
+        rootCatalogId={selectedWorkspace?.rootCatalogId ?? rootCatalogId}
         identityKey={identityKey}
         excludeCatalogId={catalog.id}
         value={target}
-        onChange={setTarget}
+        onChange={(value) => {
+          setTarget(value);
+          setPreview(null);
+        }}
       />
+      {preview && (
+        <p role="status" className="rounded-xl border p-3 text-xs leading-5">
+          将移动 {preview.documentCount} 篇文档，保留 {preview.preservedDirectSubjectCount}{' '}
+          位成员的独立授权；继承范围按目标空间和各文档设置变化。原公开链接将撤销，已接受的长期邀请保留。请核对后再次确认。
+        </p>
+      )}
     </FormDialog>
   );
 }
@@ -620,23 +677,42 @@ export function MoveDocumentDialog({
   const [targetWorkspaceId, setTargetWorkspaceId] = useState(workspaceId);
   const selectedWorkspace = workspaces.find((item) => item.id === targetWorkspaceId);
   const [target, setTarget] = useState<string | null>(null);
+  const [preview, setPreview] = useState<Awaited<
+    ReturnType<typeof previewKnowledgeTransfer>
+  > | null>(null);
   const { busy, error, run } = useSubmit();
   return (
     <FormDialog
       title={`移动文档「${document.title}」`}
-      description="选择目标空间和目录；正文、版本及文档授权随文档保留。"
-      submitLabel="移动到此处"
+      description="选择目标空间和目录。跨空间移动前会显示权限影响。"
+      submitLabel={
+        targetWorkspaceId !== workspaceId && !preview ? '预览权限影响' : '确认移动到此处'
+      }
       busy={busy}
       error={error}
       onCancel={onClose}
       onSubmit={() =>
         void run(async () => {
           if (!target) throw new Error('请选择目标目录。');
+          if (targetWorkspaceId !== workspaceId && !preview) {
+            setPreview(
+              await previewKnowledgeTransfer({
+                kind: 'document',
+                resourceId: document.id,
+                targetCatalogId: target,
+              }),
+            );
+            return;
+          }
           await moveKnowledgeDocument(document.id, {
             workspaceId: targetWorkspaceId,
             catalogId: target,
             beforeId: null,
             metadataRevision: document.metadataRevision,
+            authorizationPreview: preview?.token,
+          }).catch((cause) => {
+            setPreview(null);
+            throw cause;
           });
           invalidateSpaceData(queryClient, identityKey);
           void queryClient.invalidateQueries({ queryKey: ['document', document.id] });
@@ -652,6 +728,7 @@ export function MoveDocumentDialog({
             if (value) {
               setTargetWorkspaceId(value);
               setTarget(null);
+              setPreview(null);
             }
           }}
           items={Object.fromEntries(
@@ -678,8 +755,26 @@ export function MoveDocumentDialog({
         rootCatalogId={selectedWorkspace?.rootCatalogId ?? rootCatalogId}
         identityKey={identityKey}
         value={target}
-        onChange={setTarget}
+        onChange={(value) => {
+          setTarget(value);
+          setPreview(null);
+        }}
       />
+      {preview && (
+        <div
+          role="status"
+          className="space-y-2 rounded-xl border bg-secondary/40 p-3 text-xs leading-5"
+        >
+          <p>
+            将移动 {preview.documentCount} 篇文档，保留 {preview.preservedDirectSubjectCount}{' '}
+            位成员的独立授权。
+          </p>
+          <p>
+            目标空间按文档当前继承设置获得访问权。原公开链接将撤销，已接受的长期邀请保留；限时来源随链接失效。
+          </p>
+          <p>原空间的成员仍可能通过独立授权访问文档。请核对后再次确认移动。</p>
+        </div>
+      )}
     </FormDialog>
   );
 }

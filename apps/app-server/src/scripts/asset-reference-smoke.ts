@@ -13,7 +13,7 @@ import {
 } from "../../database/schema/index.js";
 import { buildApp } from "../app.js";
 import { loadConfig } from "../config.js";
-import { DocumentRepository } from "../modules/documents/document.repository.js";
+import { DocumentRepository } from "../modules/documents/index.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 assert.ok(databaseUrl, "DATABASE_URL must target the disposable project PostgreSQL database");

@@ -23,6 +23,14 @@
     "./image": {
       "types": "./dist/image.d.ts",
       "import": "./dist/image.js"
+    },
+    "./writing/compiler": {
+      "types": "./dist/writing/compiler.d.ts",
+      "import": "./dist/writing/compiler.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "import": "./dist/errors.js"
     }
   },
   "files": [

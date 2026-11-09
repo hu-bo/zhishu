@@ -42,6 +42,7 @@ export const AuthoringRequestSchema = Type.Object(
     intent: Type.Union(
       (
         [
+          "auto",
           "create",
           "continue",
           "rewrite",
@@ -294,6 +295,10 @@ export type SourceCitation = Static<typeof SourceCitationSchema>;
 export type EvidenceItem = Static<typeof EvidenceItemSchema>;
 export type EvidenceBundle = Static<typeof EvidenceBundleSchema>;
 export type AuthoringProposal = Static<typeof AuthoringProposalSchema>;
+export const isReplacementProposal = (request: AuthoringRequest, proposal: AuthoringProposal) =>
+  request.intent === "auto"
+    ? proposal.target.kind === "document" || proposal.target.kind === "blocks"
+    : isReplacementIntent(request.intent);
 export type AnswerResult = Static<typeof AnswerResultSchema>;
 export type AiTaskEvent = Static<typeof AiTaskEventSchema>;
 export type ChatResult = Static<typeof ChatResultSchema>;

@@ -1,5 +1,7 @@
+import { CURRENT_DOCUMENT_SCHEMA_VERSION } from "@zhishu/document-contracts";
 import "../environment.js";
 import assert from "node:assert/strict";
+import type { LightMyRequestResponse } from "fastify";
 import { createHash, randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -32,7 +34,7 @@ import { createDatabase, createPool } from "../../database/index.js";
 import { buildApp } from "../app.js";
 import { loadConfig } from "../config.js";
 import { createCollaborationServer } from "../modules/collaboration/hocuspocus.server.js";
-import { DocumentRepository } from "../modules/documents/document.repository.js";
+import { DocumentHistoryRepository, AiDocumentAccess } from "../modules/documents/index.js";
 import { serverRoot } from "../paths.js";
 import type { AiTaskView } from "../modules/ai/ai.schema.js";
 import { mockUser } from "../modules/identity/mock-user.js";
@@ -40,6 +42,8 @@ import { startImageProviderFixture } from "./image-provider-fixture.js";
 import { spawn } from "node:child_process";
 import type { ChatSnapshot } from "@zhishu/chat-contracts";
 import { AssetObjectStorage } from "../modules/assets/asset-storage.js";
+import { threadId } from "../modules/ai/ai.repository.js";
+import { WritingService } from "../modules/writing-chat/writing.service.js";
 
 function deferred() {
   let resolve!: () => void;
@@ -213,7 +217,8 @@ class ScriptedDshModel extends LlmAdapter {
       yield { type: "finish", reason: { kind: "tool-calls" } };
       return;
     }
-    if (!options.tools?.some((tool) => tool.name === "authoring_result")) {
+    const auto = options.tools?.some((tool) => tool.name === "draft_document");
+    if (!auto && !options.tools?.some((tool) => tool.name === "authoring_result")) {
       const turns = options.messages.filter((m) => m.role === "user" && m.source?.kind === "user");
       const text = `第 ${turns.length} 轮写作讨论：${
         turns
@@ -222,18 +227,40 @@ class ScriptedDshModel extends LlmAdapter {
           .map((b) => b.text)
           .join("") ?? ""
       }`;
-      yield { type: "text-delta", index: 0, text };
+      yield { type: "block-start", index: 0, blockType: "text" };
+      yield { type: "text-delta", index: 0, text: text.slice(0, 5) };
+      yield { type: "reasoning-delta", index: 1, text: "PRIVATE_FIXTURE_REASONING" };
+      yield { type: "text-delta", index: 0, text: text.slice(5) };
       yield { type: "block-end", index: 0, block: { type: "text", text } };
       yield { type: "finish", reason: { kind: "stop" } };
       return;
     }
-    const name =
+    let name =
       call.name === "searchKnowledge"
         ? "search_sources"
         : call.name === "readSource"
           ? "read_source"
           : call.name;
-    const args = JSON.stringify(call.args),
+    let payload: unknown = call.args;
+    if (auto && call.name === "authoring_result") {
+      const instruction = messages
+        .map((message) => {
+          try {
+            return JSON.parse(String(message.content)) as { instruction?: string };
+          } catch {
+            return {};
+          }
+        })
+        .find((message) => message.instruction)?.instruction;
+      name = instruction?.includes("整篇改写")
+        ? "rewrite_document"
+        : instruction?.includes("翻译第一块")
+          ? "translate_paragraph"
+          : "draft_document";
+      if (name === "translate_paragraph" && "blocks" in call.args)
+        payload = { ...call.args, blockNumber: 1, blocks: call.args.blocks?.slice(0, 1) };
+    }
+    const args = JSON.stringify(payload),
       id = ToolCallId(call.id);
     yield { type: "block-start", index: 0, blockType: "tool-call" };
     yield { type: "tool-call-delta", index: 0, id, name, argumentsDelta: args };
@@ -242,9 +269,21 @@ class ScriptedDshModel extends LlmAdapter {
   }
 }
 
-assert.ok(process.env.DATABASE_URL, "Configure the project .env first");
-const admin = createPool({ connectionString: process.env.DATABASE_URL, max: 2 });
-const testUrl = new URL(process.env.AI_TEST_DATABASE_URL ?? process.env.DATABASE_URL);
+const smokeArguments = process.argv.slice(2).filter((argument) => argument !== "--");
+if (smokeArguments.includes("--help")) {
+  console.log("AI_TEST_ADMIN_DATABASE_URL=<disposable PostgreSQL URL> pnpm smoke:ai [--serve]");
+  process.exit(0);
+}
+assert.ok(
+  smokeArguments.every((argument) => argument === "--serve"),
+  "Unknown smoke argument",
+);
+assert.ok(
+  process.env.AI_TEST_ADMIN_DATABASE_URL,
+  "Explicit AI_TEST_ADMIN_DATABASE_URL is required; project DATABASE_URL is never used for this test",
+);
+const admin = createPool({ connectionString: process.env.AI_TEST_ADMIN_DATABASE_URL, max: 2 });
+const testUrl = new URL(process.env.AI_TEST_DATABASE_URL ?? process.env.AI_TEST_ADMIN_DATABASE_URL);
 const databaseName = process.env.AI_TEST_DATABASE_URL
   ? testUrl.pathname.slice(1)
   : `zhishu_ai_test_${randomUUID().replaceAll("-", "")}`;
@@ -283,6 +322,8 @@ try {
     COLLABORATION_ALLOWED_ORIGINS: "http://127.0.0.1:5187,http://127.0.0.1:5173",
     AI_MODEL: undefined,
     AI_API_KEY: undefined,
+    AI_MAX_CONCURRENT: "4",
+    DATABASE_POOL_MAX: "10",
     AI_IMAGE_MODEL: imageFixture ? "fixture-image" : undefined,
     AI_IMAGE_API_KEY: imageFixture ? "image-fixture-key" : undefined,
     AI_IMAGE_BASE_URL: imageFixture?.baseURL,
@@ -442,6 +483,11 @@ try {
     sourceDocumentIds: [],
   };
   const beforeChat = await context();
+  assert.equal(
+    (await call("GET", "/api/ai/capabilities")).json<{ supportsTokenPreview: boolean }>()
+      .supportsTokenPreview,
+    false,
+  );
   const chatResponse = await call("POST", "/api/ai/chat", chat);
   assert.equal(events(chatResponse.body, chat.request.requestId, 2).at(-1)?.type, "completed");
   assert.equal((await context()).snapshot.durableSeq, beforeChat.snapshot.durableSeq);
@@ -491,6 +537,86 @@ try {
     "PASS Manual: preview is separate, atomic accept, durable receipt, repeated accepts write once.",
   );
 
+  await call(
+    "POST",
+    "/api/ai/authoring",
+    {
+      ...(await authoring()),
+      previousRequestIds: [chat.request.requestId],
+    },
+    400,
+  );
+  await call(
+    "POST",
+    "/api/ai/chat",
+    {
+      ...chat,
+      request: {
+        ...chat.request,
+        requestId: randomUUID(),
+        previousRequestIds: [manual.request.requestId],
+      },
+    },
+    400,
+  );
+
+  // Reproduce a pre-migration native checkpoint whose product terminal commit was lost.
+  const legacyRequest = await authoring();
+  await call("POST", "/api/ai/authoring", legacyRequest);
+  const [legacyRun] = await app.db
+    .select()
+    .from(aiRuns)
+    .where(eq(aiRuns.requestId, legacyRequest.request.requestId));
+  assert.ok(legacyRun?.input.snapshot);
+  assert.equal(legacyRun.input.engine, "dsh-v1");
+  const { createAuthoringRuntime } = await import("@zhishu/ai-runtime/legacy-authoring");
+  const originalInput = legacyRun.input;
+  for await (const event of createAuthoringRuntime({
+    model,
+    checkpointer: saver,
+    modelVersion: originalInput.modelVersion,
+    limits: originalInput.limits,
+    countTokens: (text) => Buffer.byteLength(text),
+  }).generate(
+    {
+      threadId: threadId(legacyRun),
+      request: legacyRequest.request,
+      snapshot: originalInput.snapshot!,
+      structureRevision: legacyRequest.request.baseStructureRevision,
+      evidence: originalInput.evidence,
+      history: originalInput.history,
+      // Frozen v1 prompt is part of the old checkpoint fingerprint.
+      prompt: {
+        id: "zhishu-writing",
+        version: "1",
+        systemInstruction: "请用清楚、自然的中文帮助用户思考和写作。资料不足时如实说明。",
+      },
+    },
+    AbortSignal.timeout(10000),
+  ))
+    assert.notEqual(event.type, "failed", JSON.stringify(event));
+  const oldInput = { ...originalInput };
+  delete oldInput.engine;
+  await app.db
+    .update(aiRuns)
+    .set({ input: oldInput, status: "interrupted", result: null })
+    .where(eq(aiRuns.requestId, legacyRun.requestId));
+  const callsBeforeLegacyResume = model.calls;
+  await call("POST", `/api/ai/requests/${legacyRun.requestId}/resume`, undefined, 202);
+  let recoveredLegacy: AiTaskView | undefined;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    recoveredLegacy = (
+      await call("GET", `/api/ai/requests/${legacyRun.requestId}`)
+    ).json<AiTaskView>();
+    if (recoveredLegacy.status !== "running") break;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.equal(recoveredLegacy?.status, "completed");
+  assert.equal(model.calls, callsBeforeLegacyResume);
+  console.log(
+    "PASS Migration boundaries: new authoring uses DSH, cross-business history is rejected, old LangGraph checkpoint resumes without a new model call.",
+  );
+
   const teamRequest = await authoring(source.id);
   await call("POST", "/api/ai/authoring", teamRequest, 403);
   const readerRequest = await authoring();
@@ -507,7 +633,7 @@ try {
   const pending = call("POST", "/api/ai/authoring", conflict);
   await gate.started.promise;
   const current = await context(),
-    repository = new DocumentRepository(app.db),
+    repository = new DocumentHistoryRepository(app.db),
     scratch = new Y.Doc();
   await repository.replayYjsState(
     {
@@ -533,7 +659,7 @@ try {
     await call(
       "POST",
       `/api/documents/${doc.id}/collaboration-session`,
-      { schemaVersion: 5, extensions: [] },
+      { schemaVersion: CURRENT_DOCUMENT_SCHEMA_VERSION, extensions: [] },
       201,
     )
   ).json<{ documentName: string; token: string }>();
@@ -744,8 +870,8 @@ try {
   );
 
   const replacement = await authoring();
-  replacement.request.intent = "rewrite-document";
-  replacement.request.target = { kind: "document" };
+  replacement.request.intent = "auto";
+  replacement.request.instruction = "整篇改写当前文档";
   replacement.sourceDocumentIds = [doc.id];
   replacement.request.contextRef = "selected-documents";
   const initialReplacement = await context();
@@ -755,6 +881,7 @@ try {
     await call("GET", `/api/ai/requests/${replacement.request.requestId}`)
   ).json<AiTaskView>();
   assert.ok(task.result && "operationBatch" in task.result);
+  assert.equal(task.result.target.kind, "document");
   const changes = replacementChanges(task.result, initialReplacement.snapshot.content);
   assert.ok(changes.length >= 3);
   const staleReplacement = await authoring();
@@ -827,6 +954,42 @@ try {
     ),
   );
   await call("POST", endpoint, all);
+  assert.equal((await context()).snapshot.durableSeq, final.snapshot.durableSeq);
+  const translation = await authoring();
+  translation.request.intent = "auto";
+  translation.request.instruction = "翻译第一块";
+  await call("POST", "/api/ai/authoring", translation);
+  const translated = (
+    await call("GET", `/api/ai/requests/${translation.request.requestId}`)
+  ).json<AiTaskView>();
+  assert.ok(translated.result && "operationBatch" in translated.result);
+  assert.deepEqual(translated.result.target, {
+    kind: "blocks",
+    blocks: [
+      {
+        blockId: final.snapshot.content.content[0]!.attrs.blockId,
+        contentHash: hashContent(final.snapshot.content.content[0]),
+      },
+    ],
+  });
+  const draft = await authoring();
+  draft.request.intent = "auto";
+  await call("POST", "/api/ai/authoring", draft);
+  const drafted = (
+    await call("GET", `/api/ai/requests/${draft.request.requestId}`)
+  ).json<AiTaskView>();
+  assert.ok(drafted.result && "operationBatch" in drafted.result);
+  assert.equal(drafted.result.target.kind, "document-end");
+  await call(
+    "POST",
+    `/api/ai/requests/${draft.request.requestId}/review`,
+    {
+      decisionId: randomUUID(),
+      revision: 0,
+      action: "accept",
+    },
+    409,
+  );
   assert.equal((await context()).snapshot.durableSeq, final.snapshot.durableSeq);
   const stale = (
     await call("POST", `/api/ai/requests/${staleReplacement.request.requestId}/review`, {
@@ -923,8 +1086,30 @@ try {
     throw new Error(`Writing did not reach ${status}`);
   };
   await waitWriting("completed");
-  await new Promise((r) => setTimeout(r, 150));
+  // SSE polls the durable outbox every 250ms; completion can precede its next drain.
+  for (let i = 0; i < 40 && !writingFrames.join("").includes("assistant.delta"); i++)
+    await new Promise((r) => setTimeout(r, 25));
   assert.ok(writingFrames.join("").includes("assistant.delta"));
+  const deltas = writingFrames
+    .join("")
+    .split("\n\n")
+    .flatMap((frame) => {
+      const data = frame.split("\n").find((line) => line.startsWith("data: "));
+      if (!data) return [];
+      const value = JSON.parse(data.slice(6)) as {
+        type: string;
+        index: number;
+        revision: number;
+        text: string;
+      };
+      return value.type === "assistant.delta" ? [value] : [];
+    });
+  assert.deepEqual(
+    deltas.map((frame) => frame.index),
+    [0, 1],
+  );
+  assert.equal(deltas[0]?.revision, deltas[1]?.revision);
+  assert.ok(!writingFrames.join("").includes("PRIVATE_FIXTURE_REASONING"));
   streamStop.abort();
   await observe;
   const writingGate = model.holdNext();
@@ -947,6 +1132,22 @@ try {
   const writingReplay = await reconnectReader.read();
   assert.ok(new TextDecoder().decode(writingReplay.value).length > 0);
   await reconnectReader.cancel();
+  const subscriptions: { stop: AbortController; response: Response }[] = [];
+  try {
+    for (let i = 0; i < 9; i++) {
+      const stop = new AbortController();
+      const response = await fetch(`${address}${writingPath}/events?cursor=${twoTurns.cursor}`, {
+        headers: { authorization: `Bearer ${ownerToken}` },
+        signal: stop.signal,
+      });
+      subscriptions.push({ stop, response });
+    }
+    const overflow = await subscriptions.at(-1)!.response.text();
+    assert.ok(overflow.includes("resync-required"));
+    await call("GET", writingPath);
+  } finally {
+    for (const subscription of subscriptions) subscription.stop.abort();
+  }
   const writingCancelGate = model.holdNext();
   const cancelling = (
     await call(
@@ -1105,6 +1306,67 @@ try {
   console.log(
     "PASS PostgreSQL product commit failure: no success is published; after recovery the already durable native turn commits once without model redelivery.",
   );
+
+  let capacityLimited = false;
+  for (let i = 0; i < config.AI_MAX_CONCURRENT * 2 + 1; i++) {
+    const response: LightMyRequestResponse = await app.inject({
+      method: "POST",
+      url: "/api/writing/conversations",
+      headers: { authorization: `Bearer ${ownerToken}` },
+      payload: { sourceDocumentIds: [] },
+    });
+    if (response.statusCode === 429) {
+      capacityLimited = true;
+      break;
+    }
+    assert.equal(response.statusCode, 200, response.body);
+  }
+  assert.ok(
+    capacityLimited,
+    "Writer connection reservations must bound live handles before exhausting the pool",
+  );
+  await call("GET", "/api/writing/capabilities");
+  console.log(
+    "PASS Writer capacity: bounded handles reject excess sessions and keep API/authorization connections available.",
+  );
+
+  const writingProbe = new WritingService(
+    pool,
+    new AiDocumentAccess(app.db, collaboration!.owner),
+    config,
+    new ScriptedDshModel(new ScriptedModel({})),
+  );
+  try {
+    const initial = await writingProbe.create(principal, []);
+    const id = initial.conversation.id;
+    const subscription = writingProbe.observe(principal, id, "0", new AbortController().signal);
+    await subscription.next();
+    const handles = Reflect.get(writingProbe, "handles") as Map<string, { used: number }>;
+    const releaseIdle = () =>
+      Reflect.get(writingProbe, "releaseIdle").call(writingProbe) as Promise<void>;
+    handles.get(id)!.used = Date.now() - 65000;
+    await releaseIdle();
+    assert.ok(handles.has(id), "A live SSE subscription must retain its observed native handle");
+    await subscription.return(undefined);
+    await releaseIdle();
+    assert.ok(!handles.has(id), "The last subscriber leaving must permit idle reclamation");
+    await writingProbe.submit(principal, id, {
+      clientMessageId: randomUUID(),
+      idempotencyKey: randomUUID(),
+      text: "回收后继续写作",
+    });
+    let after = await writingProbe.snapshot(principal, id);
+    for (let i = 0; i < 100 && after.runs[0]?.status !== "completed"; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      after = await writingProbe.snapshot(principal, id);
+    }
+    assert.equal(after.runs[0]?.status, "completed");
+    console.log(
+      "PASS Idle lifecycle: active subscriptions survive idle maintenance; disconnected idle handles release and restore for the next turn.",
+    );
+  } finally {
+    await writingProbe.close();
+  }
 
   if (serve) {
     const canvas = (

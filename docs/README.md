@@ -1,14 +1,16 @@
 # 知书项目文档地图
 
-状态：设计规划，Chat 业务边界于 2026-10-24 更新。本文组织产品范围与设计责任，不表示功能已经实现。
+状态：设计规划，统一 Chat、skills 与零新增表目标于 2026-11-09 更新。本文组织产品范围与设计责任，当前源码及历史验收分别记录实际完成范围。
 
 项目先交付可嵌入、可独立使用的文档编辑与协同产品，再组合知识库、AI 和企业业务能力。文档采用“一个 package 一份主文档、一个 app 一份主文档”；本页负责导航、跨包约束和交付顺序。[原始需求](resreach.md)作为需求输入保留，原先按四个系统视角输出的方式由此文档地图替代。
 
 应用界面的视觉、控件和响应式约定见[知书界面设计规范](design-system.md)。
 
-2026-10-24 明确两类 Chat：**协作 AI 写作 Chat 使用 Server 进程内 DSH Session/Agent + HTTP/SSE；RAG Chat 继续使用 LangChain。** 两者共用 [chat-ui](packages/chat-ui.md)基础组件，app-web 分别封装 WritingChat 与 RagChat，各自维护协议、会话和业务状态，见[业务组件库](apps/app-web.md#ai-chat-业务组件库)。
+2026-11-09 的应用目标为统一 Chat 会话与 Agent 编排，组合写作、RAG 和范围选择 skills，并通过既有表重命名与结构调整实现零新增表。DSH 承担主会话编排，LangChain 检索能力封装在 RAG skill 内，ai_runs 统一执行事实，通用 shares 与 resource_acl 承载对外渠道及空间绑定。
 
-当前 [协作 AI 写作与 DSH 方案](packages/ai-chat-architecture.md)以写作 AI 为规划主体，基于官方 Cordis/DSH，再接写作、调研和图片插件；RAG Chat 不迁入 DSH，LangChain 问答路线持续使用。旧写作运行时、checkpoint 与 v1/v2 保留为兼容依据，不能据此删除 RAG 所需依赖。空间权限与正文写入由应用负责，用户主动接受后走协同 durable ack。
+现有实现仍有 WritingChat 和 RagChat 两条业务路径。目标允许破坏性 API/Schema 重构，按方案迁移历史记录并收敛重复入口。原 [协作 AI 写作与 DSH 方案](packages/ai-chat-architecture.md)保留历史设计与包级实现依据，新应用架构及迁移出口以统一 skills 方案为准。权限与正文写入继续由应用负责，用户采纳后走协同 durable ack。
+
+完整目标见 [AI 问答、创作与对外问答站技术设计](apps/ai-assistant-and-public-qa.md)。文档于 2026-11-07 建立、2026-11-09 按零新增表修订，覆盖统一会话/Run、三项 skills、通用分享、来源 ACL、破坏性迁移、API/SSE 和最终表结构关系图。
 
 ## 1. 产品交付形态
 

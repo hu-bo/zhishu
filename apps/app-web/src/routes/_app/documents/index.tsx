@@ -24,8 +24,8 @@ import {
   restoreDocument,
   trashDocument,
   unfavoriteDocument,
-} from '@/api/generated/app-api';
-import type { ListDocumentsParams } from '@/api/generated/models';
+} from '@/api/generated/documents';
+import type { ListDocumentsParams } from '@/api/generated/app-api.schemas';
 import { ApiError, errorMessage } from '@/api/api-error';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';

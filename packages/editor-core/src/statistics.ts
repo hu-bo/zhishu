@@ -56,6 +56,10 @@ function collectText(value: unknown, output: string[]): void {
     content?: unknown;
     attrs?: Record<string, unknown>;
   };
+  if (node.type === "mention") {
+    output.push(`@${String(node.attrs?.label ?? "")}`);
+    return;
+  }
   if (node.type === "statusTag") {
     const status = DOCUMENT_STATUSES.find((entry) => entry === node.attrs?.status) ?? "todo";
     output.push(DOCUMENT_STATUS_LABELS[status]);

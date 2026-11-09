@@ -1,9 +1,11 @@
+import { lockKnowledgeTree } from "../../shared/knowledge-transaction.js";
+import { insertNotifications } from "../notifications/index.js";
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { Database } from "../../../database/index.js";
 import {
   assets,
-  documentAcl,
+  resourceAcl,
   documentAuditEvents,
   documentGenerations,
   documentShares,
@@ -13,6 +15,8 @@ import type { Principal } from "../identity/identity.types.js";
 import { DomainError } from "../../shared/domain-error.js";
 import type { DocumentRepository } from "./document.repository.js";
 import type { CreateShareInput } from "./share.schema.js";
+import { documentActionSql, hasDocumentPermission } from "../authorization/permissions.js";
+import type { PermissionAction } from "../authorization/policy.js";
 
 const SHARE_INVALID_MESSAGE = "分享链接已失效或已被撤销";
 
@@ -23,6 +27,7 @@ type ShareRow = {
   id: string;
   documentId: string;
   permission: string;
+  kind: "invite" | "access";
   expiresAt: Date;
   revokedAt: Date | null;
   createdBy: string;
@@ -47,12 +52,14 @@ type ShareWithDocumentRow = {
   schemaVersion: number | null;
   extensions: Array<{ name: string; version: string; required: boolean }> | null;
   generationId: string | null;
+  grantorCanDelegate: boolean;
 };
 
 export type PublicShareDetail = {
   shareId: string;
   state: PublicShareState;
   permission: SharePermission | null;
+  kind: "invite" | "access" | null;
   expiresAt: string | null;
   document: {
     id: string;
@@ -81,6 +88,7 @@ function presentShare(row: ShareRow) {
     id: row.id,
     documentId: row.documentId,
     permission: row.permission === "edit" ? ("edit" as const) : ("read" as const),
+    kind: row.kind,
     expiresAt: row.expiresAt.toISOString(),
     revokedAt: row.revokedAt ? row.revokedAt.toISOString() : null,
     createdBy: row.createdBy,
@@ -95,6 +103,19 @@ function shareState(row: { expiresAt: Date; revokedAt: Date | null }, now: Date)
   return "active";
 }
 
+function shareActions(permission: string): readonly PermissionAction[] {
+  return permission === "edit" ? ["read", "comment", "write"] : ["read"];
+}
+
+function grantorCanDelegateSql() {
+  const principal = {
+    tenantId: sql`document_shares.tenant_id`,
+    identityId: sql`document_shares.created_by`,
+  };
+  return sql<boolean>`(${documentActionSql(principal, "read", undefined, false)} and ${documentActionSql(principal, "share", undefined, false)}
+    and (document_shares.permission = 'read' or (${documentActionSql(principal, "write", undefined, false)} and ${documentActionSql(principal, "comment", undefined, false)})))`;
+}
+
 export class ShareRepository {
   constructor(
     private readonly db: Database,
@@ -102,35 +123,51 @@ export class ShareRepository {
   ) {}
 
   async create(principal: Principal, documentId: string, input: CreateShareInput) {
-    const document = await this.documents.findActiveForAction(
-      documentId,
-      principal.tenantId,
-      principal.identityId,
-      "share",
-    );
-    if (!document) throw new DomainError("NOT_FOUND", "Document not found");
-    const id = `shr_${randomUUID()}`;
-    const expiresAt = new Date(input.expiresAt);
-    const [row] = await this.db
-      .insert(documentShares)
-      .values({
+    return this.db.transaction(async (tx) => {
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
+      const [document] = await tx
+        .select({ id: documents.id })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.tenantId, principal.tenantId),
+            eq(documents.id, documentId),
+            eq(documents.status, "active"),
+            documentActionSql(principal, "share"),
+            ...shareActions(input.permission).map((action) =>
+              documentActionSql(principal, action, undefined, false),
+            ),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!document) throw new DomainError("NOT_FOUND", "文档不存在或超出可分享的权限范围");
+      const id = `shr_${randomUUID()}`;
+      const expiresAt = new Date(input.expiresAt);
+      if (expiresAt.getTime() <= Date.now())
+        throw new DomainError("VALIDATION_ERROR", "分享有效期已过，请重新选择");
+      const [row] = await tx
+        .insert(documentShares)
+        .values({
+          tenantId: principal.tenantId,
+          id,
+          documentId,
+          permission: input.permission,
+          kind: input.kind ?? "invite",
+          expiresAt,
+          createdBy: principal.identityId,
+        })
+        .returning();
+      if (!row) throw new Error("Share insert returned no row");
+      await tx.insert(documentAuditEvents).values({
         tenantId: principal.tenantId,
-        id,
-        documentId,
-        permission: input.permission,
-        expiresAt,
-        createdBy: principal.identityId,
-      })
-      .returning();
-    if (!row) throw new Error("Share insert returned no row");
-    await this.db.insert(documentAuditEvents).values({
-      tenantId: principal.tenantId,
-      actorIdentityId: principal.identityId,
-      action: "document.share-created",
-      resourceId: documentId,
-      details: { shareId: id, permission: input.permission, expiresAt: input.expiresAt },
+        actorIdentityId: principal.identityId,
+        action: "document.share-created",
+        resourceId: documentId,
+        details: { shareId: id, permission: input.permission, expiresAt: input.expiresAt },
+      });
+      return presentShare(row);
     });
-    return presentShare(row);
   }
 
   async list(principal: Principal, documentId: string) {
@@ -156,38 +193,37 @@ export class ShareRepository {
   }
 
   async revoke(principal: Principal, documentId: string, shareId: string): Promise<void> {
-    const [share] = await this.db
-      .select()
-      .from(documentShares)
-      .where(
-        and(
-          eq(documentShares.tenantId, principal.tenantId),
-          eq(documentShares.documentId, documentId),
-          eq(documentShares.id, shareId),
-        ),
-      )
-      .limit(1);
-    if (!share) throw new DomainError("NOT_FOUND", "Share link not found");
-    if (share.createdBy !== principal.identityId) {
-      const document = await this.documents.findActiveForAction(
-        documentId,
-        principal.tenantId,
-        principal.identityId,
-        "share",
-      );
-      if (!document) throw new DomainError("NOT_FOUND", "Document not found");
-    }
-    if (share.revokedAt) return; // Idempotent: repeated revocations stay 204.
-    await this.db
-      .update(documentShares)
-      .set({ revokedAt: new Date() })
-      .where(and(eq(documentShares.tenantId, share.tenantId), eq(documentShares.id, shareId)));
-    await this.db.insert(documentAuditEvents).values({
-      tenantId: principal.tenantId,
-      actorIdentityId: principal.identityId,
-      action: "document.share-revoked",
-      resourceId: documentId,
-      details: { shareId },
+    await this.db.transaction(async (tx) => {
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
+      const [share] = await tx
+        .select()
+        .from(documentShares)
+        .where(
+          and(
+            eq(documentShares.tenantId, principal.tenantId),
+            eq(documentShares.documentId, documentId),
+            eq(documentShares.id, shareId),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!share) throw new DomainError("NOT_FOUND", "Share link not found");
+      if (share.createdBy !== principal.identityId) {
+        if (!(await hasDocumentPermission(tx, principal, documentId, "share")))
+          throw new DomainError("NOT_FOUND", "Document not found");
+      }
+      if (share.revokedAt) return; // Idempotent: repeated revocations stay 204.
+      await tx
+        .update(documentShares)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(documentShares.tenantId, share.tenantId), eq(documentShares.id, shareId)));
+      await tx.insert(documentAuditEvents).values({
+        tenantId: principal.tenantId,
+        actorIdentityId: principal.identityId,
+        action: "document.share-revoked",
+        resourceId: documentId,
+        details: { shareId },
+      });
     });
   }
 
@@ -202,6 +238,7 @@ export class ShareRepository {
         tenantId: documentShares.tenantId,
         documentId: documentShares.documentId,
         permission: documentShares.permission,
+        kind: documentShares.kind,
         expiresAt: documentShares.expiresAt,
         revokedAt: documentShares.revokedAt,
         documentStatus: documents.status,
@@ -211,6 +248,7 @@ export class ShareRepository {
         schemaVersion: documentGenerations.schemaVersion,
         extensions: documentGenerations.extensions,
         generationId: documentGenerations.id,
+        grantorCanDelegate: grantorCanDelegateSql(),
       })
       .from(documentShares)
       .leftJoin(
@@ -264,18 +302,20 @@ export class ShareRepository {
       shareId,
       state: "unknown",
       permission: null,
+      kind: null,
       expiresAt: null,
       document: null,
     };
     if (!row) return unknown;
     const document = this.activeDocumentFrom(row);
-    if (!document) return unknown;
+    if (!document || !row.grantorCanDelegate) return unknown;
     const state = shareState(row, new Date());
     if (state !== "active")
       return {
         shareId,
         state,
         permission: null,
+        kind: null,
         expiresAt: row.expiresAt.toISOString(),
         document: null,
       };
@@ -283,6 +323,7 @@ export class ShareRepository {
       shareId,
       state: "active",
       permission: row.permission === "edit" ? "edit" : "read",
+      kind: row.kind,
       expiresAt: row.expiresAt.toISOString(),
       document: {
         id: document.documentId,
@@ -296,12 +337,14 @@ export class ShareRepository {
     };
   }
 
-  private async requireActivePublicDocument(shareId: string): Promise<PublicShareDocument> {
+  private async requireActivePublicDocument(
+    shareId: string,
+  ): Promise<PublicShareDocument & { expiresAt: Date }> {
     const row = await this.findShareWithDocument(shareId);
     const document = row ? this.activeDocumentFrom(row) : null;
-    if (!document || shareState(row, new Date()) !== "active")
+    if (!row || !document || !row.grantorCanDelegate || shareState(row, new Date()) !== "active")
       throw new DomainError("NOT_FOUND", "分享链接已失效");
-    return document;
+    return { ...document, expiresAt: row.expiresAt };
   }
 
   async contentForPublic(shareId: string) {
@@ -345,61 +388,97 @@ export class ShareRepository {
       )
       .limit(1);
     if (!asset) throw new DomainError("NOT_FOUND", "Asset not found");
-    return asset;
+    return { ...asset, shareExpiresAt: document.expiresAt };
   }
 
   async join(
     principal: Principal,
     shareId: string,
   ): Promise<{ joined: boolean; documentId: string }> {
-    const [share] = await this.db
-      .select()
-      .from(documentShares)
-      .where(eq(documentShares.id, shareId))
-      .limit(1);
-    if (!share || share.tenantId !== principal.tenantId)
-      throw new DomainError("NOT_FOUND", SHARE_INVALID_MESSAGE);
-    if (shareState(share, new Date()) !== "active")
-      throw new DomainError("NOT_FOUND", SHARE_INVALID_MESSAGE);
-    const [document] = await this.db
-      .select({ id: documents.id })
-      .from(documents)
-      .where(
-        and(
-          eq(documents.tenantId, share.tenantId),
-          eq(documents.id, share.documentId),
-          eq(documents.status, "active"),
-        ),
-      )
-      .limit(1);
-    if (!document) throw new DomainError("NOT_FOUND", SHARE_INVALID_MESSAGE);
+    return this.db.transaction(async (tx) => {
+      // Same tenant lock as membership, policy, access-mode and tree mutations.
+      // Recheck all authority after locking; a preflight read is never sufficient.
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
+      const [share] = await tx
+        .select()
+        .from(documentShares)
+        .where(and(eq(documentShares.tenantId, principal.tenantId), eq(documentShares.id, shareId)))
+        .for("update")
+        .limit(1);
+      if (!share || share.tenantId !== principal.tenantId)
+        throw new DomainError("NOT_FOUND", SHARE_INVALID_MESSAGE);
+      if (shareState(share, new Date()) !== "active")
+        throw new DomainError("NOT_FOUND", SHARE_INVALID_MESSAGE);
+      const [document] = await tx
+        .select({ id: documents.id })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.tenantId, share.tenantId),
+            eq(documents.id, share.documentId),
+            eq(documents.status, "active"),
+          ),
+        )
+        .for("update")
+        .limit(1);
+      if (!document) throw new DomainError("NOT_FOUND", SHARE_INVALID_MESSAGE);
 
-    const existing = await this.documents.findActiveForAction(
-      share.documentId,
-      principal.tenantId,
-      principal.identityId,
-      "read",
-    );
-    if (existing) return { joined: false, documentId: share.documentId };
-
-    const actions = share.permission === "edit" ? ["read", "comment", "write"] : ["read"];
-    await this.db.transaction(async (tx) => {
+      const actions = shareActions(share.permission);
+      const grantor = { tenantId: share.tenantId, identityId: share.createdBy };
+      for (const action of ["share" as const, ...actions])
+        if (!(await hasDocumentPermission(tx, grantor, share.documentId, action)))
+          throw new DomainError("NOT_FOUND", SHARE_INVALID_MESSAGE);
+      const [delegation] = await tx
+        .select({ allowed: grantorCanDelegateSql() })
+        .from(documentShares)
+        .innerJoin(
+          documents,
+          and(
+            eq(documents.tenantId, documentShares.tenantId),
+            eq(documents.id, documentShares.documentId),
+          ),
+        )
+        .where(
+          and(eq(documentShares.tenantId, principal.tenantId), eq(documentShares.id, shareId)),
+        );
+      if (!delegation?.allowed) throw new DomainError("NOT_FOUND", SHARE_INVALID_MESSAGE);
+      const alreadyAllowed: boolean[] = [];
+      for (const action of actions)
+        alreadyAllowed.push(await hasDocumentPermission(tx, principal, share.documentId, action));
+      if (shareState(share, new Date()) !== "active")
+        throw new DomainError("NOT_FOUND", SHARE_INVALID_MESSAGE);
+      let inserted = false;
       for (const action of actions) {
-        await tx
-          .insert(documentAcl)
+        const grants = await tx
+          .insert(resourceAcl)
           .values({
             tenantId: principal.tenantId,
             documentId: share.documentId,
             identityId: principal.identityId,
-            action,
-            grantedBy: share.createdBy,
+            role: action,
+            sourceShareId: shareId,
+            createdBy: share.createdBy,
           })
-          .onConflictDoNothing();
+          .onConflictDoNothing()
+          .returning({ id: resourceAcl.id });
+        inserted ||= grants.length > 0;
       }
+      if (!inserted) return { joined: false, documentId: share.documentId };
       await tx
         .update(documentShares)
         .set({ joinCount: sql`${documentShares.joinCount} + 1` })
         .where(and(eq(documentShares.tenantId, share.tenantId), eq(documentShares.id, shareId)));
+      await insertNotifications(tx, [
+        {
+          tenantId: principal.tenantId,
+          actorId: share.createdBy,
+          recipientId: principal.identityId,
+          type: "share",
+          eventKey: `share:${shareId}:${principal.identityId}`,
+          documentId: share.documentId,
+          message: "你通过分享链接获得了文档访问权限",
+        },
+      ]);
       await tx.insert(documentAuditEvents).values({
         tenantId: principal.tenantId,
         actorIdentityId: principal.identityId,
@@ -407,7 +486,7 @@ export class ShareRepository {
         resourceId: share.documentId,
         details: { operation: "share-join", shareId, actions },
       });
+      return { joined: !alreadyAllowed.every(Boolean), documentId: share.documentId };
     });
-    return { joined: true, documentId: share.documentId };
   }
 }

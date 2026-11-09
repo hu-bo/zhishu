@@ -167,15 +167,15 @@ AI 请求、事件顺序、最终提案和来源/引用的唯一规范见 [ai-co
 
 npm 包版本、`schemaVersion`、扩展内容版本、协同协议版本分别维护。依赖同一格式的包发布需要在兼容矩阵中列出读取/写入范围；升级任一包都不自动迁移已保存文档。
 
-`createContentMigrationExecutor()` 接收唯一 source-version 步骤表和目标 Schema validator。每步以稳定 `id` 和简短 `summary` 标识，只能向前迁移且同一 source 不允许分叉；执行前克隆输入，每步保存 JSON 中间快照，最终校验失败或迁移抛错时返回未修改的原件和安全错误报告。目标 Schema 版本必须由调用方显式匹配，防止错误地以另一版 validator 宣告可写。早期 v3 验收的格式范围为 Schema v1、v2 和 v3（当前 v5 范围见下节）：v1 接受扁平任务项但拒绝递归 `taskList` 和表格，v2 增加递归任务清单但拒绝表格，v3 增加有界表格；已注册的 1→2 与 2→3 步骤保留原内容。JSON 导入、模板复制及可写协同会话使用同一迁移链，普通正文和结构操作按 generation 的 Schema 版本校验。目标 migration snapshots 在文档创建/代次切换事务内写入独立表；audit event 只保存 migrationId、步骤 ID、摘要和版本范围，不包含正文快照；永久删除文档时快照行级联清理。协同源/目标正文分别保留在旧/新 generation，目标 JSON 也经 outbox 投影。迁移 `0020_spotty_living_tribunal.sql` 建立快照表、`0021_public_starjammers.sql` 将 generation 默认 Schema 版本升至 3，均已应用到项目本地 PostgreSQL；项目本地 PostgreSQL/HTTP 验收已覆盖 v1/v2 导入与协同旧代次迁移到 v3，确认旧代次退休、迁移快照落库；对快照写入注入失败后原代次保持活动，移除注入后重试成功。旧 Schema 代次通过本地临时测试记录模拟，未改共享数据库。
+`createContentMigrationExecutor()` 接收唯一 source-version 步骤表和目标 Schema validator。每步以稳定 `id` 和简短 `summary` 标识，只能向前迁移且同一 source 不允许分叉；执行前克隆输入，每步保存 JSON 中间快照，最终校验失败或迁移抛错时返回未修改的原件和安全错误报告。目标 Schema 版本必须由调用方显式匹配，防止错误地以另一版 validator 宣告可写。早期 v3 验收的格式范围为 Schema v1、v2 和 v3（当前 v6 范围见下节）：v1 接受扁平任务项但拒绝递归 `taskList` 和表格，v2 增加递归任务清单但拒绝表格，v3 增加有界表格；已注册的 1→2 与 2→3 步骤保留原内容。JSON 导入、模板复制及可写协同会话使用同一迁移链，普通正文和结构操作按 generation 的 Schema 版本校验。目标 migration snapshots 在文档创建/代次切换事务内写入独立表；audit event 只保存 migrationId、步骤 ID、摘要和版本范围，不包含正文快照；永久删除文档时快照行级联清理。协同源/目标正文分别保留在旧/新 generation，目标 JSON 也经 outbox 投影。迁移 `0020_spotty_living_tribunal.sql` 建立快照表、`0021_public_starjammers.sql` 将 generation 默认 Schema 版本升至 3，均已应用到项目本地 PostgreSQL；项目本地 PostgreSQL/HTTP 验收已覆盖 v1/v2 导入与协同旧代次迁移到 v3，确认旧代次退休、迁移快照落库；对快照写入注入失败后原代次保持活动，移除注入后重试成功。旧 Schema 代次通过本地临时测试记录模拟，未改共享数据库。
 
 需要覆盖旧版输入、新版读取、扩展缺失、迁移失败、空文档、嵌套边界、重复 ID 和恶意超深结构的规范样例。JSON 往返保持语义与必需属性；不得在序列化时悄悄丢弃未知数据。
 
 `@zhishu/document-contracts/examples` 单独导出 `createKnowledgePresets()`，生成产品规范、系统架构和团队协作指南三篇中文文档。每次生成均分配新 blockId 并通过当前内容校验，覆盖标题、列表、任务、代码与表格；不包含演示成员或外部资源。示例与服务端显式初始化复用同一来源，不会把业务目录/标签混入正文契约。
 
-### 当前格式：Schema v5
+### 当前格式：Schema v6
 
-当前写入格式为 v5，读取/迁移支持 v1～v5。v4 增加下划线、多色高亮与段落/标题对齐；v5 增加 `callout`、行内 `statusTag` 与 `horizontalRule.attrs.label`。v1～v4 校验器拒绝 v5 格式，旧客户端不能打开 v5 可写协同会话。4→5 迁移保留原内容，不自动插入新节点。
+当前写入格式为 v6，读取/迁移支持 v1～v6；v6 增加正文成员提及（见后文）。v4 增加下划线、多色高亮与段落/标题对齐；v5 增加 `callout`、行内 `statusTag` 与 `horizontalRule.attrs.label`。v1～v4 校验器拒绝 v5 格式，旧客户端不能打开 v5 可写协同会话。4→5 迁移保留原内容，不自动插入新节点。
 
 `callout` 是有稳定 blockId 的非空块容器，theme 只允许 info/tip/warning/success/danger。`statusTag` 是行内原子节点，status 只允许 todo/in-progress/in-review/done/blocked，表达正文文本状态。分隔线标签最多 80 个字符，不含交互状态。新增节点参与递归校验、结构操作、统计、搜索、JSON/HTML 往返及历史读取；Markdown 对主题、状态外观和带标签分隔线报告降级。
 
@@ -188,3 +188,7 @@ npm 包版本、`schemaVersion`、扩展内容版本、协同协议版本分别�
 产物提供 ESM、类型声明、明确 exports 与可使用的 Schema 产物。基础导入可在没有 React/Tiptap/Yjs 的独立消费项目运行。发布记录同时列出包版本与支持的内容 Schema，提供变更和迁移说明。
 
 M1 完成 DC-01—06 的规范与最小消费例；M2 补齐代次、资产和锚点；M3 补齐创作/引用/事件。进入各阶段前，调用方必须能从此文档确定一份内容是否可读、可写、可迁移，以及拒绝时如何保留原件。
+
+## 正文成员提及（2026-10-31）
+
+内容版本 v6 新增行内原子节点 `mention`，属性仅 `identityId`（稳定主体标识）和 `label`（显示名称，1–80 字符）。`MentionSchema`、`DocumentMention` 与 `collectDocumentMentions` 从公开入口导出；后者按包含块的稳定 blockId 与成员标识去重，不从文字中的 @ 解析身份。v1–v5 不接受此节点，v5 → v6 迁移保留原文。节点不携带通知、租户、权限、头像 URL 等业务数据，出现已离开成员的历史提及不影响内容读取。JSON/HTML 保留关联；Markdown/纯文本显式降级为 @姓名。

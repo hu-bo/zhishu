@@ -5,7 +5,10 @@ import * as Y from "yjs";
 import { createDatabase, createPool } from "../../database/index.js";
 import { documentGenerations, documents } from "../../database/schema/index.js";
 import { projectDocumentContent } from "../modules/collaboration/hocuspocus.server.js";
-import { DocumentRepository } from "../modules/documents/document.repository.js";
+import {
+  DocumentHistoryRepository,
+  DocumentProjectionRepository,
+} from "../modules/documents/index.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 assert.ok(databaseUrl, "DATABASE_URL must target the project PostgreSQL database");
@@ -19,7 +22,8 @@ assert.ok(
 
 const pool = createPool({ connectionString: databaseUrl, max: 2 });
 const db = createDatabase(pool);
-const repository = new DocumentRepository(db);
+const history = new DocumentHistoryRepository(db);
+const projections = new DocumentProjectionRepository(db);
 let projected = 0;
 let alreadyCurrent = 0;
 
@@ -44,7 +48,7 @@ try {
   for (const row of activeGenerations) {
     const ydoc = new Y.Doc();
     try {
-      await repository.replayYjsState(
+      await history.replayYjsState(
         {
           documentId: row.documentId,
           generationId: row.generationId,
@@ -53,7 +57,7 @@ try {
         (updateBytes) => Y.applyUpdate(ydoc, updateBytes, "projection-backfill"),
       );
       const content = projectDocumentContent(ydoc);
-      const changed = await repository.backfillProjectionSnapshot({
+      const changed = await projections.backfillProjectionSnapshot({
         tenantId: row.tenantId,
         documentId: row.documentId,
         generationId: row.generationId,

@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { documentIconSchema } from "./document.schema.js";
-import { documentLocateSchema } from "./catalog.schema.js";
+import { documentLocateSchema } from "../catalogs/index.js";
+import { documentIdSchema } from "../../shared/resource.schema.js";
 
-const documentIdSchema = z.string().regex(/^doc_[A-Za-z0-9_-]{1,64}$/);
 const extensionSchema = z
   .object({
     name: z.string().min(1).max(64),
@@ -19,6 +19,7 @@ const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1_000;
 export const createShareBodySchema = z
   .object({
     permission: sharePermissionSchema,
+    kind: z.enum(["invite", "access"]).default("invite"),
     expiresAt: z.string().datetime("请选择有效的过期时间"),
   })
   .strict()
@@ -49,6 +50,7 @@ export const shareSchema = z
     id: shareIdSchema,
     documentId: documentIdSchema,
     permission: sharePermissionSchema,
+    kind: z.enum(["invite", "access"]),
     expiresAt: z.string().datetime(),
     revokedAt: z.string().datetime().nullable(),
     createdBy: z.string(),
@@ -63,6 +65,7 @@ export const publicShareDetailSchema = z
     shareId: shareIdSchema,
     state: z.enum(["active", "expired", "revoked", "unknown"]),
     permission: sharePermissionSchema.nullable(),
+    kind: z.enum(["invite", "access"]).nullable(),
     expiresAt: z.string().datetime().nullable(),
     document: z
       .object({

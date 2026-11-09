@@ -1,12 +1,15 @@
+import { requirePrincipal } from "./principal.js";
 import type { FastifyInstance } from "fastify";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { DomainError } from "../../shared/domain-error.js";
 import { errorResponseSchema } from "../../shared/error.schema.js";
-import { workspaceMembers, workspaces } from "../../../database/schema/index.js";
+import { and, eq } from "drizzle-orm";
+import { identityProfiles, resourceAcl, workspaces } from "../../../database/schema/index.js";
 import type { MockIdentityService } from "./identity.service.js";
 import { getMockUser, mockUsers } from "./mock-user.js";
 import type { MockPrincipal } from "./mock-user.js";
+import { rememberIdentities, searchIdentities } from "./identity-directory.js";
 import {
   mockLoginBodySchema,
   mockLoginResponseSchema,
@@ -23,6 +26,17 @@ const bearerSecurity = [{ bearerAuth: [] }];
 async function ensureMockMembership(app: FastifyInstance, user: MockPrincipal): Promise<void> {
   const { defaultMemberRole } = user;
   if (!defaultMemberRole) return;
+  const [known] = await app.db
+    .select({ identityId: identityProfiles.identityId })
+    .from(identityProfiles)
+    .where(
+      and(
+        eq(identityProfiles.tenantId, user.tenantId),
+        eq(identityProfiles.identityId, user.identityId),
+      ),
+    )
+    .limit(1);
+  if (known) return;
   await app.db
     .insert(workspaces)
     .values({
@@ -34,12 +48,12 @@ async function ensureMockMembership(app: FastifyInstance, user: MockPrincipal): 
     })
     .onConflictDoNothing();
   await app.db
-    .insert(workspaceMembers)
+    .insert(resourceAcl)
     .values({
       tenantId: user.tenantId,
       workspaceId: "ws_default",
       identityId: user.identityId,
-      displayName: user.displayName,
+      createdBy: user.identityId,
       role: defaultMemberRole,
     })
     .onConflictDoNothing();
@@ -51,6 +65,41 @@ export async function identityRoutes(
 ): Promise<void> {
   const { service } = options;
   const typed = app.withTypeProvider<ZodTypeProvider>();
+  typed.get(
+    "/directory",
+    {
+      schema: {
+        operationId: "searchIdentityDirectory",
+        tags: ["identity"],
+        security: bearerSecurity,
+        querystring: z
+          .object({
+            q: z.string().trim().max(100).default(""),
+            documentId: z
+              .string()
+              .regex(/^doc_[A-Za-z0-9_-]{1,64}$/)
+              .optional(),
+          })
+          .strict(),
+        response: {
+          200: z.array(
+            z
+              .object({ identityId: z.string(), displayName: z.string(), email: z.string() })
+              .strict(),
+          ),
+          401: errorResponseSchema,
+          404: errorResponseSchema,
+        },
+      },
+    },
+    async (request) =>
+      searchIdentities(
+        app.db,
+        requirePrincipal(request.principal),
+        request.query.q,
+        request.query.documentId,
+      ),
+  );
   if (service) {
     typed.post(
       "/mock/login",
@@ -66,7 +115,8 @@ export async function identityRoutes(
       async (request) => {
         const user = getMockUser(request.body?.userId);
         if (!user) throw new DomainError("NOT_FOUND", "Mock user not found");
-        await ensureMockMembership(app, user);
+        for (const mock of mockUsers) await ensureMockMembership(app, mock);
+        await rememberIdentities(app.db, mockUsers);
         const session = service.createSession(user.identityId);
         return {
           accessToken: session.accessToken,
@@ -109,12 +159,7 @@ export async function identityRoutes(
         response: { 200: principalSchema, 401: errorResponseSchema },
       },
     },
-    async (request) => {
-      if (!request.principal) {
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      }
-      return request.principal;
-    },
+    async (request) => requirePrincipal(request.principal),
   );
 
   if (service) {

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root';
 import { Route as AppRouteImport } from './routes/_app';
 import { Route as AppIndexRouteImport } from './routes/_app/index';
 import { Route as AppAiRouteImport } from './routes/_app/ai';
+import { Route as AppInvitationsRouteImport } from './routes/_app/invitations';
 import { Route as ShareShareIdRouteImport } from './routes/share/$shareId';
 import { Route as AppDocumentsIndexRouteImport } from './routes/_app/documents/index';
 import { Route as AppDocumentsDocumentIdRouteImport } from './routes/_app/documents/$documentId';
@@ -31,6 +32,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppAiRoute = AppAiRouteImport.update({
   id: '/ai',
   path: '/ai',
+  getParentRoute: () => AppRoute,
+} as any);
+const AppInvitationsRoute = AppInvitationsRouteImport.update({
+  id: '/invitations',
+  path: '/invitations',
   getParentRoute: () => AppRoute,
 } as any);
 const ShareShareIdRoute = ShareShareIdRouteImport.update({
@@ -68,6 +74,7 @@ const AppSpacesWorkspaceIdDocDocumentIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute;
   '/ai': typeof AppAiRoute;
+  '/invitations': typeof AppInvitationsRoute;
   '/share/$shareId': typeof ShareShareIdRoute;
   '/documents/$documentId': typeof AppDocumentsDocumentIdRoute;
   '/spaces/$workspaceId': typeof AppSpacesWorkspaceIdRouteWithChildren;
@@ -77,6 +84,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/ai': typeof AppAiRoute;
+  '/invitations': typeof AppInvitationsRoute;
   '/share/$shareId': typeof ShareShareIdRoute;
   '/': typeof AppIndexRoute;
   '/documents/$documentId': typeof AppDocumentsDocumentIdRoute;
@@ -89,6 +97,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   '/_app': typeof AppRouteWithChildren;
   '/_app/ai': typeof AppAiRoute;
+  '/_app/invitations': typeof AppInvitationsRoute;
   '/share/$shareId': typeof ShareShareIdRoute;
   '/_app/': typeof AppIndexRoute;
   '/_app/documents/$documentId': typeof AppDocumentsDocumentIdRoute;
@@ -102,6 +111,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/ai'
+    | '/invitations'
     | '/share/$shareId'
     | '/documents/$documentId'
     | '/spaces/$workspaceId'
@@ -111,6 +121,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo;
   to:
     | '/ai'
+    | '/invitations'
     | '/share/$shareId'
     | '/'
     | '/documents/$documentId'
@@ -122,6 +133,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/_app/ai'
+    | '/_app/invitations'
     | '/share/$shareId'
     | '/_app/'
     | '/_app/documents/$documentId'
@@ -157,6 +169,13 @@ declare module '@tanstack/react-router' {
       path: '/ai';
       fullPath: '/ai';
       preLoaderRoute: typeof AppAiRouteImport;
+      parentRoute: typeof AppRoute;
+    };
+    '/_app/invitations': {
+      id: '/_app/invitations';
+      path: '/invitations';
+      fullPath: '/invitations';
+      preLoaderRoute: typeof AppInvitationsRouteImport;
       parentRoute: typeof AppRoute;
     };
     '/share/$shareId': {
@@ -218,6 +237,7 @@ const AppSpacesWorkspaceIdRouteWithChildren =
 
 interface AppRouteChildren {
   AppAiRoute: typeof AppAiRoute;
+  AppInvitationsRoute: typeof AppInvitationsRoute;
   AppIndexRoute: typeof AppIndexRoute;
   AppDocumentsDocumentIdRoute: typeof AppDocumentsDocumentIdRoute;
   AppSpacesWorkspaceIdRoute: typeof AppSpacesWorkspaceIdRouteWithChildren;
@@ -227,6 +247,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppAiRoute: AppAiRoute,
+  AppInvitationsRoute: AppInvitationsRoute,
   AppIndexRoute: AppIndexRoute,
   AppDocumentsDocumentIdRoute: AppDocumentsDocumentIdRoute,
   AppSpacesWorkspaceIdRoute: AppSpacesWorkspaceIdRouteWithChildren,

@@ -1,7 +1,7 @@
 import type { Principal } from "../identity/identity.types.js";
 import { DomainError } from "../../shared/domain-error.js";
 import type { AssetObjectStorage } from "../assets/asset-storage.js";
-import type { CatalogService } from "./catalog.service.js";
+import type { CatalogService } from "../catalogs/index.js";
 import type { CreateShareInput } from "./share.schema.js";
 import type { ShareRepository } from "./share.repository.js";
 
@@ -41,15 +41,20 @@ export class ShareService {
     if (!this.storage)
       throw new DomainError("SERVICE_UNAVAILABLE", "Private asset storage is not configured");
     const asset = await this.shares.assetForPublic(shareId, assetId);
+    const expiresIn = Math.min(
+      this.options.accessUrlTtlSeconds,
+      Math.floor((asset.shareExpiresAt.getTime() - Date.now()) / 1000),
+    );
+    if (expiresIn < 1) throw new DomainError("NOT_FOUND", "分享链接已失效或已被撤销");
     const url = await this.storage.createReadUrl({
       objectKey: asset.objectKey,
       fileName: asset.fileName,
       mediaType: asset.mediaType,
-      expiresIn: this.options.accessUrlTtlSeconds,
+      expiresIn,
     });
     return {
       url,
-      expiresAt: new Date(Date.now() + this.options.accessUrlTtlSeconds * 1_000).toISOString(),
+      expiresAt: new Date(Date.now() + expiresIn * 1_000).toISOString(),
     };
   }
 

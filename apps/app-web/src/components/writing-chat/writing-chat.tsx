@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowUpRight, FileText, ListTree, PenLine, Plus, Sparkles } from 'lucide-react';
 import { Chat, Composer, ChatStatus, ApprovalCard, type MessageView } from '@zhishu/chat-ui';
 import '@zhishu/chat-ui/styles.css';
 import {
   applyChatEvent,
+  applyChatSnapshot,
   isChatSnapshot,
   isSubmitChatMessage,
   type ChatSnapshot,
@@ -17,27 +19,58 @@ import {
   cancelWritingRun,
   resumeWritingRun,
   decideWritingApproval,
-} from '@/api/generated/app-api';
+} from '@/api/generated/writing-chat';
 import { readRecord, writeRecord, writeRecordOnPageExit } from '@/features/offline/storage';
 import { useOfflineState } from '@/features/offline/cache';
 import { errorMessage } from '@/api/api-error';
 import { observeWriting } from './transport';
 import { ImageArtifacts } from './image-artifacts';
+import { appendWritingPreview, type WritingPreview } from './preview';
+import { WritingMarkdown } from './writing-markdown';
+import './writing-markdown.css';
+
+const starters = [
+  { icon: PenLine, label: '从想法起草', prompt: '帮我把下面的想法写成一份可编辑的初稿：' },
+  {
+    icon: ListTree,
+    label: '先列一份大纲',
+    prompt: '请围绕这个主题列一份大纲，并注明每节要回答的问题：',
+  },
+  {
+    icon: FileText,
+    label: '根据资料整理',
+    prompt: '请根据已选资料整理一份文档，概括要点并列出下一步行动。',
+  },
+];
 
 export function WritingChat({
   identityKey,
   scope,
+  legacyScope,
   sourceDocumentIds,
-  onUseForWriting,
+  sourceLabels,
+  onPickSources,
+  previewDisabled,
+  onPreview,
 }: {
   identityKey: string;
   scope: string;
+  legacyScope: string;
   sourceDocumentIds: string[];
-  onUseForWriting(text: string): void;
+  sourceLabels: string[];
+  onPickSources(): void;
+  previewDisabled: boolean;
+  onPreview(draft: { id: string; text: string }): void;
 }) {
   const offline = useOfflineState(),
     cache = useQueryClient();
   const storageKey = JSON.stringify(['writing', identityKey, scope, [...sourceDocumentIds].sort()]);
+  const legacyStorageKey = JSON.stringify([
+    'writing',
+    identityKey,
+    legacyScope,
+    [...sourceDocumentIds].sort(),
+  ]);
   const [conversationId, setConversationId] = useState(''),
     [draft, setDraft] = useState(''),
     [hydrated, setHydrated] = useState(false);
@@ -45,12 +78,15 @@ export function WritingChat({
     [submitting, setSubmitting] = useState(false),
     [stopping, setStopping] = useState(false),
     [connection, setConnection] = useState(0);
-  const [previews, setPreviews] = useState<
-    Record<
+  const [previews, setPreviews] = useState<Record<string, WritingPreview>>({});
+  const [deciding, setDeciding] = useState<string | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const decisions = useRef(
+    new Map<
       string,
-      { text: string; epoch: string; attempt: number; revision: number; index: number }
-    >
-  >({});
+      { approvalId: string; decisionId: string; decision: 'allow-once' | 'reject' }
+    >(),
+  );
   const pending = useRef<{ text: string; input: SubmitChatMessage } | null>(null);
   const mounted = useRef(true);
   useEffect(() => {
@@ -62,7 +98,15 @@ export function WritingChat({
   useEffect(() => {
     let active = true;
     if (!offline.identity) return;
-    void readRecord(offline.identity, 'chat-draft', storageKey)
+    const identity = offline.identity;
+    void readRecord(identity, 'chat-draft', storageKey)
+      .then(
+        (value) =>
+          value ??
+          (storageKey !== legacyStorageKey
+            ? readRecord(identity, 'chat-draft', legacyStorageKey)
+            : undefined),
+      )
       .then((value) => {
         if (!active) return;
         if (value && typeof value === 'object') {
@@ -83,7 +127,7 @@ export function WritingChat({
     return () => {
       active = false;
     };
-  }, [offline.identity, storageKey]);
+  }, [offline.identity, storageKey, legacyStorageKey]);
   useEffect(() => {
     if (!hydrated || !offline.identity) return;
     const timer = setTimeout(() => {
@@ -108,6 +152,10 @@ export function WritingChat({
     },
     enabled: hydrated && !!conversationId && offline.verified && offline.online,
     retry: false,
+    structuralSharing: (current, incoming) =>
+      isChatSnapshot(current) && isChatSnapshot(incoming)
+        ? applyChatSnapshot(current, incoming)
+        : incoming,
   });
   const latest = useRef<{
     conversationId: string;
@@ -145,6 +193,8 @@ export function WritingChat({
       (frame) => {
         if (stop.signal.aborted) return;
         if (frame.type === 'snapshot') {
+          const current = cache.getQueryData<ChatSnapshot>(key);
+          if (current && BigInt(frame.sequence) < BigInt(current.cursor)) return;
           if (
             !frame.snapshot.runs.some((r) =>
               ['running', 'queued', 'waiting-approval'].includes(r.status),
@@ -174,24 +224,10 @@ export function WritingChat({
             )
           )
             return;
-          setPreviews((current) => {
-            const previous = current[frame.runId];
-            const same =
-              previous?.epoch === frame.streamEpoch &&
-              previous.attempt === frame.attempt &&
-              previous.revision === frame.revision;
-            if (same && previous.index >= frame.index) return current;
-            return {
-              ...current,
-              [frame.runId]: {
-                text: ((same ? previous.text : '') + frame.text).slice(0, 128000),
-                epoch: frame.streamEpoch,
-                attempt: frame.attempt,
-                revision: frame.revision,
-                index: frame.index,
-              },
-            };
-          });
+          setPreviews((current) => ({
+            ...current,
+            [frame.runId]: appendWritingPreview(current[frame.runId], frame),
+          }));
         } else {
           stop.abort();
           void query.refetch();
@@ -228,7 +264,13 @@ export function WritingChat({
         .map(([id, p]) => ({
           id: `preview:${id}`,
           role: 'assistant' as const,
-          parts: [{ id: `${id}:text`, kind: 'text' as const, text: p.text }],
+          parts: [
+            {
+              id: `${id}:text`,
+              kind: 'text' as const,
+              text: p.incomplete ? '实时预览不完整，正在等待服务端保存完整回复…' : p.text,
+            },
+          ],
           status: '生成中，尚未保存',
         })),
     ],
@@ -237,6 +279,7 @@ export function WritingChat({
   const active = snapshot?.runs.find((r) =>
     ['running', 'waiting-approval', 'queued'].includes(r.status),
   );
+  const lastRun = snapshot?.runs.at(-1);
   const command = async (operation: () => Promise<unknown>) => {
     setError('');
     try {
@@ -245,8 +288,18 @@ export function WritingChat({
       setError(errorMessage(cause));
     }
   };
+  const composerDisabled =
+    query.isError ||
+    !hydrated ||
+    !offline.online ||
+    !offline.verified ||
+    !capabilities.data?.enabled;
+  const preparePrompt = (prompt: string) => {
+    setDraft((current) => (current.trim() ? current : prompt));
+    inputRef.current?.focus();
+  };
   const submit = async () => {
-    if (submitting || !draft.trim()) return;
+    if (composerDisabled || submitting || active || !draft.trim()) return;
     const text = draft;
     if (!pending.current || pending.current.text !== text)
       pending.current = {
@@ -278,6 +331,7 @@ export function WritingChat({
       const accepted = await submitWritingMessage(id, pending.current.input);
       if (!mounted.current) return;
       cache.setQueryData(['writing-chat', identityKey, scope, id], accepted.snapshot);
+      setConnection((current) => current + 1);
       setDraft((current) => (current === text ? '' : current));
       pending.current = null;
       setError('');
@@ -287,45 +341,115 @@ export function WritingChat({
       if (mounted.current) setSubmitting(false);
     }
   };
+  const decide = async (approvalId: string, decision: 'allow-once' | 'reject') => {
+    if (deciding) return;
+    const previous = decisions.current.get(approvalId);
+    const input =
+      previous?.decision === decision
+        ? previous
+        : { approvalId, decisionId: crypto.randomUUID(), decision };
+    decisions.current.set(approvalId, input);
+    setDeciding(approvalId);
+    try {
+      await command(async () => {
+        await decideWritingApproval(conversationId, input);
+        await query.refetch();
+      });
+    } finally {
+      if (mounted.current) setDeciding(null);
+    }
+  };
   return (
     <Chat
       messages={messages}
-      emptyState={<p>从想法开始，一起打磨文章。生成的内容由你检查后再写入文档。</p>}
+      emptyState={
+        !hydrated || (conversationId && query.isFetching) ? (
+          <p role="status" className="py-8 text-center text-xs text-muted-foreground">
+            正在打开对话…
+          </p>
+        ) : (
+          !query.isError && (
+            <div className="mx-auto max-w-sm px-1 py-8">
+              <div className="mb-5 grid size-11 place-items-center rounded-2xl bg-primary/8 text-primary">
+                <Sparkles size={21} strokeWidth={1.6} aria-hidden="true" />
+              </div>
+              <h2 className="text-xl font-semibold tracking-tight">今天想写点什么？</h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                描述你想写的内容，和知书一起打磨。满意的回复可以直接存成文档。
+              </p>
+              <div className="mt-5 grid gap-2">
+                {starters.map(({ icon: Icon, label, prompt }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className="flex w-full items-center gap-2.5 text-left text-xs"
+                    disabled={composerDisabled || !!draft.trim()}
+                    onClick={() => {
+                      if (label === '根据资料整理' && !sourceDocumentIds.length) onPickSources();
+                      else preparePrompt(prompt);
+                    }}
+                  >
+                    <Icon size={15} aria-hidden="true" className="text-primary" />
+                    <span className="flex-1 py-1">{label}</span>
+                    <ArrowUpRight size={13} aria-hidden="true" className="text-muted-foreground" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        )
+      }
       header={
-        <div className="flex items-center justify-between px-4 py-2 text-xs">
-          <span>写作对话</span>
+        <div className="zhishu-chat-header">
+          <span>{conversationId ? '当前对话' : '写作助手'}</span>
           <button
             type="button"
-            disabled={submitting}
+            disabled={!conversationId || submitting || !!active}
             onClick={() => {
               setConversationId('');
               setPreviews({});
               pending.current = null;
             }}
           >
-            新对话
+            <Plus size={14} aria-hidden="true" /> 新对话
           </button>
         </div>
       }
-      messageActions={(message) =>
-        message.role === 'assistant' && !message.id.startsWith('preview:') ? (
-          <button
-            onClick={() =>
-              onUseForWriting(
-                message.parts
-                  .filter((p) => p.kind === 'text')
-                  .map((p) => p.text)
-                  .join('\n'),
-              )
-            }
-          >
-            用于写作
-          </button>
-        ) : null
+      renderText={(text, message) =>
+        message.role === 'assistant' ? (
+          <WritingMarkdown text={text} />
+        ) : (
+          <p className="whitespace-pre-wrap">{text}</p>
+        )
       }
+      messageActions={(message) => {
+        if (message.role !== 'assistant' || message.status) return null;
+        const part = message.parts[0];
+        if (part?.kind !== 'text' || !part.text.trim()) return null;
+        return (
+          <>
+            <button
+              type="button"
+              disabled={previewDisabled}
+              onClick={() => onPreview({ id: message.id, text: part.text })}
+            >
+              <FileText size={14} aria-hidden="true" /> 预览为文档
+            </button>
+            {message.id === messages.at(-1)?.id && !active && (
+              <button
+                type="button"
+                disabled={composerDisabled || !!draft.trim()}
+                onClick={() => preparePrompt('请把上一版写得更清楚、紧凑，保留关键事实。')}
+              >
+                继续打磨
+              </button>
+            )}
+          </>
+        );
+      }}
       status={
         <>
-          <ChatStatus error={!!error || query.isError}>
+          <ChatStatus error={!!error || query.isError || lastRun?.status === 'failed'}>
             {error ||
               (query.isError
                 ? '读取失败，请重连或开启新对话'
@@ -333,11 +457,17 @@ export function WritingChat({
                   ? active.status === 'waiting-approval'
                     ? '等待审批'
                     : '正在生成'
-                  : snapshot
-                    ? '对话已保存；正文由你确认后写入'
-                    : capabilities.data?.enabled
-                      ? ''
-                      : '写作模型尚未配置')}
+                  : lastRun?.status === 'failed'
+                    ? '本次回复未完成，已保存的消息仍可读取。可以调整输入后重发。'
+                    : lastRun?.status === 'cancelled'
+                      ? '本次生成已停止，未完成草稿不会写入正文。'
+                      : lastRun?.status === 'interrupted'
+                        ? '本次回复已中断，可尝试恢复原请求。'
+                        : capabilities.isError
+                          ? '暂时无法检查写作服务'
+                          : capabilities.data && !capabilities.data.enabled
+                            ? '写作模型尚未配置'
+                            : '')}
           </ChatStatus>
           {error && (
             <button
@@ -379,26 +509,9 @@ export function WritingChat({
                   title={approval.action === 'create_image' ? '创建文章配图' : approval.action}
                   description={approval.description}
                   status={approval.status}
-                  onAllow={() =>
-                    void command(async () => {
-                      await decideWritingApproval(conversationId, {
-                        approvalId: approval.id,
-                        decisionId: crypto.randomUUID(),
-                        decision: 'allow-once',
-                      });
-                      await query.refetch();
-                    })
-                  }
-                  onReject={() =>
-                    void command(async () => {
-                      await decideWritingApproval(conversationId, {
-                        approvalId: approval.id,
-                        decisionId: crypto.randomUUID(),
-                        decision: 'reject',
-                      });
-                      await query.refetch();
-                    })
-                  }
+                  busy={deciding !== null}
+                  onAllow={() => void decide(approval.id, 'allow-once')}
+                  onReject={() => void decide(approval.id, 'reject')}
                 />
               ))}
               {conversationId && !query.isError && (
@@ -414,19 +527,16 @@ export function WritingChat({
       }
       composer={
         <Composer
+          inputRef={inputRef}
           value={draft}
+          maxLength={32000}
           onValueChange={setDraft}
           onSubmit={submit}
           submitting={submitting}
-          disabled={
-            query.isError ||
-            !hydrated ||
-            !offline.online ||
-            !offline.verified ||
-            !capabilities.data?.enabled
-          }
+          disabled={composerDisabled}
+          placeholder="写下你的想法，或继续修改上一版…"
           busy={!!active}
-          stopping={stopping}
+          stopping={stopping || !!active?.cancelRequested}
           onStop={
             active
               ? async () => {
@@ -439,7 +549,18 @@ export function WritingChat({
                 }
               : undefined
           }
-          toolbarEnd={<small>{capabilities.data?.image.reason ?? '正在读取图片能力'}</small>}
+          attachments={sourceLabels.map((label, index) => ({
+            id: sourceDocumentIds[index]!,
+            label,
+          }))}
+          toolbarStart={
+            <button type="button" onClick={onPickSources} disabled={submitting || !!active}>
+              <span className="inline-flex items-center gap-1">
+                <Plus size={13} aria-hidden="true" /> 资料
+              </span>
+            </button>
+          }
+          toolbarEnd={<span className="hidden sm:inline">Shift + Enter 换行</span>}
         />
       }
     />

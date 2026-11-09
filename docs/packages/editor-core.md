@@ -198,3 +198,7 @@ Block 索引依据 ProseMirror StepMap 移除并重建受影响范围，heading 
 发布时声明兼容的 Tiptap/ProseMirror peer 范围，将相关运行时保持为兼容的一套依赖；不捆绑 React、Yjs、UI 样式或业务 SDK。提供最小原生 DOM 消费示例、纯 Schema Node.js 消费示例和自定义扩展示例。
 
 完成条件：M1 的 DC/EC 合约可往返、中文编辑与撤销正常、只读不触发本地写入；M2 的图片/表格和协同交互有明确异常恢复；M3 的引用与 AI 不修改基础编辑语义。输入法、粘贴、选区与复杂表格需真实浏览器验证，纯函数结果不能替代编辑体验验证。
+
+## 正文成员提及（2026-10-31）
+
+基础 Schema 注册 `mention`，`EditorController.insertMention({ identityId, label }, range?)` 检查写能力、组合输入及当前位置；传入范围时仅替换当前光标前的 @ 查询，失效范围不误插入。节点不继承文字 Marks，支持选择、删除、复制和协同正文更新。显示名称计入统计、大纲和正文查找；Markdown/纯文本导出说明成员关联损失，HTML 导出与安全导入保留主体和名称。

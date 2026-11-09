@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { updateDocumentMetadata } from '@/api/generated/app-api';
-import type { GetDocument200 } from '@/api/generated/models';
+import { updateDocumentMetadata } from '@/api/generated/documents';
+import type { GetDocument200 } from '@/api/generated/app-api.schemas';
 import { errorMessage } from '@/api/api-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

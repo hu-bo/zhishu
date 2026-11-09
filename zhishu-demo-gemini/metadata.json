@@ -1,6 +1,0 @@
-{
-  "name": "知书 (Zhishu) - 协同与快照文档平台",
-  "description": "知书 (Zhishu) 企业知识与独立文档平台，提供双模式（实时协同与普通快照）、版本对比与恢复、工作台筛选、文档大纲与全功能富文本编辑、ACL授权管理及知识库与AI创作。",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

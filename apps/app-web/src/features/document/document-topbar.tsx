@@ -1,7 +1,9 @@
+import { NotificationBell } from '@/features/notifications/notification-bell';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   ChevronRight,
+  MessageSquare,
   Eye,
   FileDown,
   History,
@@ -24,26 +26,31 @@ import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/compo
 export interface DocumentTopbarProps {
   aiEntry?: ReactNode;
   workspaceName: string;
-  workspaceMemberCount: number;
+  workspaceMemberCount?: number;
   canManageWorkspace: boolean;
   onlineCount: number;
-  onOpenMembers: () => void;
-  onOpenWorkspaceSettings: () => void;
-  onOpenDirectory: () => void;
+  onOpenMembers?: () => void;
+  onOpenWorkspaceSettings?: () => void;
+  onOpenDirectory?: () => void;
   /** Locate catalog path without the root segment; null while resolving. */
   catalogPath: { id: string; name: string }[] | null;
   title: string;
   icon: string | null;
   canManage: boolean;
+  canWrite: boolean;
+  canMove: boolean;
+  canShare: boolean;
   readOnlyReason: string | null;
   titleSaving: boolean;
   onTitleSave: (title: string) => void;
   viewMode: 'edit' | 'read';
   onViewModeToggle: () => void;
   onBack: () => void;
+  backLabel?: string;
   onOpenWorkspaceRoot: () => void;
-  onOpenCatalog: (catalogId: string) => void;
+  onOpenCatalog?: (catalogId: string) => void;
   onShare: () => void;
+  onComments: () => void;
   onVersions: () => void;
   onTransfer: () => void;
   onMetadata: () => void;
@@ -69,15 +76,20 @@ export function DocumentTopbar({
   title,
   icon,
   canManage,
+  canWrite,
+  canMove,
+  canShare,
   readOnlyReason,
   titleSaving,
   onTitleSave,
   viewMode,
   onViewModeToggle,
   onBack,
+  backLabel = '返回目录浏览',
   onOpenWorkspaceRoot,
   onOpenCatalog,
   onShare,
+  onComments,
   onVersions,
   onTransfer,
   onMetadata,
@@ -102,18 +114,20 @@ export function DocumentTopbar({
   return (
     <header className="flex h-15 min-w-0 shrink-0 items-center gap-1 border-b border-border/70 bg-card/95 px-2 backdrop-blur sm:gap-1.5 sm:px-4">
       <div className="flex shrink-0 items-center gap-0.5">
-        <Button variant="ghost" size="icon-sm" aria-label="返回目录浏览" onClick={onBack}>
+        <Button variant="ghost" size="icon-sm" aria-label={backLabel} onClick={onBack}>
           <ArrowLeft size={15} aria-hidden="true" />
         </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="lg:hidden"
-          aria-label="打开空间目录"
-          onClick={onOpenDirectory}
-        >
-          <MenuIcon size={15} aria-hidden="true" />
-        </Button>
+        {onOpenDirectory && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="lg:hidden"
+            aria-label="打开空间目录"
+            onClick={onOpenDirectory}
+          >
+            <MenuIcon size={15} aria-hidden="true" />
+          </Button>
+        )}
       </div>
 
       <nav
@@ -136,7 +150,8 @@ export function DocumentTopbar({
             />
             <button
               type="button"
-              onClick={() => onOpenCatalog(segment.id)}
+              onClick={() => onOpenCatalog?.(segment.id)}
+              disabled={!onOpenCatalog}
               className="max-w-32 truncate rounded px-1 py-0.5 text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground"
             >
               {segment.name}
@@ -152,7 +167,7 @@ export function DocumentTopbar({
             {icon}
           </span>
         )}
-        {viewMode === 'edit' && canManage ? (
+        {viewMode === 'edit' && canWrite ? (
           <Input
             aria-label="文档标题"
             value={draft}
@@ -190,23 +205,36 @@ export function DocumentTopbar({
       </div>
 
       {aiEntry}
+      <span className="hidden lg:inline-flex">
+        <NotificationBell />
+      </span>
       <Button
         variant="ghost"
-        size="sm"
-        aria-label={`空间成员（${workspaceMemberCount} 人）${onlineCount ? `，${onlineCount} 位在线` : ''}`}
-        onClick={onOpenMembers}
-        className="hidden shrink-0 gap-1.5 px-2 sm:inline-flex"
+        size="icon-sm"
+        aria-label="文档评论"
+        title="文档评论"
+        onClick={onComments}
       >
-        <Users size={15} aria-hidden="true" />
-        <span className="hidden text-xs sm:inline">成员</span>
-        <span className="text-xs">{workspaceMemberCount}</span>
-        {onlineCount > 0 && (
-          <span className="hidden text-xs text-muted-foreground md:inline">
-            {onlineCount} 位在线
-          </span>
-        )}
+        <MessageSquare size={15} aria-hidden="true" />
       </Button>
-      {canManageWorkspace && (
+      {onOpenMembers && workspaceMemberCount !== undefined && (
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={`空间成员（${workspaceMemberCount} 人）${onlineCount ? `，${onlineCount} 位在线` : ''}`}
+          onClick={onOpenMembers}
+          className="hidden shrink-0 gap-1.5 px-2 sm:inline-flex"
+        >
+          <Users size={15} aria-hidden="true" />
+          <span className="hidden text-xs sm:inline">成员</span>
+          {onlineCount > 0 && (
+            <span className="hidden text-xs text-muted-foreground md:inline">
+              {onlineCount}
+            </span>
+          )}
+        </Button>
+      )}
+      {canManageWorkspace && onOpenWorkspaceSettings && (
         <Button
           variant="ghost"
           size="icon-sm"
@@ -232,7 +260,7 @@ export function DocumentTopbar({
           <Pencil size={15} aria-hidden="true" />
         )}
       </Button>
-      {canManage && (
+      {canShare && (
         <Button
           variant="outline"
           size="sm"
@@ -262,11 +290,13 @@ export function DocumentTopbar({
           }
         />
         <MenuContent align="end">
-          <MenuItem className="sm:hidden" onClick={onOpenMembers}>
-            <Users size={14} aria-hidden="true" />
-            空间成员（{workspaceMemberCount}）
-          </MenuItem>
-          {canManageWorkspace && (
+          {onOpenMembers && workspaceMemberCount !== undefined && (
+            <MenuItem className="sm:hidden" onClick={onOpenMembers}>
+              <Users size={14} aria-hidden="true" />
+              空间成员（{workspaceMemberCount}）
+            </MenuItem>
+          )}
+          {canManageWorkspace && onOpenWorkspaceSettings && (
             <MenuItem className="sm:hidden" onClick={onOpenWorkspaceSettings}>
               <Settings size={14} aria-hidden="true" />
               空间设置
@@ -280,7 +310,7 @@ export function DocumentTopbar({
             <FileDown size={14} aria-hidden="true" />
             导入导出…
           </MenuItem>
-          {viewMode === 'edit' && (
+          {viewMode === 'edit' && canWrite && (
             <MenuItem onClick={onMetadata}>
               <Pencil size={14} aria-hidden="true" />
               图标与标签…
@@ -290,17 +320,21 @@ export function DocumentTopbar({
             <Info size={14} aria-hidden="true" />
             文档详情…
           </MenuItem>
-          {canManage && viewMode === 'edit' && (
+          {(canManage || canMove) && viewMode === 'edit' && (
             <>
               <MenuSeparator />
-              <MenuItem onClick={onMove}>
-                <FolderInput size={14} aria-hidden="true" />
-                移动到…
-              </MenuItem>
-              <MenuItem variant="destructive" onClick={onTrash}>
-                <Trash2 size={14} aria-hidden="true" />
-                移入回收站
-              </MenuItem>
+              {canMove && (
+                <MenuItem onClick={onMove}>
+                  <FolderInput size={14} aria-hidden="true" />
+                  移动到…
+                </MenuItem>
+              )}
+              {canManage && (
+                <MenuItem variant="destructive" onClick={onTrash}>
+                  <Trash2 size={14} aria-hidden="true" />
+                  移入回收站
+                </MenuItem>
+              )}
             </>
           )}
         </MenuContent>

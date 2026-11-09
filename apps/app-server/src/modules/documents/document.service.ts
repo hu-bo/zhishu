@@ -1,5 +1,12 @@
+import {
+  createCollaborationStateFromContent,
+  readDocumentContent,
+} from "../collaboration/document-state.js";
+import { stableJsonStringify } from "../../shared/stable-json.js";
+import { inspectDocumentContent } from "./document-content.js";
+import type { DocumentHistoryRepository } from "./document-history.repository.js";
+import type { AccessRole, PermissionAction } from "../authorization/policy.js";
 import { createHash, randomUUID } from "node:crypto";
-import { prosemirrorJSONToYDoc, yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import * as Y from "yjs";
 import {
   createEditorSchema,
@@ -20,6 +27,7 @@ import {
 } from "@zhishu/document-contracts";
 import type { Principal } from "../identity/identity.types.js";
 import { createSessionTicket } from "../collaboration/session-ticket.js";
+import type { CollaborationSessionRevoker } from "../collaboration/session-revoker.js";
 import type {
   ActiveDocument,
   DocumentIdempotency,
@@ -28,7 +36,6 @@ import type {
   DocumentRepository,
   DocumentVersion,
 } from "./document.repository.js";
-import type { DocumentPermissionAction } from "./document.permissions.js";
 import type {
   CopyDocumentInput,
   DocumentTag,
@@ -39,21 +46,14 @@ import type {
   ImportDocumentInput,
 } from "./document.schema.js";
 import {
-  emptyStructureState,
-  projectContentUpdateToStructure,
   readStoredStructureState,
   sameDocumentContent,
-  writeStoredStructureState,
 } from "../collaboration/structure-operations.js";
 
 export type CollaborationOptions = {
   tokenSecret: string;
   sessionTtlSeconds: number;
   providerUrl: string;
-};
-
-export type CollaborationSessionRevoker = {
-  revokeDocumentSessions(documentId: string, generationId: string): void;
 };
 
 const collaborationPresenceColors = [
@@ -64,21 +64,6 @@ const collaborationPresenceColors = [
   "#B45309",
   "#4D7C0F",
 ] as const;
-
-function stableJsonStringify(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableJsonStringify(item)).join(",")}]`;
-  }
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) =>
-      left < right ? -1 : left > right ? 1 : 0,
-    );
-    return `{${entries
-      .map(([key, item]) => `${JSON.stringify(key)}:${stableJsonStringify(item)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value) ?? "null";
-}
 
 function migrationPersistence(stepSnapshots: readonly ContentMigrationStepSnapshot[]) {
   return stepSnapshots.length > 0 ? { migrationId: randomUUID(), stepSnapshots } : undefined;
@@ -107,7 +92,7 @@ export type DuplicateBlockIdRepairResult =
     }
   | { status: "conflict" };
 
-function presentDocument(document: ActiveDocument, identityId: string) {
+function presentDocument(document: ActiveDocument) {
   return {
     id: document.id,
     tenantId: document.tenantId,
@@ -117,6 +102,7 @@ function presentDocument(document: ActiveDocument, identityId: string) {
     position: document.position ?? 0,
     icon: document.icon ?? null,
     tags: document.tags ?? [],
+    accessMode: document.accessMode ?? "restricted",
     createdBy: document.createdBy,
     generationId: document.generationId,
     schemaVersion: document.schemaVersion,
@@ -125,15 +111,20 @@ function presentDocument(document: ActiveDocument, identityId: string) {
     createdAt: document.createdAt.toISOString(),
     updatedAt: document.updatedAt.toISOString(),
     metadataRevision: document.metadataRevision,
-    canManage: document.createdBy === identityId,
+    canManage: document.canManage ?? false,
+    canWrite: document.canWrite ?? false,
+    offlineCacheAllowed: document.offlineCacheAllowed ?? false,
+    canComment: document.canComment ?? false,
+    canMove: document.canMove ?? false,
+    canShare: document.canShare ?? false,
+    canExport: document.canExport ?? false,
   };
 }
 
-function presentListItem(document: DocumentListItem, identityId: string) {
+function presentListItem(document: DocumentListItem) {
   return {
-    ...presentDocument(document, identityId),
+    ...presentDocument(document),
     isFavorite: document.isFavorite,
-    canManage: document.createdBy === identityId,
     deletedAt: document.deletedAt?.toISOString() ?? null,
     workspaceName: document.workspaceName,
     excerpt: document.excerpt,
@@ -160,97 +151,6 @@ type ImportReportIssue = {
   recoverable: boolean;
 };
 
-function summarizePortableContent(content: unknown): {
-  blockCount: number;
-  assetCount: number;
-  assetPaths: string[];
-} {
-  let blockCount = 0;
-  let assetCount = 0;
-  const assetPaths: string[] = [];
-  const pending: Array<{ value: unknown; path: string }> = [{ value: content, path: "$" }];
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (!current || typeof current.value !== "object" || current.value === null) continue;
-    if (Array.isArray(current.value)) {
-      for (let index = current.value.length - 1; index >= 0; index -= 1) {
-        pending.push({ value: current.value[index], path: `${current.path}/${index}` });
-      }
-      continue;
-    }
-    const node = current.value as { type?: unknown; attrs?: unknown; content?: unknown };
-    if (
-      typeof node.attrs === "object" &&
-      node.attrs !== null &&
-      !Array.isArray(node.attrs) &&
-      typeof (node.attrs as { blockId?: unknown }).blockId === "string"
-    ) {
-      blockCount += 1;
-    }
-    if (node.type === "image" || node.type === "pdfAttachment") {
-      assetCount += 1;
-      assetPaths.push(`${current.path}/attrs`);
-    }
-    if (Array.isArray(node.content)) {
-      for (let index = node.content.length - 1; index >= 0; index -= 1) {
-        pending.push({ value: node.content[index], path: `${current.path}/content/${index}` });
-      }
-    }
-  }
-  return { blockCount, assetCount, assetPaths };
-}
-
-// Kept exported only for the one-time standard→collaborative migration script.
-export function collectAssetReferences(
-  content: DocumentContent,
-): Array<{ assetId: string; blockId: string; mediaType: string }> {
-  const references: Array<{ assetId: string; blockId: string; mediaType: string }> = [];
-  const pending: unknown[] = [...content.content];
-  while (pending.length > 0) {
-    const value = pending.pop();
-    if (typeof value !== "object" || value === null || Array.isArray(value)) continue;
-    const node = value as {
-      type?: unknown;
-      attrs?: { assetId?: unknown; blockId?: unknown; mediaType?: unknown };
-      content?: unknown;
-    };
-    if (
-      (node.type === "image" || node.type === "pdfAttachment") &&
-      typeof node.attrs?.assetId === "string" &&
-      typeof node.attrs.blockId === "string" &&
-      typeof node.attrs.mediaType === "string"
-    ) {
-      references.push({
-        assetId: node.attrs.assetId,
-        blockId: node.attrs.blockId,
-        mediaType: node.attrs.mediaType,
-      });
-    }
-    if (Array.isArray(node.content)) pending.push(...node.content);
-  }
-  return references;
-}
-
-// Kept exported only for the one-time standard→collaborative migration script.
-export function createCollaborationStateFromContent(content: DocumentContent): Uint8Array {
-  const doc = prosemirrorJSONToYDoc(createEditorSchema(), content, "content");
-  const projectedStructure = projectContentUpdateToStructure(
-    emptyStructureState(),
-    { type: "doc", content: [] },
-    content,
-  );
-  if (!projectedStructure.success) {
-    doc.destroy();
-    throw new DomainError("CONFLICT", "The version structure cannot be restored safely");
-  }
-  try {
-    writeStoredStructureState(doc, projectedStructure.state, "version-snapshot-restore");
-    return Y.encodeStateAsUpdate(doc);
-  } finally {
-    doc.destroy();
-  }
-}
-
 function pushImportIssue(issues: ImportReportIssue[], issue: ImportReportIssue): void {
   if (issues.length < 100) {
     issues.push(issue);
@@ -276,6 +176,7 @@ function asImportIssue(issue: ContentIssue): ImportReportIssue {
 export class DocumentService {
   constructor(
     private readonly repository: DocumentRepository,
+    private readonly history: DocumentHistoryRepository,
     private readonly collaboration: CollaborationOptions,
     private readonly sessionRevoker: CollaborationSessionRevoker,
     private readonly migration: DocumentMigrationOptions,
@@ -292,7 +193,7 @@ export class DocumentService {
   ): Promise<Y.Doc> {
     const yDoc = new Y.Doc();
     try {
-      await this.repository.replayYjsState(
+      await this.history.replayYjsState(
         {
           documentId,
           generationId,
@@ -334,8 +235,7 @@ export class DocumentService {
       undefined,
       { workspaceId: input.workspaceId, catalogId: input.catalogId },
     );
-    await this.repository.markRecent(document, principal.identityId);
-    return presentDocument(document, principal.identityId);
+    return this.get(principal, document.id);
   }
 
   async copyTemplate(
@@ -360,14 +260,14 @@ export class DocumentService {
         subjectId: principal.identityId,
         idempotency,
       });
-      if (replay) return presentDocument(replay, principal.identityId);
+      if (replay) return this.get(principal, replay.id);
     }
 
     const template = await this.repository.findActiveForAction(
       templateId,
       principal.tenantId,
       principal.identityId,
-      "read",
+      "export",
     );
     if (!template) throw new DomainError("NOT_FOUND", "An accessible template was not found");
 
@@ -379,31 +279,16 @@ export class DocumentService {
       "The template update history is incomplete",
     );
     try {
-      const sourceContent = (() => {
-        const projected = yDocToProsemirrorJSON(sourceDoc, "content");
-        return normalizeTiptapDocumentJSON(
-          Array.isArray(projected.content) || projected.content !== undefined
-            ? projected
-            : { ...projected, content: [] },
-        );
-      })();
+      const sourceContent = readDocumentContent(sourceDoc);
       const validatedSource = this.migration.validateSource(sourceContent, template.schemaVersion);
       if (!validatedSource.success) {
         throw new DomainError("CONFLICT", "The template content cannot be copied safely");
       }
-      const pendingBlocks: unknown[] = [...validatedSource.data.content];
-      while (pendingBlocks.length > 0) {
-        const block = pendingBlocks.pop();
-        if (typeof block !== "object" || block === null || Array.isArray(block)) continue;
-        const node = block as { type?: unknown; content?: unknown };
-        if (node.type === "image" || node.type === "pdfAttachment") {
-          throw new DomainError(
-            "CONFLICT",
-            "Templates containing attachments cannot be copied until document asset cloning is available",
-          );
-        }
-        if (Array.isArray(node.content)) pendingBlocks.push(...node.content);
-      }
+      if (inspectDocumentContent(validatedSource.data).assetCount > 0)
+        throw new DomainError(
+          "CONFLICT",
+          "Templates containing attachments cannot be copied until document asset cloning is available",
+        );
 
       const migrated = this.migration.execute(
         validatedSource.data,
@@ -427,26 +312,12 @@ export class DocumentService {
         if (!editorValidation.success) {
           throw new DomainError("CONFLICT", "The template content uses unsupported editor nodes");
         }
-        const targetDoc = prosemirrorJSONToYDoc(createEditorSchema(), content, "content");
-        try {
-          const projectedStructure = projectContentUpdateToStructure(
-            emptyStructureState(),
-            { type: "doc", content: [] },
-            content,
-          );
-          if (!projectedStructure.success) {
-            throw new DomainError("CONFLICT", "The template structure cannot be copied safely");
-          }
-          writeStoredStructureState(targetDoc, projectedStructure.state);
-          const updateBytes = Y.encodeStateAsUpdate(targetDoc);
-          initialUpdate = {
-            updateHash: createHash("sha256").update(updateBytes).digest("hex"),
-            updateBytes,
-            content,
-          };
-        } finally {
-          targetDoc.destroy();
-        }
+        const updateBytes = createCollaborationStateFromContent(content);
+        initialUpdate = {
+          updateHash: createHash("sha256").update(updateBytes).digest("hex"),
+          updateBytes,
+          content,
+        };
       }
 
       const result = await this.repository.copyTemplate({
@@ -475,11 +346,7 @@ export class DocumentService {
           limit: this.maxDocumentsPerTenant,
         });
       }
-      if (result.status === "replayed") {
-        return presentDocument(result.document, principal.identityId);
-      }
-      await this.repository.markRecent(result.document, principal.identityId);
-      return presentDocument(result.document, principal.identityId);
+      return this.get(principal, result.document.id);
     } finally {
       sourceDoc?.destroy();
     }
@@ -505,7 +372,7 @@ export class DocumentService {
     });
     return {
       ...result,
-      items: result.items.map((item) => presentListItem(item, principal.identityId)),
+      items: result.items.map((item) => presentListItem(item)),
     };
   }
 
@@ -539,7 +406,7 @@ export class DocumentService {
     if (result.status === "not-found") throw new DomainError("NOT_FOUND", "Document not found");
     if (result.status === "conflict")
       throw new DomainError("CONFLICT", "Document metadata changed");
-    return presentDocument(result.document, principal.identityId);
+    return this.get(principal, result.document.id);
   }
 
   async setFavorite(principal: Principal, documentId: string, favorite: boolean): Promise<void> {
@@ -595,7 +462,7 @@ export class DocumentService {
     );
     if (!document) throw new DomainError("NOT_FOUND", "Document not found");
     await this.repository.markRecent(document, principal.identityId);
-    return presentDocument(document, principal.identityId);
+    return presentDocument(document);
   }
 
   async getContent(principal: Principal, documentId: string) {
@@ -649,14 +516,7 @@ export class DocumentService {
       "The document update history is incomplete",
     );
     try {
-      const source = (() => {
-        const projected = yDocToProsemirrorJSON(yDoc, "content");
-        return normalizeTiptapDocumentJSON(
-          Array.isArray(projected.content) || projected.content !== undefined
-            ? projected
-            : { ...projected, content: [] },
-        );
-      })();
+      const source = readDocumentContent(yDoc);
       const validated = this.migration.validateSource(source, document.schemaVersion);
       if (
         !validated.success ||
@@ -664,7 +524,7 @@ export class DocumentService {
       ) {
         throw new DomainError("CONFLICT", "The document content cannot be exported safely");
       }
-      const summary = summarizePortableContent(validated.data);
+      const summary = inspectDocumentContent(validated.data);
       const recorded = await this.repository.recordExport({
         tenantId: principal.tenantId,
         documentId: document.id,
@@ -704,7 +564,7 @@ export class DocumentService {
     idempotencyKey?: string,
   ) {
     const normalized = normalizeTiptapDocumentJSON(input.content);
-    const summary = summarizePortableContent(normalized);
+    const summary = inspectDocumentContent(normalized);
     const issues: ImportReportIssue[] = [];
     const compatibility = checkDocumentCompatibility(
       { schemaVersion: input.schemaVersion, extensions: input.extensions },
@@ -788,56 +648,43 @@ export class DocumentService {
       return { status: "rejected" as const, report };
     }
 
-    const targetDoc = prosemirrorJSONToYDoc(createEditorSchema(), contentToImport, "content");
-    try {
-      const projectedStructure = projectContentUpdateToStructure(
-        emptyStructureState(),
-        { type: "doc", content: [] },
-        contentToImport,
-      );
-      if (!projectedStructure.success) {
-        throw new DomainError("CONFLICT", "The imported document structure is invalid");
-      }
-      writeStoredStructureState(targetDoc, projectedStructure.state);
-      const updateBytes = Y.encodeStateAsUpdate(targetDoc);
-      const updateHash = createHash("sha256").update(updateBytes).digest("hex");
-      const idempotency: DocumentIdempotency | undefined = idempotencyKey
-        ? {
-            operationId: "documents.import",
-            key: idempotencyKey,
-            requestHash: createHash("sha256")
-              .update(
-                stableJsonStringify({
-                  title: input.title,
-                  schemaVersion: input.schemaVersion,
-                  extensions: input.extensions,
-                  content: normalized,
-                }),
-              )
-              .digest("hex"),
-          }
-        : undefined;
-      const document = await this.repository.create(
-        principal.tenantId,
-        principal.identityId,
-        input.title,
-        { schemaVersion: this.migration.targetSchemaVersion, extensions: input.extensions },
-        requestId,
-        this.maxDocumentsPerTenant,
-        { updateHash, updateBytes, content: contentToImport },
-        idempotency,
-        migrationReport,
-        migrationArchive,
-      );
-      await this.repository.markRecent(document, principal.identityId);
-      return {
-        status: "completed" as const,
-        document: presentDocument(document, principal.identityId),
-        report,
-      };
-    } finally {
-      targetDoc.destroy();
-    }
+    const updateBytes = createCollaborationStateFromContent(contentToImport);
+    const updateHash = createHash("sha256").update(updateBytes).digest("hex");
+    const idempotency: DocumentIdempotency | undefined = idempotencyKey
+      ? {
+          operationId: "documents.import",
+          key: idempotencyKey,
+          requestHash: createHash("sha256")
+            .update(
+              stableJsonStringify({
+                title: input.title,
+                ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
+                schemaVersion: input.schemaVersion,
+                extensions: input.extensions,
+                content: normalized,
+              }),
+            )
+            .digest("hex"),
+        }
+      : undefined;
+    const document = await this.repository.create(
+      principal.tenantId,
+      principal.identityId,
+      input.title,
+      { schemaVersion: this.migration.targetSchemaVersion, extensions: input.extensions },
+      requestId,
+      this.maxDocumentsPerTenant,
+      { updateHash, updateBytes, content: contentToImport },
+      idempotency,
+      migrationReport,
+      migrationArchive,
+      input.workspaceId ? { workspaceId: input.workspaceId, catalogId: null } : undefined,
+    );
+    return {
+      status: "completed" as const,
+      document: await this.get(principal, document.id),
+      report,
+    };
   }
 
   async listVersions(principal: Principal, documentId: string) {
@@ -891,12 +738,7 @@ export class DocumentService {
       version.id,
     );
     try {
-      const projected = yDocToProsemirrorJSON(versionDoc, "content");
-      const source = normalizeTiptapDocumentJSON(
-        Array.isArray(projected.content) || projected.content !== undefined
-          ? projected
-          : { ...projected, content: [] },
-      );
+      const source = readDocumentContent(versionDoc);
       const validated = this.migration.validateSource(source, schemaVersion);
       if (!validated.success) {
         throw new DomainError("CONFLICT", "The document version content cannot be read safely");
@@ -990,7 +832,7 @@ export class DocumentService {
       throw new DomainError("CONFLICT", "Document changed or version content is unavailable");
     if (result.status === "restored")
       this.sessionRevoker.revokeDocumentSessions(documentId, result.previousGenerationId);
-    return presentDocument(result.document, principal.identityId);
+    return this.get(principal, result.document.id);
   }
 
   private async createVersionStateBytes(
@@ -1026,16 +868,17 @@ export class DocumentService {
     principal: Principal,
     documentId: string,
     identityId: string,
-    actions: readonly DocumentPermissionAction[],
+    actions: readonly PermissionAction[],
     requestId?: string,
     idempotencyKey?: string,
+    role?: AccessRole,
   ) {
     const idempotency: DocumentIdempotency | undefined = idempotencyKey
       ? {
           operationId: "documents.acl.set",
           key: idempotencyKey,
           requestHash: createHash("sha256")
-            .update(stableJsonStringify({ documentId, identityId, actions }))
+            .update(stableJsonStringify({ documentId, identityId, actions, role }))
             .digest("hex"),
         }
       : undefined;
@@ -1047,12 +890,13 @@ export class DocumentService {
       actions,
       requestId,
       idempotency,
+      role,
     );
     if (result.status === "not-found" || result.status === "not-owner")
       throw new DomainError("NOT_FOUND", "Document not found");
     if (result.status === "updated")
-      this.sessionRevoker.revokeDocumentSessions(documentId, result.generationId);
-    return { documentId, identityId, actions: result.actions };
+      this.sessionRevoker.revokeDocumentSessions(documentId, result.generationId, identityId);
+    return { documentId, identityId, actions: result.actions, ...(role ? { role } : {}) };
   }
 
   async removeAcl(
@@ -1082,7 +926,7 @@ export class DocumentService {
     if (result.status === "not-found" || result.status === "not-owner")
       throw new DomainError("NOT_FOUND", "Document not found");
     if (result.status === "updated")
-      this.sessionRevoker.revokeDocumentSessions(documentId, result.generationId);
+      this.sessionRevoker.revokeDocumentSessions(documentId, result.generationId, identityId);
   }
 
   async repairDuplicateBlockIds(
@@ -1107,12 +951,7 @@ export class DocumentService {
     ).catch(() => null);
     if (!sourceDoc) return { status: "conflict" };
     try {
-      const projected = yDocToProsemirrorJSON(sourceDoc, "content");
-      const content = normalizeTiptapDocumentJSON(
-        Array.isArray(projected.content) || projected.content !== undefined
-          ? projected
-          : { ...projected, content: [] },
-      );
+      const content = readDocumentContent(sourceDoc);
       const validated = this.migration.validateSource(content, source.schemaVersion);
       if (validated.success) return { status: "clean" };
       const duplicateCount = validated.issues.filter(
@@ -1143,46 +982,34 @@ export class DocumentService {
       if (!editorValidation.success) return { status: "conflict" };
       if (!apply) return { status: "repairable", duplicateCount };
 
-      const targetDoc = prosemirrorJSONToYDoc(createEditorSchema(), migrated.content, "content");
-      try {
-        const projectedStructure = projectContentUpdateToStructure(
-          emptyStructureState(),
-          { type: "doc", content: [] },
-          migrated.content,
-        );
-        if (!projectedStructure.success) return { status: "conflict" };
-        writeStoredStructureState(targetDoc, projectedStructure.state);
-        const updateBytes = Y.encodeStateAsUpdate(targetDoc);
-        const updateHash = createHash("sha256").update(updateBytes).digest("hex");
-        const result = await this.repository.switchActiveGeneration({
-          tenantId: principal.tenantId,
-          documentId: source.id,
-          identityId: principal.identityId,
-          expectedGenerationId: source.generationId,
-          expectedSchemaVersion: source.schemaVersion,
-          expectedDurableSeq: source.durableSeq,
-          targetSchemaVersion: this.migration.targetSchemaVersion,
-          extensions: source.extensions,
-          updateHash,
-          updateBytes,
-          content: migrated.content,
-          migrationReport: migrated.report,
-          ...(migrationArchive ? { migrationPersistence: migrationArchive } : {}),
-        });
-        if (result.status === "conflict" || result.status === "not-found") {
-          return { status: "conflict" };
-        }
-        if (result.status !== "repaired") return { status: "conflict" };
-        this.sessionRevoker.revokeDocumentSessions(source.id, result.previousGenerationId);
-        return {
-          status: "repaired",
-          duplicateCount,
-          previousGenerationId: result.previousGenerationId,
-          generationId: result.document.generationId,
-        };
-      } finally {
-        targetDoc.destroy();
+      const updateBytes = createCollaborationStateFromContent(migrated.content);
+      const updateHash = createHash("sha256").update(updateBytes).digest("hex");
+      const result = await this.repository.switchActiveGeneration({
+        tenantId: principal.tenantId,
+        documentId: source.id,
+        identityId: principal.identityId,
+        expectedGenerationId: source.generationId,
+        expectedSchemaVersion: source.schemaVersion,
+        expectedDurableSeq: source.durableSeq,
+        targetSchemaVersion: this.migration.targetSchemaVersion,
+        extensions: source.extensions,
+        updateHash,
+        updateBytes,
+        content: migrated.content,
+        migrationReport: migrated.report,
+        ...(migrationArchive ? { migrationPersistence: migrationArchive } : {}),
+      });
+      if (result.status === "conflict" || result.status === "not-found") {
+        return { status: "conflict" };
       }
+      if (result.status !== "repaired") return { status: "conflict" };
+      this.sessionRevoker.revokeDocumentSessions(source.id, result.previousGenerationId);
+      return {
+        status: "repaired",
+        duplicateCount,
+        previousGenerationId: result.previousGenerationId,
+        generationId: result.document.generationId,
+      };
     } catch {
       return { status: "conflict" };
     } finally {
@@ -1225,10 +1052,18 @@ export class DocumentService {
         principal.identityId,
         "write",
       )) !== null;
+    // Viewers can open supported older generations without triggering a schema migration.
+    const readableSchemaVersions =
+      !canWriteCurrentGeneration &&
+      this.migration.supportedSchemaVersions.includes(client.schemaVersion)
+        ? this.migration.supportedSchemaVersions.filter(
+            (version) => version <= client.schemaVersion,
+          )
+        : [client.schemaVersion];
     const compatibility = checkDocumentCompatibility(
       { schemaVersion: document.schemaVersion, extensions: document.extensions },
       {
-        schemaVersions: [client.schemaVersion],
+        schemaVersions: readableSchemaVersions,
         extensions: Object.fromEntries(
           client.extensions.map((extension) => [extension.name, [extension.version]]),
         ),
@@ -1281,11 +1116,7 @@ export class DocumentService {
       "The document update history is incomplete",
     );
     try {
-      const projected = yDocToProsemirrorJSON(sourceDoc, "content");
-      const sourceContent =
-        Array.isArray(projected.content) || projected.content !== undefined
-          ? projected
-          : { ...projected, content: [] };
+      const sourceContent = readDocumentContent(sourceDoc);
       const validatedSource = this.migration.validateSource(sourceContent, source.schemaVersion);
       if (!validatedSource.success) {
         throw new DomainError("CONFLICT", "The document content cannot be migrated safely");
@@ -1301,13 +1132,7 @@ export class DocumentService {
       }
       const migrationArchive = migrationPersistence(migrated.stepSnapshots);
 
-      let updateBytes: Uint8Array;
-      const targetDoc = prosemirrorJSONToYDoc(createEditorSchema(), migrated.content, "content");
-      try {
-        updateBytes = Y.encodeStateAsUpdate(targetDoc);
-      } finally {
-        targetDoc.destroy();
-      }
+      const updateBytes = createCollaborationStateFromContent(migrated.content);
       const updateHash = createHash("sha256").update(updateBytes).digest("hex");
       const result = await this.repository.switchActiveGeneration({
         tenantId: principal.tenantId,

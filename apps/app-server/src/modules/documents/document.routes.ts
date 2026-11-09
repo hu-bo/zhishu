@@ -1,7 +1,8 @@
+import { idempotencyKeyHeadersSchema } from "../../shared/idempotency.schema.js";
+import { requirePrincipal } from "../identity/principal.js";
 import type { FastifyInstance } from "fastify";
 import { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { DomainError } from "../../shared/domain-error.js";
 import type { DocumentService } from "./document.service.js";
 import {
   collaborationSessionSchema,
@@ -31,16 +32,6 @@ import {
 } from "./document.schema.js";
 
 const bearerSecurity = [{ bearerAuth: [] }];
-const idempotencyKeyHeadersSchema = z
-  .object({
-    "idempotency-key": z
-      .string()
-      .min(1)
-      .max(128)
-      .regex(/^[A-Za-z0-9._~-]+$/)
-      .optional(),
-  })
-  .passthrough();
 
 export async function documentRoutes(
   app: FastifyInstance,
@@ -61,22 +52,20 @@ export async function documentRoutes(
           200: importDocumentResultSchema,
           400: errorResponseSchema,
           401: errorResponseSchema,
+          404: errorResponseSchema,
           409: errorResponseSchema,
           413: errorResponseSchema,
           429: errorResponseSchema,
         },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.importJson(
-        request.principal,
+    async (request) =>
+      service.importJson(
+        requirePrincipal(request.principal),
         request.body,
         request.id,
         request.headers["idempotency-key"],
-      );
-    },
+      ),
   );
   typed.get(
     "/",
@@ -89,18 +78,16 @@ export async function documentRoutes(
         response: { 200: documentListSchema, 401: errorResponseSchema, 400: errorResponseSchema },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.list(request.principal, {
+    async (request) =>
+      service.list(requirePrincipal(request.principal), {
         view: request.query.view,
         q: request.query.q,
+        workspaceId: request.query.workspaceId,
         sort: request.query.sort,
         direction: request.query.direction,
         limit: request.query.limit,
         offset: request.query.offset,
-      });
-    },
+      }),
   );
   typed.get(
     "/:documentId",
@@ -113,11 +100,7 @@ export async function documentRoutes(
         response: { 200: documentSchema, 401: errorResponseSchema, 404: errorResponseSchema },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.get(request.principal, request.params.documentId);
-    },
+    async (request) => service.get(requirePrincipal(request.principal), request.params.documentId),
   );
   typed.get(
     "/:documentId/export",
@@ -135,11 +118,12 @@ export async function documentRoutes(
         },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.exportJson(request.principal, request.params.documentId, request.id);
-    },
+    async (request) =>
+      service.exportJson(
+        requirePrincipal(request.principal),
+        request.params.documentId,
+        request.id,
+      ),
   );
   typed.get(
     "/:documentId/content",
@@ -157,11 +141,8 @@ export async function documentRoutes(
         },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.getContent(request.principal, request.params.documentId);
-    },
+    async (request) =>
+      service.getContent(requirePrincipal(request.principal), request.params.documentId),
   );
   typed.get(
     "/:documentId/acl",
@@ -178,11 +159,8 @@ export async function documentRoutes(
         },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.listAcl(request.principal, request.params.documentId);
-    },
+    async (request) =>
+      service.listAcl(requirePrincipal(request.principal), request.params.documentId),
   );
   typed.post(
     "/",
@@ -197,25 +175,23 @@ export async function documentRoutes(
           201: documentSchema,
           400: errorResponseSchema,
           401: errorResponseSchema,
+          404: errorResponseSchema,
           409: errorResponseSchema,
           429: errorResponseSchema,
         },
       },
     },
-    async (request, reply) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return reply
+    async (request, reply) =>
+      reply
         .code(201)
         .send(
           await service.create(
-            request.principal,
+            requirePrincipal(request.principal),
             request.body,
             request.id,
             request.headers["idempotency-key"],
           ),
-        );
-    },
+        ),
   );
   typed.get(
     "/:documentId/versions",
@@ -232,11 +208,8 @@ export async function documentRoutes(
         },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.listVersions(request.principal, request.params.documentId);
-    },
+    async (request) =>
+      service.listVersions(requirePrincipal(request.principal), request.params.documentId),
   );
   typed.post(
     "/:documentId/versions",
@@ -257,21 +230,18 @@ export async function documentRoutes(
         },
       },
     },
-    async (request, reply) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return reply
+    async (request, reply) =>
+      reply
         .code(201)
         .send(
           await service.createVersion(
-            request.principal,
+            requirePrincipal(request.principal),
             request.params.documentId,
             request.body,
             request.id,
             request.headers["idempotency-key"],
           ),
-        );
-    },
+        ),
   );
   typed.get(
     "/:documentId/versions/:versionId",
@@ -288,15 +258,12 @@ export async function documentRoutes(
         },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.getVersion(
-        request.principal,
+    async (request) =>
+      service.getVersion(
+        requirePrincipal(request.principal),
         request.params.documentId,
         request.params.versionId,
-      );
-    },
+      ),
   );
   typed.get(
     "/:documentId/versions/:versionId/content",
@@ -314,15 +281,12 @@ export async function documentRoutes(
         },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.getVersionContent(
-        request.principal,
+    async (request) =>
+      service.getVersionContent(
+        requirePrincipal(request.principal),
         request.params.documentId,
         request.params.versionId,
-      );
-    },
+      ),
   );
   typed.post(
     "/:documentId/versions/:versionId/restore",
@@ -343,18 +307,15 @@ export async function documentRoutes(
         },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.restoreVersion(
-        request.principal,
+    async (request) =>
+      service.restoreVersion(
+        requirePrincipal(request.principal),
         request.params.documentId,
         request.params.versionId,
         request.body,
         request.id,
         request.headers["idempotency-key"],
-      );
-    },
+      ),
   );
   typed.post(
     "/:documentId/copy",
@@ -376,21 +337,18 @@ export async function documentRoutes(
         },
       },
     },
-    async (request, reply) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return reply
+    async (request, reply) =>
+      reply
         .code(201)
         .send(
           await service.copyTemplate(
-            request.principal,
+            requirePrincipal(request.principal),
             request.params.documentId,
             request.body,
             request.id,
             request.headers["idempotency-key"],
           ),
-        );
-    },
+        ),
   );
   typed.patch(
     "/:documentId",
@@ -411,17 +369,14 @@ export async function documentRoutes(
         },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.updateTitle(
-        request.principal,
+    async (request) =>
+      service.updateTitle(
+        requirePrincipal(request.principal),
         request.params.documentId,
         request.body,
         request.id,
         request.headers["idempotency-key"],
-      );
-    },
+      ),
   );
   typed.put(
     "/:documentId/favorite",
@@ -435,9 +390,11 @@ export async function documentRoutes(
       },
     },
     async (request, reply) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      await service.setFavorite(request.principal, request.params.documentId, true);
+      await service.setFavorite(
+        requirePrincipal(request.principal),
+        request.params.documentId,
+        true,
+      );
       return reply.code(204).send(null);
     },
   );
@@ -453,9 +410,11 @@ export async function documentRoutes(
       },
     },
     async (request, reply) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      await service.setFavorite(request.principal, request.params.documentId, false);
+      await service.setFavorite(
+        requirePrincipal(request.principal),
+        request.params.documentId,
+        false,
+      );
       return reply.code(204).send(null);
     },
   );
@@ -477,10 +436,8 @@ export async function documentRoutes(
       },
     },
     async (request, reply) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
       await service.lifecycle(
-        request.principal,
+        requirePrincipal(request.principal),
         request.params.documentId,
         "archive",
         request.id,
@@ -507,10 +464,8 @@ export async function documentRoutes(
       },
     },
     async (request, reply) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
       await service.lifecycle(
-        request.principal,
+        requirePrincipal(request.principal),
         request.params.documentId,
         "restore",
         request.id,
@@ -537,10 +492,8 @@ export async function documentRoutes(
       },
     },
     async (request, reply) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
       await service.lifecycle(
-        request.principal,
+        requirePrincipal(request.principal),
         request.params.documentId,
         "purge",
         request.id,
@@ -567,10 +520,8 @@ export async function documentRoutes(
       },
     },
     async (request, reply) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
       await service.lifecycle(
-        request.principal,
+        requirePrincipal(request.principal),
         request.params.documentId,
         "trash",
         request.id,
@@ -598,18 +549,16 @@ export async function documentRoutes(
         },
       },
     },
-    async (request) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return service.setAcl(
-        request.principal,
+    async (request) =>
+      service.setAcl(
+        requirePrincipal(request.principal),
         request.params.documentId,
         request.params.identityId,
-        request.body.actions,
+        "actions" in request.body ? request.body.actions : [],
         request.id,
         request.headers["idempotency-key"],
-      );
-    },
+        "role" in request.body ? request.body.role : undefined,
+      ),
   );
   typed.delete(
     "/:documentId/acl/:identityId",
@@ -629,10 +578,8 @@ export async function documentRoutes(
       },
     },
     async (request, reply) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
       await service.removeAcl(
-        request.principal,
+        requirePrincipal(request.principal),
         request.params.documentId,
         request.params.identityId,
         request.id,
@@ -659,18 +606,15 @@ export async function documentRoutes(
         },
       },
     },
-    async (request, reply) => {
-      if (!request.principal)
-        throw new DomainError("UNAUTHENTICATED", "Authentication is required");
-      return reply
+    async (request, reply) =>
+      reply
         .code(201)
         .send(
           await service.createCollaborationSession(
-            request.principal,
+            requirePrincipal(request.principal),
             request.params.documentId,
             request.body,
           ),
-        );
-    },
+        ),
   );
 }
