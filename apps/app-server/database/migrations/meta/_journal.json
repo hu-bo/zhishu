@@ -295,6 +295,34 @@
       "when": 1793523329998,
       "tag": "0041_sleepy_quicksilver",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1794337011701,
+      "tag": "0042_archive_legacy_ai",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1794337030927,
+      "tag": "0043_retire_legacy_ai",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1794337108851,
+      "tag": "0044_ai_platform_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1794337180000,
+      "tag": "0045_backfill_ai_platform",
+      "breakpoints": true
     }
   ]
 }

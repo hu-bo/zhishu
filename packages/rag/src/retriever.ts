@@ -1,6 +1,6 @@
 import type { QdrantClient, Schemas } from "@qdrant/js-client-rest";
 import type { Embeddings } from "@langchain/core/embeddings";
-import type { EvidenceBundle, EvidenceItem } from "@zhishu/ai-contracts";
+import type { DocumentEvidenceSource, EvidenceBundle, EvidenceItem } from "@zhishu/ai-contracts";
 import { configurationFingerprint, conservativeTokenCount, type IndexOptions } from "./chunks.js";
 import { readPointEvidence, validAclKeys, validateVectors } from "./qdrant.js";
 
@@ -24,6 +24,7 @@ const fields = [
   "configFingerprint",
   "sourceState",
   "snapshotId",
+  "documentTitle",
 ] as const;
 type Candidate = {
   pointId: string | number;
@@ -39,6 +40,7 @@ type Candidate = {
   configFingerprint: string;
   sourceState: string;
   snapshotId: string;
+  documentTitle: string;
 };
 function metadataOf(
   payload: Record<string, unknown> | null | undefined,
@@ -70,6 +72,8 @@ export function createKnowledgeRetriever<Scope>(options: {
     items: readonly EvidenceItem[],
     signal: AbortSignal,
   ): Promise<boolean>;
+  /** Optional display enrichment for workspace names the principal may see. */
+  describeWorkspace?(scope: Scope, workspaceId: string): Promise<string | null>;
   candidateLimit?: number;
   maxCandidates?: number;
   maxAclBatchBytes?: number;
@@ -109,7 +113,7 @@ export function createKnowledgeRetriever<Scope>(options: {
         input.contextTokenBudget === 0 ||
         scope.documentIds?.length === 0
       )
-        return { items: [], freshness: "current" };
+        return { sources: [], items: [], freshness: "current" };
       if (
         !validAclKeys(scope.readAclKeys) ||
         scope.readAclKeys.length > (options.maxAclKeys ?? 20_000)
@@ -190,8 +194,9 @@ export function createKnowledgeRetriever<Scope>(options: {
       const allowed = new Set(await options.authorizeCandidates(input.scope, candidates, signal));
       signal.throwIfAborted();
       const approved = candidates.filter((c) => allowed.has(c.pointId));
-      const items: EvidenceItem[] = [],
-        seen = new Set<string>();
+      const items: EvidenceItem[] = [];
+      const sources = new Map<string, DocumentEvidenceSource>();
+      const seen = new Set<string>();
       let used = 0;
       for (let offset = 0; offset < approved.length; offset += limit) {
         const group = approved.slice(offset, offset + limit);
@@ -207,12 +212,7 @@ export function createKnowledgeRetriever<Scope>(options: {
             m = metadataOf(point?.payload);
           if (!m || !fields.every((key) => m[key] === candidate[key])) continue;
           const item = readPointEvidence(point?.payload);
-          if (
-            !item ||
-            item.source.sourceId !== candidate.documentId ||
-            item.source.snapshotId !== candidate.snapshotId ||
-            seen.has(item.evidenceId)
-          )
+          if (!item || item.sourceId !== candidate.documentId || seen.has(item.evidenceId))
             continue;
           const cost =
             (options.index.countTokens ?? conservativeTokenCount)(JSON.stringify(item)) + 8;
@@ -221,12 +221,41 @@ export function createKnowledgeRetriever<Scope>(options: {
           used += cost;
           seen.add(item.evidenceId);
           items.push(item);
+          const key = `${item.sourceId}\u0000${item.snapshotId}`;
+          if (!sources.has(key))
+            sources.set(key, {
+              sourceKind: "document",
+              sourceId: candidate.documentId,
+              snapshotId: candidate.snapshotId,
+              title: candidate.documentTitle,
+              workspaceId: candidate.workspaceId,
+              documentId: candidate.documentId,
+              generationId: candidate.generationId,
+              durableSeq: candidate.durableSeq,
+              metadataRevision: candidate.metadataRevision,
+              indexVersion: candidate.indexVersion,
+            });
         }
       }
       if (!(await options.verifyEvidence(input.scope, items, signal)))
         throw new Error("ACCESS_REVOKED");
       signal.throwIfAborted();
-      return { items, freshness: "current" };
+      const documentSources: DocumentEvidenceSource[] = [...sources.values()];
+      if (documentSources.length && options.describeWorkspace) {
+        // Attach display labels the current principal may see; failures degrade to hidden labels.
+        for (const source of documentSources) {
+          if (source.workspaceLabel !== undefined) continue;
+          try {
+            source.workspaceLabel = await options.describeWorkspace(
+              input.scope,
+              source.workspaceId,
+            );
+          } catch {
+            source.workspaceLabel = null;
+          }
+        }
+      }
+      return { sources: documentSources, items, freshness: "current" };
     },
   };
 }

@@ -92,6 +92,12 @@ export class CatalogService {
   constructor(
     private readonly db: Database,
     private readonly revoker: CollaborationSessionRevoker,
+    /**
+     * Root-assembly-injected transaction port: before documents change ownership or land in
+     * the trash, their public site relations dissolve in the same transaction. The catalogs
+     * module must not import qa-sites directly.
+     */
+    private readonly publicLinkage?: import("../../shared/public-linkage.js").DocumentPublicLinkage,
   ) {}
 
   private async capabilities(
@@ -430,6 +436,21 @@ export class CatalogService {
           );
         if ((foreignDocuments?.count ?? 0) > 0)
           throw new DomainError("CONFLICT", "跨空间移动需要拥有子树内全部文档");
+        // Ownership changes dissolve public site approval relations first, in this transaction.
+        const movedDocuments = await tx
+          .select({ id: documents.id })
+          .from(documents)
+          .where(
+            and(
+              eq(documents.tenantId, principal.tenantId),
+              sql`${documents.catalogId} = any(${sql.param(subtreeIds)}::text[])`,
+            ),
+          );
+        await this.publicLinkage?.detachDocuments(
+          tx,
+          principal.tenantId,
+          movedDocuments.map((row) => row.id),
+        );
       }
       const siblings = await tx
         .select({ id: catalogs.id })
@@ -632,6 +653,7 @@ export class CatalogService {
       const now = new Date();
       if (affectedDocuments.length) {
         const documentIds = affectedDocuments.map((row) => row.id);
+        await this.publicLinkage?.detachDocuments(tx, principal.tenantId, documentIds);
         for (const documentId of documentIds) {
           const recipients = await documentRecipients(tx, principal.tenantId, documentId);
           await insertNotifications(

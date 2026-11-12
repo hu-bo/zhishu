@@ -1,23 +1,28 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { AiCreationPage } from '@/features/ai/ai-creation-page';
+import { createFileRoute } from '@tanstack/react-router';
+import { CreationPage } from '@/features/writing/creation-page';
 import { useKnowledgeWorkspace } from '@/features/knowledge/workspace-context';
 export const Route = createFileRoute('/_app/ai')({
   validateSearch: (
     search: Record<string, unknown>,
-  ): { sourceWorkspaceId?: string; contextDocumentId?: string; targetDocumentId?: string } => ({
+  ): {
+    sourceWorkspaceId?: string;
+    contextDocumentId?: string;
+    targetDocumentId?: string;
+    conversationId?: string;
+  } => ({
     sourceWorkspaceId:
       typeof search.sourceWorkspaceId === 'string' ? search.sourceWorkspaceId : undefined,
     contextDocumentId:
       typeof search.contextDocumentId === 'string' ? search.contextDocumentId : undefined,
     targetDocumentId:
       typeof search.targetDocumentId === 'string' ? search.targetDocumentId : undefined,
+    conversationId: typeof search.conversationId === 'string' ? search.conversationId : undefined,
   }),
   component: AiRoute,
 });
 function AiRoute() {
-  const search = Route.useSearch(),
-    navigate = useNavigate({ from: '/ai' }),
-    { identityKey, enabled } = useKnowledgeWorkspace();
+  const search = Route.useSearch();
+  const { identityKey, enabled } = useKnowledgeWorkspace();
   if (!enabled)
     return (
       <div
@@ -28,14 +33,16 @@ function AiRoute() {
       </div>
     );
   return (
-    <AiCreationPage
-      key={JSON.stringify([identityKey, search.sourceWorkspaceId, search.contextDocumentId])}
-      initialTargetDocumentId={search.targetDocumentId}
-      contextDocumentId={search.contextDocumentId}
+    <CreationPage
+      key={JSON.stringify([
+        identityKey,
+        search.sourceWorkspaceId,
+        search.contextDocumentId,
+        search.targetDocumentId,
+      ])}
       sourceWorkspaceId={search.sourceWorkspaceId}
-      onTargetChange={(id) => {
-        void navigate({ search: (old) => ({ ...old, targetDocumentId: id }), replace: true });
-      }}
+      contextDocumentId={search.contextDocumentId}
+      targetDocumentId={search.targetDocumentId}
     />
   );
 }

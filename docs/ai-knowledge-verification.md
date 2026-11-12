@@ -1,5 +1,7 @@
 # AI 写作与知识问答验收（2026-10-30）
 
+> 状态（2026-11-11）：本文为旧架构真实链路验收的历史记录，其中的 `smoke:ai-knowledge` 脚本、writing-chat 协议与 checkpoint 设计已在 AI 平台切换批次退役。现行验收入口为 `pnpm test:ai`、`pnpm check:ai-packages`、`pnpm --dir apps/app-server smoke:ai`（一次性库端到端冒烟）与根 `pnpm check`，真实模型/Qdrant/Tavily 的验收要求见 [AI 平台技术设计](apps/ai-assistant-and-public-qa.md) §15。
+
 完整真实文本流程已通过：`qwen3.8-flash` 生成文章并采纳落库 → `qwen3.7-text-embedding-flash` 自动生成 1024 维向量 → Qdrant 持久化和检索 → 真实模型回答指定文档或空间中的问题，并给出逐字原文引用。独立向量密钥更新后，`https://maas.qianwenaiapi.com/compatible-mode/v1/embeddings` 实测返回 HTTP 200。
 
 ## 本轮修复

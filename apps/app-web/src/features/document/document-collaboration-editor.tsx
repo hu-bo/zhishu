@@ -164,6 +164,43 @@ function UnconfirmedChangesProbe({
   return null;
 }
 
+/** Reports top-level block ids intersecting the editor selection for AI writing targets. */
+function SelectionReportBridge({ onChange }: { onChange?: (blockIds: string[]) => void }) {
+  const { controller } = useEditorInstance();
+  useEffect(() => {
+    if (!onChange || !controller) return;
+    let last = '';
+    const report = () => {
+      const editor = controller.editor;
+      if (!editor || editor.isDestroyed) return;
+      const { selection, doc } = editor.state;
+      const empty = selection.empty;
+      const ids: string[] = [];
+      if (!empty) {
+        let consumed = 0;
+        doc.forEach((node) => {
+          const start = consumed;
+          const end = consumed + node.nodeSize;
+          consumed = end;
+          if (selection.to > start && selection.from < end) {
+            const blockId = node.attrs?.blockId as string | undefined;
+            if (blockId) ids.push(blockId);
+          }
+        });
+      }
+      const key = ids.join(',');
+      if (key !== last) {
+        last = key;
+        onChange(ids);
+      }
+    };
+    const unlisten = controller.subscribe(() => report());
+    report();
+    return unlisten;
+  }, [controller, onChange]);
+  return null;
+}
+
 function CachedDraftProbe({
   cached,
   identity,
@@ -198,6 +235,7 @@ export function DocumentCollaborationEditor({
   onVersionsOpenChange,
   onDocumentInput,
   replacementReview,
+  onSelectionBlocksChange,
 }: {
   document: GetDocument200;
   viewMode: 'edit' | 'read';
@@ -208,6 +246,8 @@ export function DocumentCollaborationEditor({
   onVersionsOpenChange: (open: boolean) => void;
   onDocumentInput?: () => void;
   replacementReview?: EditorReplacementReviewProps;
+  /** Reports the top-level block ids intersecting the current selection (AI writing targets). */
+  onSelectionBlocksChange?: (blockIds: string[]) => void;
 }) {
   const offline = useOfflineState();
   const identity = offline.identity;
@@ -540,6 +580,7 @@ export function DocumentCollaborationEditor({
             : undefined
       }
     >
+      <SelectionReportBridge onChange={onSelectionBlocksChange} />
       <div className="flex h-full min-h-0 flex-col">
         {editorError?.key === sessionKey && (
           <div

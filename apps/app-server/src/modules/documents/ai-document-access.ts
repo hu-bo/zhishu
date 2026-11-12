@@ -1,10 +1,7 @@
-import { documentActionSql, hasDocumentPermission } from "../authorization/permissions.js";
+﻿import { documentActionSql, hasDocumentPermission } from "../authorization/permissions.js";
 import { and, eq, inArray } from "drizzle-orm";
 import type { Database } from "../../../database/index.js";
 import { documents, documentGenerations, workspaces } from "../../../database/schema/index.js";
-import type { AiRunInput } from "../../../database/schema/ai.table.js";
-import { prepareDocumentChunks } from "@zhishu/rag";
-import type { EvidenceBundle } from "@zhishu/ai-contracts";
 import type { CollaborationOwner } from "../collaboration/owner.js";
 import type { Principal } from "../identity/identity.types.js";
 import { DomainError } from "../../shared/domain-error.js";
@@ -98,109 +95,21 @@ export class AiDocumentAccess {
   async context(principal: Principal, id: string) {
     const row = await this.authorized(this.db, principal, id, ["read", "ai"]);
     let writable = false;
-    if (row.kind === "personal" && row.personalOwnerId === principal.identityId) {
-      try {
-        await this.authorized(this.db, principal, id, ["write", "ai"]);
-        writable = true;
-      } catch {
-        /* Readable sources remain available. */
-      }
-    }
+    if (await this.canWrite(principal, id)) writable = true;
     return {
       ...(await this.owner.snapshot(principal, id)),
       aiWritable: writable,
-      reason: writable
-        ? null
-        : row.kind === "personal"
-          ? "仅空间所有者可将此文档用于 AI 写入"
-          : "AI 正文写入仅支持本人的个人空间",
+      workspaceId: row.workspaceId,
     };
   }
-  async target(principal: Principal, id: string, db: Executor = this.db) {
-    const row = await this.authorized(db, principal, id, ["write", "ai"]);
-    if (row.kind !== "personal" || row.personalOwnerId !== principal.identityId)
-      throw new DomainError("AI_WRITE_PERSONAL_ONLY", "AI 正文写入仅支持本人的个人空间");
-    return row;
-  }
-  async sources(principal: Principal, ids: string[], targetWorkspaceId?: string) {
-    const versions: AiRunInput["sourceVersions"] = [],
-      items: EvidenceBundle["items"] = [];
-    for (const id of ids) {
-      const row = await this.authorized(this.db, principal, id, ["read", "ai"]);
-      if (targetWorkspaceId && row.workspaceId !== targetWorkspaceId)
-        await this.authorized(this.db, principal, id, ["export"]);
-      const { snapshot, title } = await this.owner.snapshot(principal, id);
-      versions.push({
-        documentId: id,
-        generationId: snapshot.generationId,
-        durableSeq: snapshot.durableSeq,
-      });
-      const chunks = await prepareDocumentChunks(snapshot, {
-        collectionName: "selected-documents",
-        embeddingFingerprint: "none",
-        dimensions: 1,
-        metric: "cosine",
-        normalizerVersion: "rag-v2",
-        chunkerVersion: "selected-v1",
-        targetTokens: 800,
-        maxTokens: 1200,
-        overlapTokens: 80,
-      });
-      const selected = chunks.slice(0, 8).map((item) => ({
-        ...item,
-        title: `${title}${item.title ? ` / ${item.title}` : ""}`.slice(0, 512),
-      }));
-      items.push(...selected);
-    }
-    if (Buffer.byteLength(JSON.stringify(items)) > 32000)
-      throw new DomainError("VALIDATION_ERROR", "所选资料过多，请缩小资料范围");
-    return { sourceVersions: versions, evidence: { freshness: "current" as const, items } };
-  }
-  async verify(
-    principal: Principal,
-    input: AiRunInput,
-    db: Executor = this.db,
-    forWrite = false,
-    checkVersions = true,
-  ) {
-    const targetId = input.request.kind === "authoring" ? input.request.document.documentId : null;
-    const target = targetId
-      ? forWrite
-        ? await this.target(principal, targetId, db)
-        : await this.authorized(db, principal, targetId, ["read", "ai"])
-      : null;
-    for (const version of [...input.sourceVersions].sort((a, b) =>
-      a.documentId.localeCompare(b.documentId),
-    )) {
-      const row = await this.authorized(
-        db,
-        principal,
-        version.documentId,
-        ["read", "ai"],
-        forWrite,
-      );
-      if (
-        checkVersions &&
-        (row.generationId !== version.generationId ||
-          row.durableSeq !== version.durableSeq ||
-          (version.metadataRevision !== undefined &&
-            row.metadataRevision !== version.metadataRevision))
-      )
-        throw new DomainError("AI_ACCESS_REVOKED", "资料已更新，请基于最新资料重新生成");
-      if (forWrite && target && row.workspaceId !== target.workspaceId)
-        await this.authorized(db, principal, row.id, ["export"]);
-    }
-  }
-  async verifySourceVersions(principal: Principal, versions: AiRunInput["sourceVersions"]) {
-    for (const version of versions) {
-      const row = await this.authorized(this.db, principal, version.documentId, ["read", "ai"]);
-      if (
-        row.generationId !== version.generationId ||
-        row.durableSeq !== version.durableSeq ||
-        (version.metadataRevision !== undefined &&
-          row.metadataRevision !== version.metadataRevision)
-      )
-        throw new DomainError("AI_ACCESS_REVOKED", "资料已更新，请重新选择资料");
+
+  /** Writing requires read+ai+write; personal-workspace limits are lifted with team review. */
+  async canWrite(principal: Principal, id: string): Promise<boolean> {
+    try {
+      await this.authorized(this.db, principal, id, ["write", "ai"]);
+      return true;
+    } catch {
+      return false;
     }
   }
 }

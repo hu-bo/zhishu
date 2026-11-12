@@ -1,11 +1,13 @@
-import { Type, type Static, type TSchema } from "@sinclair/typebox";
-import { AnchorSchema, OperationBatchSchema } from "@zhishu/document-contracts";
+import { Type, type Static } from "@sinclair/typebox";
+import { OperationBatchSchema } from "@zhishu/document-contracts";
 
 const objectOptions = { additionalProperties: false } as const;
 const id = Type.String({ minLength: 1, maxLength: 160 });
 const integer = Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
 const hash = Type.String({ pattern: "^sha256:[a-f0-9]{64}$" });
-export const AuthoringDocumentVersionSchema = Type.Object(
+
+/** Persistent document identity used by target capture, proposals and evidence versioning. */
+export const DocumentVersionSchema = Type.Object(
   {
     documentId: id,
     generationId: id,
@@ -14,12 +16,14 @@ export const AuthoringDocumentVersionSchema = Type.Object(
   },
   objectOptions,
 );
-export const AuthoringTargetSchema = Type.Union([
+export type DocumentVersion = Static<typeof DocumentVersionSchema>;
+
+/**
+ * Proposal target. Selection is resolved to `blocks` at the request boundary by the
+ * application, so persisted targets always name durable block identities.
+ */
+export const WritingTargetSchema = Type.Union([
   Type.Object({ kind: Type.Literal("document") }, objectOptions),
-  Type.Object(
-    { kind: Type.Literal("selection"), anchor: AnchorSchema, selectedTextHash: hash },
-    objectOptions,
-  ),
   Type.Object(
     {
       kind: Type.Literal("blocks"),
@@ -35,69 +39,41 @@ export const AuthoringTargetSchema = Type.Union([
     objectOptions,
   ),
 ]);
-export const AuthoringRequestSchema = Type.Object(
-  {
-    kind: Type.Literal("authoring"),
-    requestId: id,
-    intent: Type.Union(
-      (
-        [
-          "auto",
-          "create",
-          "continue",
-          "rewrite",
-          "rewrite-document",
-          "summarize",
-          "translate",
-          "research",
-        ] as const
-      ).map((value) => Type.Literal(value)),
-    ),
-    document: AuthoringDocumentVersionSchema,
-    baseStructureRevision: integer,
-    target: AuthoringTargetSchema,
-    instruction: Type.String({ minLength: 1, maxLength: 8_000 }),
-    contextRef: Type.Optional(id),
-    constraints: Type.Optional(
-      Type.Object(
-        {
-          language: Type.Optional(Type.String({ maxLength: 80 })),
-          maxBlocks: Type.Optional(Type.Integer({ minimum: 1, maximum: 256 })),
-          maxCharacters: Type.Optional(Type.Integer({ minimum: 1, maximum: 100_000 })),
-        },
-        objectOptions,
-      ),
-    ),
-  },
-  { ...objectOptions, $id: "AuthoringRequest" },
-);
-export const AnswerRequestSchema = Type.Object(
-  {
-    kind: Type.Literal("answer"),
-    requestId: id,
-    question: Type.String({ minLength: 1, maxLength: 8_000 }),
-    contextRef: id,
-  },
-  objectOptions,
-);
-export const AiTaskRequestSchema = Type.Union([AuthoringRequestSchema, AnswerRequestSchema]);
-export const ChatRequestSchema = Type.Object(
-  {
-    kind: Type.Literal("chat"),
-    requestId: id,
-    message: Type.String({ minLength: 1, maxLength: 8_000 }),
-    responseMode: Type.Union([Type.Literal("discussion"), Type.Literal("grounded")]),
-    contextRef: Type.Optional(id),
-    previousRequestIds: Type.Optional(Type.Array(id, { maxItems: 16, uniqueItems: true })),
-  },
-  { ...objectOptions, $id: "ChatRequest" },
-);
-// Keep v1 closed: callers must explicitly negotiate v2 before accepting Chat.
-export const AiTaskRequestV2Schema = Type.Union([
-  AuthoringRequestSchema,
-  AnswerRequestSchema,
-  ChatRequestSchema,
+export type WritingTarget = Static<typeof WritingTargetSchema>;
+
+export const WRITING_INTENTS = [
+  "auto",
+  "create",
+  "continue",
+  "rewrite",
+  "rewrite-document",
+  "summarize",
+  "translate",
+  "research",
+] as const;
+export const WritingIntentSchema = Type.Union(WRITING_INTENTS.map((value) => Type.Literal(value)));
+export type WritingIntent = Static<typeof WritingIntentSchema>;
+
+/** One user-selected knowledge scope. Server re-evaluates the authorized set every round. */
+export const ScopeSelectionSchema = Type.Union([
+  Type.Object({ kind: Type.Literal("all") }, objectOptions),
+  Type.Object(
+    {
+      kind: Type.Literal("workspaces"),
+      workspaceIds: Type.Array(id, { minItems: 1, maxItems: 8, uniqueItems: true }),
+    },
+    objectOptions,
+  ),
+  Type.Object(
+    {
+      kind: Type.Literal("documents"),
+      documentIds: Type.Array(id, { minItems: 1, maxItems: 64, uniqueItems: true }),
+    },
+    objectOptions,
+  ),
 ]);
+export type ScopeSelection = Static<typeof ScopeSelectionSchema>;
+
 export const SourceLocatorSchema = Type.Union([
   Type.Object(
     { kind: Type.Literal("block"), blockId: id, start: integer, end: integer },
@@ -112,60 +88,379 @@ export const SourceLocatorSchema = Type.Union([
     objectOptions,
   ),
 ]);
-export const SourceReferenceSchema = Type.Object(
-  { sourceId: id, snapshotId: id, locator: SourceLocatorSchema },
-  objectOptions,
-);
-export const EvidenceItemSchema = Type.Object(
+export type SourceLocator = Static<typeof SourceLocatorSchema>;
+
+/**
+ * Source metadata lives only inside evidence artifacts. Each source is unique by
+ * (sourceId, snapshotId); derived products reference evidence identities instead.
+ */
+export const DocumentEvidenceSourceSchema = Type.Object(
   {
-    evidenceId: id,
-    source: SourceReferenceSchema,
-    title: Type.String({ maxLength: 512 }),
-    text: Type.String({ maxLength: 100_000 }),
+    sourceKind: Type.Literal("document"),
+    sourceId: id,
+    snapshotId: id,
+    title: Type.String({ minLength: 1, maxLength: 512 }),
+    workspaceId: id,
+    documentId: id,
+    generationId: id,
+    durableSeq: id,
+    metadataRevision: id,
+    indexVersion: id,
+    /** Workspace label the current principal may see; null hides the space entirely. */
+    workspaceLabel: Type.Optional(
+      Type.Union([Type.String({ minLength: 1, maxLength: 200 }), Type.Null()]),
+    ),
   },
   objectOptions,
 );
-export const EvidenceBundleSchema = Type.Object(
-  { items: Type.Array(EvidenceItemSchema, { maxItems: 256 }), freshness: Type.Literal("current") },
+export const WebContentKindSchema = Type.Union([
+  Type.Literal("search-snippet"),
+  Type.Literal("extracted"),
+]);
+export const WebEvidenceSourceSchema = Type.Object(
+  {
+    sourceKind: Type.Literal("web"),
+    sourceId: id,
+    snapshotId: id,
+    title: Type.String({ minLength: 1, maxLength: 512 }),
+    canonicalUrl: Type.String({ minLength: 1, maxLength: 2_048 }),
+    siteName: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+    retrievedAt: Type.String({ minLength: 1, maxLength: 40 }),
+    publishedAt: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
+    contentHash: hash,
+    contentKind: WebContentKindSchema,
+  },
   objectOptions,
 );
-export const SourceCitationSchema = Type.Object(
+export const EvidenceSourceSchema = Type.Union([
+  DocumentEvidenceSourceSchema,
+  WebEvidenceSourceSchema,
+]);
+export type EvidenceSource = Static<typeof EvidenceSourceSchema>;
+export type DocumentEvidenceSource = Static<typeof DocumentEvidenceSourceSchema>;
+export type WebEvidenceSource = Static<typeof WebEvidenceSourceSchema>;
+
+/** A text slice of one registered source. Metadata is never copied per slice. */
+export const EvidenceItemSchema = Type.Object(
+  {
+    evidenceId: id,
+    sourceId: id,
+    snapshotId: id,
+    locator: SourceLocatorSchema,
+    text: Type.String({ minLength: 1, maxLength: 100_000 }),
+  },
+  objectOptions,
+);
+export type EvidenceItem = Static<typeof EvidenceItemSchema>;
+
+/**
+ * Evidence payload persisted in `ai_artifacts.payload` for kind = evidence.
+ * `freshness` "current" vouches only for document sources at delivery time;
+ * web entries describe the snapshot captured at `retrievedAt`.
+ */
+export const EvidenceBundleSchema = Type.Object(
+  {
+    sources: Type.Array(EvidenceSourceSchema, { maxItems: 256 }),
+    items: Type.Array(EvidenceItemSchema, { maxItems: 256 }),
+    freshness: Type.Literal("current"),
+  },
+  objectOptions,
+);
+export type EvidenceBundle = Static<typeof EvidenceBundleSchema>;
+
+/** Final citation produced by the server from registered evidence, never model-authored links. */
+export const CitationSchema = Type.Object(
   {
     citationId: id,
-    source: SourceReferenceSchema,
+    evidenceArtifactId: id,
+    evidenceId: id,
+    locator: SourceLocatorSchema,
     quote: Type.String({ minLength: 1, maxLength: 8_000 }),
   },
   objectOptions,
 );
-export const AuthoringProposalSchema = Type.Object(
+export type Citation = Static<typeof CitationSchema>;
+
+/** What the model may emit: identifiers of evidence already registered for this Run. */
+export const ModelCitationSchema = Type.Object(
+  { evidenceId: id, quote: Type.String({ minLength: 1, maxLength: 8_000 }) },
+  objectOptions,
+);
+export type ModelCitation = Static<typeof ModelCitationSchema>;
+
+export const WritingConstraintsSchema = Type.Optional(
+  Type.Object(
+    {
+      language: Type.Optional(Type.String({ maxLength: 80 })),
+      maxBlocks: Type.Optional(Type.Integer({ minimum: 1, maximum: 256 })),
+      maxCharacters: Type.Optional(Type.Integer({ minimum: 1, maximum: 100_000 })),
+    },
+    objectOptions,
+  ),
+);
+
+/** The writing instruction accepted for one Run. Identity lives on the Run, not here. */
+export const WritingRequestSchema = Type.Object(
   {
-    proposalId: id,
-    requestId: id,
-    document: AuthoringDocumentVersionSchema,
+    intent: WritingIntentSchema,
+    instruction: Type.String({ minLength: 1, maxLength: 8_000 }),
+    target: WritingTargetSchema,
+    constraints: WritingConstraintsSchema,
+  },
+  { ...objectOptions, $id: "WritingRequest" },
+);
+export type WritingRequest = Static<typeof WritingRequestSchema>;
+
+/**
+ * The only proposal payload. Identity is artifact.id / runId externally; no proposalId
+ * or requestId is stored inside.
+ */
+export const WritingProposalPayloadSchema = Type.Object(
+  {
+    document: DocumentVersionSchema,
     baseStructureRevision: integer,
-    target: AuthoringTargetSchema,
+    target: WritingTargetSchema,
     operationBatch: OperationBatchSchema,
     summary: Type.String({ maxLength: 2_000 }),
-    citations: Type.Array(SourceCitationSchema, { maxItems: 32 }),
+    citations: Type.Array(CitationSchema, { maxItems: 32 }),
   },
-  { ...objectOptions, $id: "AuthoringProposal" },
+  { ...objectOptions, $id: "WritingProposalPayload" },
 );
-export const AnswerResultSchema = Type.Object(
+export type WritingProposalPayload = Static<typeof WritingProposalPayloadSchema>;
+
+/** Bounded model output for one answer generation step. */
+export const QaAnswerOutputSchema = Type.Object(
   {
     status: Type.Union([Type.Literal("answered"), Type.Literal("insufficient-evidence")]),
-    text: Type.String({ maxLength: 64_000 }),
-    citations: Type.Array(SourceCitationSchema, { maxItems: 32 }),
+    text: Type.String({ minLength: 1, maxLength: 32_000 }),
+    citations: Type.Array(ModelCitationSchema, { maxItems: 32 }),
   },
   objectOptions,
 );
-export const ChatResultSchema = Type.Object(
+export type QaAnswerOutput = Static<typeof QaAnswerOutputSchema>;
+
+/** Final QA result committed as one assistant message. */
+export const QaAnswerSchema = Type.Object(
   {
-    status: Type.Union([Type.Literal("replied"), Type.Literal("insufficient-evidence")]),
+    status: Type.Union([Type.Literal("answered"), Type.Literal("insufficient-evidence")]),
     text: Type.String({ minLength: 1, maxLength: 64_000 }),
-    citations: Type.Array(SourceCitationSchema, { maxItems: 32 }),
+    citations: Type.Array(CitationSchema, { maxItems: 32 }),
+    evidenceArtifactId: Type.Optional(id),
   },
-  { ...objectOptions, $id: "ChatResult" },
+  objectOptions,
 );
+export type QaAnswer = Static<typeof QaAnswerSchema>;
+
+/** `ai_runs.context`: everything accepted at admission; never a body or history copy. */
+export const ConversationOriginSchema = Type.Object(
+  {
+    kind: Type.Literal("qa-handoff"),
+    sourceConversationId: id,
+    sourceMessageIds: Type.Array(id, { maxItems: 16 }),
+    sourceArtifactIds: Type.Array(id, { maxItems: 16 }),
+  },
+  objectOptions,
+);
+export type ConversationOrigin = Static<typeof ConversationOriginSchema>;
+
+export const QaRunContextSchema = Type.Object(
+  {
+    contextRevision: Type.Integer({ minimum: 1 }),
+    configurationId: Type.Optional(id),
+    scope: ScopeSelectionSchema,
+    retrieval: Type.Object(
+      {
+        contextTokenBudget: Type.Integer({ minimum: 1 }),
+        maxEvidenceItems: Type.Integer({ minimum: 1, maximum: 256 }),
+        maxRepairRounds: Type.Integer({ minimum: 0, maximum: 3 }),
+      },
+      objectOptions,
+    ),
+    /** Bounded handoff provenance. Audit only; never an authorization credential. */
+    origin: Type.Optional(ConversationOriginSchema),
+  },
+  objectOptions,
+);
+export type QaRunContext = Static<typeof QaRunContextSchema>;
+
+export const WritingRunContextSchema = Type.Object(
+  {
+    contextRevision: Type.Integer({ minimum: 1 }),
+    configurationId: Type.Optional(id),
+    scope: Type.Optional(ScopeSelectionSchema),
+    /** Target document capture taken at admission; concurrent baseline lives here on purpose. */
+    capture: Type.Optional(
+      Type.Object(
+        {
+          document: DocumentVersionSchema,
+          structureRevision: integer,
+          selectedTextHash: Type.Optional(hash),
+        },
+        objectOptions,
+      ),
+    ),
+    request: Type.Optional(WritingRequestSchema),
+    webSearch: Type.Boolean(),
+    /** Reference material selected explicitly for this message. */
+    referenceArtifactIds: Type.Optional(Type.Array(id, { maxItems: 32 })),
+  },
+  objectOptions,
+);
+export type WritingRunContext = Static<typeof WritingRunContextSchema>;
+
+/** Step ledger written into `ai_runs.execution` by the flow; ids are stable across attempts. */
+export const ExecutionStepSchema = Type.Object(
+  {
+    stepId: Type.String({ minLength: 1, maxLength: 160 }),
+    status: Type.Union([
+      Type.Literal("pending"),
+      Type.Literal("running"),
+      Type.Literal("done"),
+      Type.Literal("failed"),
+    ]),
+    evidenceArtifactId: Type.Optional(id),
+    updatedAt: Type.String({ minLength: 1, maxLength: 40 }),
+  },
+  objectOptions,
+);
+export type ExecutionStep = Static<typeof ExecutionStepSchema>;
+
+/**
+ * Evidence handed to the model, including sources that only back history context.
+ * Revocation rebuilds allowed context from this ledger, not from displayed citations.
+ */
+export const EvidenceRefSchema = Type.Object(
+  { evidenceArtifactId: id, evidenceId: id },
+  objectOptions,
+);
+export type EvidenceRef = Static<typeof EvidenceRefSchema>;
+
+export const QaExecutionSchema = Type.Object(
+  {
+    evidenceRefs: Type.Array(EvidenceRefSchema, { maxItems: 256 }),
+    steps: Type.Array(ExecutionStepSchema, { maxItems: 32 }),
+    evidenceArtifactIds: Type.Array(id, { maxItems: 64 }),
+    /** Result committed as staged assistant message; recovery re-delivers it without regenerating. */
+    stagedMessageId: Type.Optional(id),
+    repairRounds: Type.Optional(Type.Integer({ minimum: 0, maximum: 3 })),
+  },
+  objectOptions,
+);
+export type QaExecution = Static<typeof QaExecutionSchema>;
+
+export const WritingApprovalSchema = Type.Object(
+  {
+    id: id,
+    attempt: Type.Integer({ minimum: 1 }),
+    action: Type.String({ minLength: 1, maxLength: 160 }),
+    description: Type.Optional(Type.String({ maxLength: 1_000 })),
+    status: Type.Union(
+      (["pending", "allowed", "rejected", "cancelled", "expired", "unavailable"] as const).map(
+        (value) => Type.Literal(value),
+      ),
+    ),
+    decisionId: Type.Optional(id),
+    decision: Type.Optional(Type.Union([Type.Literal("allow-once"), Type.Literal("reject")])),
+    requestedAt: Type.String({ minLength: 1, maxLength: 40 }),
+    expiresAt: Type.String({ minLength: 1, maxLength: 40 }),
+  },
+  objectOptions,
+);
+export type WritingApproval = Static<typeof WritingApprovalSchema>;
+
+export const WritingExecutionSchema = Type.Object(
+  {
+    nativeSessionId: Type.Optional(id),
+    nativeMessageId: Type.Optional(id),
+    /** Durable-before-deliver flag: the native user message identity was persisted first. */
+    deliveryConfirmed: Type.Optional(Type.Boolean()),
+    turn: Type.Optional(Type.Integer({ minimum: 0 })),
+    approval: Type.Optional(WritingApprovalSchema),
+    evidenceRefs: Type.Array(EvidenceRefSchema, { maxItems: 256 }),
+    evidenceArtifactIds: Type.Array(id, { maxItems: 64 }),
+    proposalArtifactIds: Type.Array(id, { maxItems: 32 }),
+    stagedMessageId: Type.Optional(id),
+    steps: Type.Array(ExecutionStepSchema, { maxItems: 64 }),
+  },
+  objectOptions,
+);
+export type WritingExecution = Static<typeof WritingExecutionSchema>;
+
+/** Single product metering source: reservations and settled usage for one Run. */
+export const RunUsageSchema = Type.Object(
+  {
+    modelCalls: integer,
+    inputTokens: integer,
+    outputTokens: integer,
+    searchCalls: integer,
+    sourceReads: integer,
+    webSearchCalls: integer,
+    webReadCalls: integer,
+    /** Provider-reported credits when the vendor returns them; never a guessed price. */
+    providerCredits: Type.Optional(Type.Number({ minimum: 0 })),
+    /** Billable side effects whose outcome is not yet reconciled keep the reservation. */
+    unknownCalls: integer,
+  },
+  objectOptions,
+);
+export type RunUsage = Static<typeof RunUsageSchema>;
+
+export const DEFAULT_RUN_USAGE: RunUsage = Object.freeze({
+  modelCalls: 0,
+  inputTokens: 0,
+  outputTokens: 0,
+  searchCalls: 0,
+  sourceReads: 0,
+  webSearchCalls: 0,
+  webReadCalls: 0,
+  unknownCalls: 0,
+});
+
+/** Execution limits shared by both flows; injected configuration may lower them. */
+export const GenerationLimitsSchema = Type.Object(
+  {
+    timeoutMs: Type.Integer({ minimum: 1_000, maximum: 2_147_483_647 }),
+    maxInputTokens: Type.Integer({ minimum: 1 }),
+    maxOutputTokens: Type.Integer({ minimum: 1 }),
+    maxOutputBytes: Type.Integer({ minimum: 1 }),
+    maxModelCalls: Type.Integer({ minimum: 1, maximum: 100 }),
+    maxSearchCalls: Type.Integer({ minimum: 0, maximum: 100 }),
+    maxSourceReads: Type.Integer({ minimum: 0, maximum: 100 }),
+    webSearchCallsPerRun: Type.Integer({ minimum: 0, maximum: 20 }),
+    webSearchResultsPerCall: Type.Integer({ minimum: 1, maximum: 20 }),
+    webReadPagesPerRun: Type.Integer({ minimum: 0, maximum: 20 }),
+    webExtractMaxBytes: Type.Integer({ minimum: 1_024 }),
+  },
+  objectOptions,
+);
+export type GenerationLimits = Static<typeof GenerationLimitsSchema>;
+export const DEFAULT_GENERATION_LIMITS: GenerationLimits = Object.freeze({
+  timeoutMs: 120_000,
+  maxInputTokens: 32_768,
+  maxOutputTokens: 4_096,
+  maxOutputBytes: 128_000,
+  maxModelCalls: 12,
+  maxSearchCalls: 6,
+  maxSourceReads: 6,
+  webSearchCallsPerRun: 3,
+  webSearchResultsPerCall: 5,
+  webReadPagesPerRun: 5,
+  webExtractMaxBytes: 64_000,
+});
+
+/** Distinct web failure semantics: an empty result is data, a provider fault is never "no facts". */
+export const WEB_FAILURE_CODES = [
+  "NOT_CONFIGURED",
+  "AUTH_FAILED",
+  "RATE_LIMITED",
+  "TIMEOUT",
+  "NETWORK",
+  "EMPTY_RESULTS",
+  "EXTRACT_FAILED",
+  "BUDGET_EXCEEDED",
+] as const;
+export type WebFailureCode = (typeof WEB_FAILURE_CODES)[number];
+
 export const AI_ERROR_CODES = [
   "CANCELLED",
   "TIMEOUT",
@@ -179,127 +474,40 @@ export const AI_ERROR_CODES = [
   "UNSUPPORTED_TARGET",
   "PROTOCOL_ERROR",
   "BUDGET_EXCEEDED",
-  "CHECKPOINT_UNAVAILABLE",
-  "THREAD_EXISTS",
-  "INCOMPATIBLE_CHECKPOINT",
+  "OUTPUT_UNKNOWN",
+  "KNOWLEDGE_NOT_READY",
+  "RETRIEVAL_FAILED",
+  "WEB_PROVIDER_FAILED",
+  "SIDE_EFFECT_REVIEW_REQUIRED",
 ] as const;
 export type AiErrorCode = (typeof AI_ERROR_CODES)[number];
-const event = <V extends 1 | 2, T extends string, P extends import("@sinclair/typebox").TSchema>(
-  protocolVersion: V,
-  type: T,
-  payload: P,
-) =>
-  Type.Object(
-    {
-      protocolVersion: Type.Literal(protocolVersion),
-      requestId: id,
-      seq: Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
-      type: Type.Literal(type),
-      payload,
-    },
-    objectOptions,
-  );
-const eventSchemas = <V extends 1 | 2, K extends TSchema, R extends TSchema>(
-  version: V,
-  kinds: K,
-  resultKinds: R,
-) => [
-  event(version, "started", Type.Object({ kind: kinds }, objectOptions)),
-  event(
-    version,
-    "progress",
-    Type.Object(
-      {
-        stage: Type.Union(
-          (["planning", "searching", "reading", "generating"] as const).map((value) =>
-            Type.Literal(value),
-          ),
-        ),
-      },
-      objectOptions,
-    ),
-  ),
-  event(
-    version,
-    "text-delta",
-    Type.Object({ text: Type.String({ maxLength: 16_000 }) }, objectOptions),
-  ),
-  event(version, "proposal", AuthoringProposalSchema),
-  event(version, "answer", AnswerResultSchema),
-  event(
-    version,
-    "completed",
-    Type.Object(
-      {
-        resultKind: resultKinds,
-        usage: Type.Optional(
-          Type.Object(
-            {
-              inputTokens: integer,
-              outputTokens: integer,
-              modelCalls: integer,
-              searchCalls: integer,
-              sourceReads: integer,
-            },
-            objectOptions,
-          ),
-        ),
-      },
-      objectOptions,
-    ),
-  ),
-  event(
-    version,
-    "failed",
-    Type.Object(
-      {
-        code: Type.Union(AI_ERROR_CODES.map((value) => Type.Literal(value))),
-        retryable: Type.Boolean(),
-      },
-      objectOptions,
-    ),
-  ),
-];
-// Separate v1 declarations preserve its derived TypeScript union as well as its wire shape.
-export const AiTaskEventSchema = Type.Union(
-  eventSchemas(
-    1,
-    Type.Union([Type.Literal("authoring"), Type.Literal("answer")]),
-    Type.Union([Type.Literal("proposal"), Type.Literal("answer")]),
-  ),
-  { $id: "AiTaskEvent" },
+export const RUN_ERROR_CODE_PATTERN = "^[A-Z][A-Z0-9_]{0,63}$";
+
+/** Proposal review lives on the artifact row, never inside the generated payload. */
+export const ProposalDecisionSchema = Type.Object(
+  {
+    blockId: id,
+    action: Type.Union([Type.Literal("accept"), Type.Literal("reject")]),
+  },
+  objectOptions,
 );
-export const AiTaskEventV2Schema = Type.Union(
-  [
-    ...eventSchemas(
-      2,
-      Type.Union([Type.Literal("authoring"), Type.Literal("answer"), Type.Literal("chat")]),
-      Type.Union([Type.Literal("proposal"), Type.Literal("answer"), Type.Literal("chat")]),
-    ),
-    event(2, "chat", ChatResultSchema),
-  ],
-  { $id: "AiTaskEventV2" },
+export type ProposalDecision = Static<typeof ProposalDecisionSchema>;
+export const ProposalReviewSchema = Type.Object(
+  {
+    revision: Type.Integer({ minimum: 0, maximum: 256 }),
+    decisions: Type.Array(ProposalDecisionSchema, { maxItems: 512 }),
+    /** Fingerprint of the accepted body so a stale decision page cannot confirm the wrong text. */
+    payloadHash: Type.Optional(hash),
+    /** decisionId → request fingerprint: duplicate decisions return the original receipt. */
+    receipts: Type.Optional(Type.Record(id, hash, { maxProperties: 512 })),
+  },
+  objectOptions,
 );
-export type AuthoringDocumentVersion = Static<typeof AuthoringDocumentVersionSchema>;
-export type AuthoringTarget = Static<typeof AuthoringTargetSchema>;
-export type AuthoringRequest = Static<typeof AuthoringRequestSchema>;
-export const isReplacementIntent = (intent: AuthoringRequest["intent"]): boolean =>
-  intent === "rewrite" || intent === "translate" || intent === "rewrite-document";
-export type AnswerRequest = Static<typeof AnswerRequestSchema>;
-export type AiTaskRequest = Static<typeof AiTaskRequestSchema>;
-export type ChatRequest = Static<typeof ChatRequestSchema>;
-export type AiTaskRequestV2 = Static<typeof AiTaskRequestV2Schema>;
-export type SourceLocator = Static<typeof SourceLocatorSchema>;
-export type SourceReference = Static<typeof SourceReferenceSchema>;
-export type SourceCitation = Static<typeof SourceCitationSchema>;
-export type EvidenceItem = Static<typeof EvidenceItemSchema>;
-export type EvidenceBundle = Static<typeof EvidenceBundleSchema>;
-export type AuthoringProposal = Static<typeof AuthoringProposalSchema>;
-export const isReplacementProposal = (request: AuthoringRequest, proposal: AuthoringProposal) =>
-  request.intent === "auto"
-    ? proposal.target.kind === "document" || proposal.target.kind === "blocks"
-    : isReplacementIntent(request.intent);
-export type AnswerResult = Static<typeof AnswerResultSchema>;
-export type AiTaskEvent = Static<typeof AiTaskEventSchema>;
-export type ChatResult = Static<typeof ChatResultSchema>;
-export type AiTaskEventV2 = Static<typeof AiTaskEventV2Schema>;
+export type ProposalReview = Static<typeof ProposalReviewSchema>;
+
+export const ProposalApplicationStateSchema = Type.Union(
+  (["pending", "partial", "applied", "rejected", "conflict", "unknown"] as const).map((value) =>
+    Type.Literal(value),
+  ),
+);
+export type ProposalApplicationState = Static<typeof ProposalApplicationStateSchema>;

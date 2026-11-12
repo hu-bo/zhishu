@@ -168,6 +168,8 @@ export const documents = pgTable(
     index("documents_workspace_access_idx").on(table.tenantId, table.workspaceId, table.accessMode),
     check("documents_metadata_revision_check", sql`${table.metadataRevision} > 0`),
     uniqueIndex("documents_tenant_id_id_uq").on(table.tenantId, table.id),
+    // Supports the qa_site_documents composite FK that proves a document belongs to its source workspace.
+    uniqueIndex("documents_tenant_workspace_id_uq").on(table.tenantId, table.workspaceId, table.id),
     index("documents_tenant_created_idx").on(table.tenantId, table.createdAt, table.id),
   ],
 );

@@ -1,5 +1,5 @@
 export * from "./schema.js";
 export * from "./validation.js";
+export * from "./errors.js";
 export { canonicalJson } from "./canonical-json.js";
-export { createAiEventValidator } from "./events.js";
-export * from "./replacement-review.js";
+export * from "./proposal-review.js";

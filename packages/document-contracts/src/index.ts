@@ -48,6 +48,7 @@ export type {
   CollaborationPresence,
   OperationBatch,
 } from "./schema.js";
+export { StructureReceiptSchema, type StructureReceipt } from "./receipts.js";
 export { collectDocumentMentions } from "./mentions.js";
 export { displayLatexPattern, inlineLatexPattern, isValidMathSource } from "./latex.js";
 export type { DocumentMentionReference } from "./mentions.js";

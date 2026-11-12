@@ -8,9 +8,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./events": {
-      "types": "./dist/events.d.ts",
-      "import": "./dist/events.js"
+    "./hash": {
+      "types": "./dist/hash.d.ts",
+      "import": "./dist/hash.js"
     }
   },
   "files": [
@@ -24,5 +24,8 @@
   "dependencies": {
     "@sinclair/typebox": "^0.34.41",
     "@zhishu/document-contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.10"
   }
 }

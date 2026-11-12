@@ -5,7 +5,7 @@ export {
   sourceSnapshotId,
   conservativeTokenCount,
 } from "./chunks.js";
-export type { IndexOptions } from "./chunks.js";
+export type { IndexOptions, PreparedChunk } from "./chunks.js";
 export type {
   RagDocumentSource,
   DocumentParseOptions,
@@ -14,6 +14,7 @@ export type {
 } from "./inputs.js";
 export { createKnowledgeRetriever } from "./retriever.js";
 export type { KnowledgeRetriever } from "./retriever.js";
+export { skillDefinitions, loadSkillInstruction, retrievalToolSchemas } from "./skills.js";
 export {
   initializeCollection,
   writeDocumentIndex,

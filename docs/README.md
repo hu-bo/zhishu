@@ -1,16 +1,18 @@
 # 知书项目文档地图
 
-状态：设计规划，统一 Chat、skills 与零新增表目标于 2026-11-09 更新。本文组织产品范围与设计责任，当前源码及历史验收分别记录实际完成范围。
+状态：设计规划，问答/写作双 package 与共享基础设施目标于 2026-11-10 更新。本文组织产品范围与设计责任，当前源码及历史验收分别记录实际完成范围。
 
 项目先交付可嵌入、可独立使用的文档编辑与协同产品，再组合知识库、AI 和企业业务能力。文档采用“一个 package 一份主文档、一个 app 一份主文档”；本页负责导航、跨包约束和交付顺序。[原始需求](resreach.md)作为需求输入保留，原先按四个系统视角输出的方式由此文档地图替代。
 
 应用界面的视觉、控件和响应式约定见[知书界面设计规范](design-system.md)。
 
-2026-11-09 的应用目标为统一 Chat 会话与 Agent 编排，组合写作、RAG 和范围选择 skills，并通过既有表重命名与结构调整实现零新增表。DSH 承担主会话编排，LangChain 检索能力封装在 RAG skill 内，ai_runs 统一执行事实，通用 shares 与 resource_acl 承载对外渠道及空间绑定。
+2026-11-10 的应用目标为 `@zhishu/ai-qa` 与 `@zhishu/ai-writing` 两个独立业务 package：问答采用有界检索/生成流程，写作使用 DSH，分别维护会话和上下文。双方复用 rag 检索与 scope/rag Skill 资源、纯合约、chat-ui，以及应用侧存储、预算、配置和事件基础设施。对外站点复用问答流程，通过来源空间和批准文档关系授权。
 
-现有实现仍有 WritingChat 和 RagChat 两条业务路径。目标允许破坏性 API/Schema 重构，按方案迁移历史记录并收敛重复入口。原 [协作 AI 写作与 DSH 方案](packages/ai-chat-architecture.md)保留历史设计与包级实现依据，新应用架构及迁移出口以统一 skills 方案为准。权限与正文写入继续由应用负责，用户采纳后走协同 durable ack。
+现有 WritingChat/RagChat 的业务分工继续保留，混合执行、旧协议和重复状态按新方案清理。两种用途共用会话/消息/Run/产物/事件表，以不可变 purpose 隔离；DSH 日志和图片任务保留写作专属表。原 dsh-agent 的有效接入迁入 ai-writing/runtime，删除旧包及 ChatRecord 产品接口。允许新增必要表与一次性破坏性迁移，旧兼容代码的退役是交付前置条件。原 [协作 AI 写作与 DSH 方案](packages/ai-chat-architecture.md)仅作历史记录，采纳后仍走协同 durable ack。
 
-完整目标见 [AI 问答、创作与对外问答站技术设计](apps/ai-assistant-and-public-qa.md)。文档于 2026-11-07 建立、2026-11-09 按零新增表修订，覆盖统一会话/Run、三项 skills、通用分享、来源 ACL、破坏性迁移、API/SSE 和最终表结构关系图。
+完整目标见 [AI 问答、写作与对外问答站技术设计](apps/ai-assistant-and-public-qa.md)。该文档包含历史全仓扫描、两个业务 package 的依赖边界、共享能力、会话交接、11 张核心表、分用途 API/共享事件协议、一次性切换和最终 ER 图。本轮只修订设计，未创建目标包或执行数据库迁移；下文旧日期段落用于核对历史基线。
+
+写作目标包含通过服务端 TAVILY_API_KEY 启用的 Tavily 联网搜索，网页和平台文档使用统一的证据/引用合约；平台文档问答标注可定位来源，写作采纳后保留正文来源链接。该能力复用现有证据产物，不新增来源表，实际密钥不进入文档或前端。
 
 ## 1. 产品交付形态
 
@@ -67,7 +69,7 @@ docs/
 | [10 ai-runtime](packages/ai-runtime.md)                     | 现有 LangChain 能力、旧写作兼容及 DSH 迁移范围            | 01、09、14               | 保留 RAG 路线、写作旧任务兼容与分路径退出             |
 | [11 rag](packages/rag.md)                                   | 来源规范化、分块、Embedding、索引构建、混合检索与证据     | 01、09；与 08 联读       | 模型/授权存储端口、版本、任务发布与检索验收           |
 
-协作写作建议按总方案 → 12 → 13 → 07 的 WritingChat → 14 → 15 → 08 阅读；RAG Chat 联读 07 的 RagChat、11 和 08，继续使用 LangChain。文档写作再联读 01、09、06。前端只发布 chat-ui 基础组件，应用分别维护两个业务封装；DSH 的 Session/Run 与 LangChain RAG 的会话/请求分别归属。
+新实现先读 [问答/写作技术设计](apps/ai-assistant-and-public-qa.md)，再读纯合约、chat-ui 与 rag 文档。dsh-agent/ai-plugins 等旧文档只用于迁移源码，不指导保留旧 API。应用分别维护业务上下文，使用同一 contextRevision，共用产品存储和事件；DSH Session 只属于写作，问答不新增原生 Session/checkpoint。
 
 ## 3. 当前仓库与目标结构
 

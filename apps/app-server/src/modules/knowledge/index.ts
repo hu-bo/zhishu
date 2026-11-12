@@ -8,11 +8,13 @@ export async function knowledgeModule(
   app: FastifyInstance,
   config: AppConfig,
   revoker: CollaborationSessionRevoker,
+  publicLinkage?: import("../../shared/public-linkage.js").DocumentPublicLinkage,
 ) {
   const service = new KnowledgeService(
     app.db,
     config.TENANT_MAX_DOCUMENTS,
     new SessionInvalidator(app.db, revoker),
+    publicLinkage,
   );
   await app.register((scope) => knowledgeRoutes(scope, service), { prefix: "/knowledge" });
 }

@@ -46,8 +46,22 @@ async function main(): Promise<void> {
       components?: { schemas?: Record<string, unknown> };
     };
     const paths = Object.keys(document.paths ?? {});
-    if (!paths.some((path) => path.startsWith("/api/projects/")))
-      throw new Error(`OpenAPI document is missing project routes; found: ${paths.join(", ")}`);
+    // Retirement gate: the deprecated AI/writing protocols must be gone from the source document.
+    for (const removed of ["/api/ai/chat", "/api/ai/authoring", "/api/projects"]) {
+      if (paths.some((path) => path.startsWith(removed)))
+        throw new Error(`OpenAPI document still exposes retired route family ${removed}`);
+    }
+    for (const required of [
+      "/api/ai/qa/capabilities",
+      "/api/ai/qa/conversations",
+      "/api/ai/writing/capabilities",
+      "/api/ai/writing/conversations",
+      "/api/qa-sites",
+      "/api/public/qa-sites/by-slug/{slug}",
+    ]) {
+      if (!paths.some((path) => path.startsWith(required)))
+        throw new Error(`OpenAPI document is missing the ${required} route family`);
+    }
     if (document.openapi !== "3.1.0")
       throw new Error("OpenAPI document must use version 3.1.0 for JSON Schema 2020-12 support");
     const contentSchema = document.components?.schemas?.DocumentContent as

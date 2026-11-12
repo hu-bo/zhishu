@@ -480,7 +480,10 @@ export type DocumentAclEntry = {
 };
 
 export class DocumentRepository {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    private readonly publicLinkage?: import("../../shared/public-linkage.js").DocumentPublicLinkage,
+  ) {}
 
   async findDocumentIdempotencyReplay(input: {
     tenantId: string;
@@ -1288,6 +1291,8 @@ export class DocumentRepository {
         .limit(1);
       if (!generation) return { status: "not-found" };
       if (input.operation === "trash" || input.operation === "purge") {
+        // Public site approvals dissolve first: a trashed or purged document must never stay readable.
+        await this.publicLinkage?.detachDocuments(tx, input.tenantId, [input.documentId]);
         const recipients = await documentRecipients(tx, input.tenantId, input.documentId);
         await insertNotifications(
           tx,

@@ -18,7 +18,7 @@ const app = await buildApp(
   },
 );
 const revokedSessions = [];
-let id;
+let qaConversationId;
 let documentId;
 let copiedDocumentId;
 let authorization;
@@ -28,7 +28,7 @@ try {
   for (const url of ["/health/live", "/health/ready", "/documentation/json"]) {
     assert.equal((await app.inject({ url })).statusCode, 200, url);
   }
-  assert.equal((await app.inject({ url: "/api/projects/" })).statusCode, 401);
+  assert.equal((await app.inject({ url: "/api/ai/qa/capabilities" })).statusCode, 401);
   const login = await app.inject({ method: "POST", url: "/api/auth/mock/login" });
   assert.equal(login.statusCode, 200);
   authorization = { authorization: `Bearer ${login.json().accessToken}` };
@@ -36,61 +36,40 @@ try {
   assert.equal(currentUser.statusCode, 200);
   assert.equal(currentUser.json().identityId, "mock-user-001");
   assert.equal(currentUser.json().tenantId, "local");
-  const invalid = await app.inject({
-    method: "POST",
-    url: "/api/projects/",
+  // Retired legacy AI routes must be gone (404), replaced by the two purpose namespaces.
+  for (const legacy of [
+    "/api/ai/chat",
+    "/api/ai/authoring",
+    "/api/writing/conversations",
+    "/api/projects/",
+  ]) {
+    const response = await app.inject({ method: "GET", url: legacy, headers: authorization });
+    assert.equal(response.statusCode, 404, `legacy ${legacy} should be retired`);
+  }
+  const qaCapabilities = await app.inject({
+    url: "/api/ai/qa/capabilities",
     headers: authorization,
-    payload: { name: " " },
   });
-  assert.equal(invalid.statusCode, 400);
-  assert.equal(invalid.json().code, "VALIDATION_ERROR");
-  const malformed = await app.inject({
-    method: "POST",
-    url: "/api/projects/",
-    headers: { ...authorization, "content-type": "application/json" },
-    payload: "{",
-  });
-  assert.equal(malformed.statusCode, 400);
-  const created = await app.inject({
-    method: "POST",
-    url: "/api/projects/",
+  assert.equal(qaCapabilities.statusCode, 200);
+  assert.equal(typeof qaCapabilities.json().enabled, "boolean");
+  const writingCapabilities = await app.inject({
+    url: "/api/ai/writing/capabilities",
     headers: authorization,
-    payload: { name: " Review project " },
   });
-  assert.equal(created.statusCode, 201);
-  id = created.json().id;
-  assert.equal(created.json().name, "Review project");
-  assert.equal(typeof created.json().createdAt, "string");
-  assert.equal(
-    (await app.inject({ url: `/api/projects/${id}`, headers: authorization })).statusCode,
-    200,
-  );
-  const list = await app.inject({ url: "/api/projects/?limit=100", headers: authorization });
-  assert.equal(list.statusCode, 200);
-  assert.ok(list.json().items.some((item) => item.id === id));
-  assert.equal(
-    (await app.inject({ url: "/api/projects/?limit=101", headers: authorization })).statusCode,
-    400,
-  );
-  assert.equal(
-    (
-      await app.inject({
-        method: "PATCH",
-        url: `/api/projects/${id}`,
-        headers: authorization,
-        payload: {},
-      })
-    ).statusCode,
-    400,
-  );
-  const updated = await app.inject({
-    method: "PATCH",
-    url: `/api/projects/${id}`,
+  assert.equal(writingCapabilities.statusCode, 200);
+  assert.equal(writingCapabilities.json().engine, "dsh-native-v1");
+  // A qa conversation may be created and listed even before the model is configured.
+  const qaConversation = await app.inject({
+    method: "POST",
+    url: "/api/ai/qa/conversations",
     headers: authorization,
-    payload: { name: "Updated" },
+    payload: {},
   });
-  assert.equal(updated.statusCode, 200);
-  assert.equal(updated.json().name, "Updated");
+  assert.equal(qaConversation.statusCode, 201);
+  qaConversationId = qaConversation.json().id;
+  assert.equal(qaConversation.json().purpose, "qa");
+  const qaList = await app.inject({ url: "/api/ai/qa/conversations", headers: authorization });
+  assert.ok(qaList.json().some((item) => item.id === qaConversationId));
 
   const document = await app.inject({
     method: "POST",
@@ -415,17 +394,6 @@ try {
     404,
   );
 
-  const removed = await app.inject({
-    method: "DELETE",
-    url: `/api/projects/${id}`,
-    headers: authorization,
-  });
-  assert.equal(removed.statusCode, 204);
-  assert.equal(removed.body, "");
-  const missing = await app.inject({ url: `/api/projects/${id}`, headers: authorization });
-  assert.equal(missing.statusCode, 404);
-  assert.equal(missing.json().code, "NOT_FOUND");
-  id = undefined;
   assert.equal(
     (await app.inject({ method: "POST", url: "/api/auth/logout", headers: authorization }))
       .statusCode,
@@ -439,8 +407,7 @@ try {
 } finally {
   try {
     if (externalApp) await externalApp.close();
-    if (id)
-      await app.inject({ method: "DELETE", url: `/api/projects/${id}`, headers: authorization });
+
     if (copiedDocumentId)
       await app.db.execute(sql`delete from documents where id = ${copiedDocumentId}`);
     if (documentId) await app.db.execute(sql`delete from documents where id = ${documentId}`);

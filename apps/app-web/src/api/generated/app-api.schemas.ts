@@ -1426,1655 +1426,6 @@ export interface OperationBatch {
   operations: OperationBatchOperationsItem[];
 }
 
-export type AuthoringRequestDocument = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  documentId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  generationId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  durableSeq: number;
-  /** @pattern ^sha256:[a-f0-9]{64}$ */
-  contentHash: string;
-};
-
-export type AuthoringRequestTarget = {
-  kind: 'document';
-} | {
-  kind: 'selection';
-  /** Generation-bound selection encoded as opaque Yjs relative positions with optional same-editor position mapping hints. */
-  anchor: {
-  /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
-  documentId: string;
-  /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
-  generationId: string;
-  anchorVersion: 1;
-  encoding: 'yjs-relative-position-v1';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  startBlockId: string;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  endBlockId: string;
-  /** @minimum 0 */
-  positionRevision?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  startPosition?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  endPosition?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  startOffset?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  endOffset?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  startBlockLength?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  selectedTextLength?: number;
-  /**
-     * @minLength 4
-     * @maxLength 8192
-     * @pattern ^[A-Za-z0-9+/]+={0,2}$
-     */
-  start: string;
-  /**
-     * @minLength 4
-     * @maxLength 8192
-     * @pattern ^[A-Za-z0-9+/]+={0,2}$
-     */
-  end: string;
-};
-  /** @pattern ^sha256:[a-f0-9]{64}$ */
-  selectedTextHash: string;
-} | {
-  kind: 'blocks';
-  /**
-     * @minItems 1
-     * @maxItems 256
-     */
-  blocks: {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  blockId: string;
-  /** @pattern ^sha256:[a-f0-9]{64}$ */
-  contentHash: string;
-}[];
-} | {
-  kind: 'document-end';
-  afterBlockId: string | null;
-};
-
-export type AuthoringRequestConstraints = {
-  /** @maxLength 80 */
-  language?: string;
-  /**
-     * @minimum 1
-     * @maximum 256
-     */
-  maxBlocks?: number;
-  /**
-     * @minimum 1
-     * @maximum 100000
-     */
-  maxCharacters?: number;
-};
-
-export interface AuthoringRequest {
-  kind: 'authoring';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  intent: 'auto' | 'create' | 'continue' | 'rewrite' | 'rewrite-document' | 'summarize' | 'translate' | 'research';
-  document: AuthoringRequestDocument;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  baseStructureRevision: number;
-  target: AuthoringRequestTarget;
-  /**
-     * @minLength 1
-     * @maxLength 8000
-     */
-  instruction: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  contextRef?: string;
-  constraints?: AuthoringRequestConstraints;
-}
-
-export type AuthoringProposalDocument = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  documentId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  generationId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  durableSeq: number;
-  /** @pattern ^sha256:[a-f0-9]{64}$ */
-  contentHash: string;
-};
-
-export type AuthoringProposalTarget = {
-  kind: 'document';
-} | {
-  kind: 'selection';
-  /** Generation-bound selection encoded as opaque Yjs relative positions with optional same-editor position mapping hints. */
-  anchor: {
-  /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
-  documentId: string;
-  /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
-  generationId: string;
-  anchorVersion: 1;
-  encoding: 'yjs-relative-position-v1';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  startBlockId: string;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  endBlockId: string;
-  /** @minimum 0 */
-  positionRevision?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  startPosition?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  endPosition?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  startOffset?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  endOffset?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  startBlockLength?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  selectedTextLength?: number;
-  /**
-     * @minLength 4
-     * @maxLength 8192
-     * @pattern ^[A-Za-z0-9+/]+={0,2}$
-     */
-  start: string;
-  /**
-     * @minLength 4
-     * @maxLength 8192
-     * @pattern ^[A-Za-z0-9+/]+={0,2}$
-     */
-  end: string;
-};
-  /** @pattern ^sha256:[a-f0-9]{64}$ */
-  selectedTextHash: string;
-} | {
-  kind: 'blocks';
-  /**
-     * @minItems 1
-     * @maxItems 256
-     */
-  blocks: {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  blockId: string;
-  /** @pattern ^sha256:[a-f0-9]{64}$ */
-  contentHash: string;
-}[];
-} | {
-  kind: 'document-end';
-  afterBlockId: string | null;
-};
-
-export type AuthoringProposalOperationBatchPreconditionsItem = {
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  blockId: string;
-  /** @pattern ^sha256:[a-fA-F0-9]{64}$ */
-  contentHash?: string;
-};
-
-export type AuthoringProposalOperationBatchOperationsItem = {
-  type: 'insert-block';
-  parentBlockId: string | null;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  beforeBlockId?: string;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  afterBlockId?: string;
-  block: DocumentBlock;
-} | {
-  type: 'delete-block';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  targetBlockId: string;
-} | {
-  type: 'replace-block';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  targetBlockId: string;
-  block: DocumentBlock;
-} | {
-  type: 'wrap-block';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  targetBlockId: string;
-  wrapper: DocumentBlock | {
-  type: 'callout';
-  attrs: {
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  blockId: string;
-  theme: 'info' | 'tip' | 'warning' | 'success' | 'danger';
-};
-  /** @maxItems 10000 */
-  content: DocumentBlock[];
-};
-} | {
-  type: 'move-block';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  targetBlockId: string;
-  parentBlockId: string | null;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  beforeBlockId?: string;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  afterBlockId?: string;
-};
-
-export type AuthoringProposalOperationBatch = {
-  /** @pattern ^op_[A-Za-z0-9_-]{1,64}$ */
-  operationId: string;
-  /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
-  documentId: string;
-  /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
-  generationId?: string;
-  origin: 'user' | 'import' | 'system' | 'ai-accept';
-  /** @maxItems 1000 */
-  preconditions?: AuthoringProposalOperationBatchPreconditionsItem[];
-  /**
-     * @minItems 1
-     * @maxItems 256
-     */
-  operations: AuthoringProposalOperationBatchOperationsItem[];
-};
-
-export type AuthoringProposalCitationsItemSourceLocator = {
-  kind: 'block';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  blockId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  start: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  end: number;
-} | {
-  kind: 'page';
-  /** @minimum 1 */
-  page: number;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  segmentId: string;
-} | {
-  kind: 'section';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  sectionId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  start: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  end: number;
-};
-
-export type AuthoringProposalCitationsItemSource = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  sourceId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  snapshotId: string;
-  locator: AuthoringProposalCitationsItemSourceLocator;
-};
-
-export type AuthoringProposalCitationsItem = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  citationId: string;
-  source: AuthoringProposalCitationsItemSource;
-  /**
-     * @minLength 1
-     * @maxLength 8000
-     */
-  quote: string;
-};
-
-export interface AuthoringProposal {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  proposalId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  document: AuthoringProposalDocument;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  baseStructureRevision: number;
-  target: AuthoringProposalTarget;
-  operationBatch: AuthoringProposalOperationBatch;
-  /** @maxLength 2000 */
-  summary: string;
-  /** @maxItems 32 */
-  citations: AuthoringProposalCitationsItem[];
-}
-
-export interface ChatRequest {
-  kind: 'chat';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minLength 1
-     * @maxLength 8000
-     */
-  message: string;
-  responseMode: 'discussion' | 'grounded';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  contextRef?: string;
-  /**
-     * @maxItems 16
-     * @items.minLength 1
-     * @items.maxLength 160
-     */
-  previousRequestIds?: string[];
-}
-
-export type ChatResultCitationsItemSourceLocator = {
-  kind: 'block';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  blockId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  start: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  end: number;
-} | {
-  kind: 'page';
-  /** @minimum 1 */
-  page: number;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  segmentId: string;
-} | {
-  kind: 'section';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  sectionId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  start: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  end: number;
-};
-
-export type ChatResultCitationsItemSource = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  sourceId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  snapshotId: string;
-  locator: ChatResultCitationsItemSourceLocator;
-};
-
-export type ChatResultCitationsItem = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  citationId: string;
-  source: ChatResultCitationsItemSource;
-  /**
-     * @minLength 1
-     * @maxLength 8000
-     */
-  quote: string;
-};
-
-export interface ChatResult {
-  status: 'replied' | 'insufficient-evidence';
-  /**
-     * @minLength 1
-     * @maxLength 64000
-     */
-  text: string;
-  /** @maxItems 32 */
-  citations: ChatResultCitationsItem[];
-}
-
-export type AiTaskEvent = {
-  protocolVersion: 1;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minimum 1
-     * @maximum 9007199254740991
-     */
-  seq: number;
-  type: 'started';
-  payload: {
-  kind: 'authoring' | 'answer';
-};
-} | {
-  protocolVersion: 1;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minimum 1
-     * @maximum 9007199254740991
-     */
-  seq: number;
-  type: 'progress';
-  payload: {
-  stage: 'planning' | 'searching' | 'reading' | 'generating';
-};
-} | {
-  protocolVersion: 1;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minimum 1
-     * @maximum 9007199254740991
-     */
-  seq: number;
-  type: 'text-delta';
-  payload: {
-  /** @maxLength 16000 */
-  text: string;
-};
-} | {
-  protocolVersion: 1;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minimum 1
-     * @maximum 9007199254740991
-     */
-  seq: number;
-  type: 'proposal';
-  payload: {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  proposalId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  document: {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  documentId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  generationId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  durableSeq: number;
-  /** @pattern ^sha256:[a-f0-9]{64}$ */
-  contentHash: string;
-};
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  baseStructureRevision: number;
-  target: {
-  kind: 'document';
-} | {
-  kind: 'selection';
-  /** Generation-bound selection encoded as opaque Yjs relative positions with optional same-editor position mapping hints. */
-  anchor: {
-  /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
-  documentId: string;
-  /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
-  generationId: string;
-  anchorVersion: 1;
-  encoding: 'yjs-relative-position-v1';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  startBlockId: string;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  endBlockId: string;
-  /** @minimum 0 */
-  positionRevision?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  startPosition?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  endPosition?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  startOffset?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  endOffset?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  startBlockLength?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  selectedTextLength?: number;
-  /**
-     * @minLength 4
-     * @maxLength 8192
-     * @pattern ^[A-Za-z0-9+/]+={0,2}$
-     */
-  start: string;
-  /**
-     * @minLength 4
-     * @maxLength 8192
-     * @pattern ^[A-Za-z0-9+/]+={0,2}$
-     */
-  end: string;
-};
-  /** @pattern ^sha256:[a-f0-9]{64}$ */
-  selectedTextHash: string;
-} | {
-  kind: 'blocks';
-  /**
-     * @minItems 1
-     * @maxItems 256
-     */
-  blocks: {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  blockId: string;
-  /** @pattern ^sha256:[a-f0-9]{64}$ */
-  contentHash: string;
-}[];
-} | {
-  kind: 'document-end';
-  afterBlockId: string | null;
-};
-  operationBatch: {
-  /** @pattern ^op_[A-Za-z0-9_-]{1,64}$ */
-  operationId: string;
-  /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
-  documentId: string;
-  /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
-  generationId?: string;
-  origin: 'user' | 'import' | 'system' | 'ai-accept';
-  /** @maxItems 1000 */
-  preconditions?: {
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  blockId: string;
-  /** @pattern ^sha256:[a-fA-F0-9]{64}$ */
-  contentHash?: string;
-}[];
-  /**
-     * @minItems 1
-     * @maxItems 256
-     */
-  operations: ({
-  type: 'insert-block';
-  parentBlockId: string | null;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  beforeBlockId?: string;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  afterBlockId?: string;
-  block: DocumentBlock;
-} | {
-  type: 'delete-block';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  targetBlockId: string;
-} | {
-  type: 'replace-block';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  targetBlockId: string;
-  block: DocumentBlock;
-} | {
-  type: 'wrap-block';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  targetBlockId: string;
-  wrapper: DocumentBlock | {
-  type: 'callout';
-  attrs: {
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  blockId: string;
-  theme: 'info' | 'tip' | 'warning' | 'success' | 'danger';
-};
-  /** @maxItems 10000 */
-  content: DocumentBlock[];
-};
-} | {
-  type: 'move-block';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  targetBlockId: string;
-  parentBlockId: string | null;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  beforeBlockId?: string;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  afterBlockId?: string;
-})[];
-};
-  /** @maxLength 2000 */
-  summary: string;
-  /** @maxItems 32 */
-  citations: ({
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  citationId: string;
-  source: {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  sourceId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  snapshotId: string;
-  locator: {
-  kind: 'block';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  blockId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  start: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  end: number;
-} | {
-  kind: 'page';
-  /** @minimum 1 */
-  page: number;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  segmentId: string;
-} | {
-  kind: 'section';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  sectionId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  start: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  end: number;
-};
-};
-  /**
-     * @minLength 1
-     * @maxLength 8000
-     */
-  quote: string;
-})[];
-};
-} | {
-  protocolVersion: 1;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minimum 1
-     * @maximum 9007199254740991
-     */
-  seq: number;
-  type: 'answer';
-  payload: {
-  status: 'answered' | 'insufficient-evidence';
-  /** @maxLength 64000 */
-  text: string;
-  /** @maxItems 32 */
-  citations: ({
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  citationId: string;
-  source: {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  sourceId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  snapshotId: string;
-  locator: {
-  kind: 'block';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  blockId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  start: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  end: number;
-} | {
-  kind: 'page';
-  /** @minimum 1 */
-  page: number;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  segmentId: string;
-} | {
-  kind: 'section';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  sectionId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  start: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  end: number;
-};
-};
-  /**
-     * @minLength 1
-     * @maxLength 8000
-     */
-  quote: string;
-})[];
-};
-} | {
-  protocolVersion: 1;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minimum 1
-     * @maximum 9007199254740991
-     */
-  seq: number;
-  type: 'completed';
-  payload: {
-  resultKind: 'proposal' | 'answer';
-  usage?: {
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  inputTokens: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  outputTokens: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  modelCalls: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  searchCalls: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  sourceReads: number;
-};
-};
-} | {
-  protocolVersion: 1;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minimum 1
-     * @maximum 9007199254740991
-     */
-  seq: number;
-  type: 'failed';
-  payload: {
-  code: 'CANCELLED' | 'TIMEOUT' | 'RATE_LIMITED' | 'MODEL_FAILED' | 'INVALID_OUTPUT' | 'INVALID_CITATION' | 'INSUFFICIENT_EVIDENCE' | 'TARGET_CONFLICT' | 'ACCESS_REVOKED' | 'UNSUPPORTED_TARGET' | 'PROTOCOL_ERROR' | 'BUDGET_EXCEEDED' | 'CHECKPOINT_UNAVAILABLE' | 'THREAD_EXISTS' | 'INCOMPATIBLE_CHECKPOINT';
-  retryable: boolean;
-};
-};
-
-export type AiTaskEventV2 = {
-  protocolVersion: 2;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minimum 1
-     * @maximum 9007199254740991
-     */
-  seq: number;
-  type: 'started';
-  payload: {
-  kind: 'authoring' | 'answer' | 'chat';
-};
-} | {
-  protocolVersion: 2;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minimum 1
-     * @maximum 9007199254740991
-     */
-  seq: number;
-  type: 'progress';
-  payload: {
-  stage: 'planning' | 'searching' | 'reading' | 'generating';
-};
-} | {
-  protocolVersion: 2;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minimum 1
-     * @maximum 9007199254740991
-     */
-  seq: number;
-  type: 'text-delta';
-  payload: {
-  /** @maxLength 16000 */
-  text: string;
-};
-} | {
-  protocolVersion: 2;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minimum 1
-     * @maximum 9007199254740991
-     */
-  seq: number;
-  type: 'proposal';
-  payload: {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  proposalId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  document: {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  documentId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  generationId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  durableSeq: number;
-  /** @pattern ^sha256:[a-f0-9]{64}$ */
-  contentHash: string;
-};
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  baseStructureRevision: number;
-  target: {
-  kind: 'document';
-} | {
-  kind: 'selection';
-  /** Generation-bound selection encoded as opaque Yjs relative positions with optional same-editor position mapping hints. */
-  anchor: {
-  /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
-  documentId: string;
-  /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
-  generationId: string;
-  anchorVersion: 1;
-  encoding: 'yjs-relative-position-v1';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  startBlockId: string;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  endBlockId: string;
-  /** @minimum 0 */
-  positionRevision?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  startPosition?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  endPosition?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  startOffset?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  endOffset?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  startBlockLength?: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  selectedTextLength?: number;
-  /**
-     * @minLength 4
-     * @maxLength 8192
-     * @pattern ^[A-Za-z0-9+/]+={0,2}$
-     */
-  start: string;
-  /**
-     * @minLength 4
-     * @maxLength 8192
-     * @pattern ^[A-Za-z0-9+/]+={0,2}$
-     */
-  end: string;
-};
-  /** @pattern ^sha256:[a-f0-9]{64}$ */
-  selectedTextHash: string;
-} | {
-  kind: 'blocks';
-  /**
-     * @minItems 1
-     * @maxItems 256
-     */
-  blocks: {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  blockId: string;
-  /** @pattern ^sha256:[a-f0-9]{64}$ */
-  contentHash: string;
-}[];
-} | {
-  kind: 'document-end';
-  afterBlockId: string | null;
-};
-  operationBatch: {
-  /** @pattern ^op_[A-Za-z0-9_-]{1,64}$ */
-  operationId: string;
-  /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
-  documentId: string;
-  /** @pattern ^gen_[A-Za-z0-9_-]{1,64}$ */
-  generationId?: string;
-  origin: 'user' | 'import' | 'system' | 'ai-accept';
-  /** @maxItems 1000 */
-  preconditions?: {
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  blockId: string;
-  /** @pattern ^sha256:[a-fA-F0-9]{64}$ */
-  contentHash?: string;
-}[];
-  /**
-     * @minItems 1
-     * @maxItems 256
-     */
-  operations: ({
-  type: 'insert-block';
-  parentBlockId: string | null;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  beforeBlockId?: string;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  afterBlockId?: string;
-  block: DocumentBlock;
-} | {
-  type: 'delete-block';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  targetBlockId: string;
-} | {
-  type: 'replace-block';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  targetBlockId: string;
-  block: DocumentBlock;
-} | {
-  type: 'wrap-block';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  targetBlockId: string;
-  wrapper: DocumentBlock | {
-  type: 'callout';
-  attrs: {
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  blockId: string;
-  theme: 'info' | 'tip' | 'warning' | 'success' | 'danger';
-};
-  /** @maxItems 10000 */
-  content: DocumentBlock[];
-};
-} | {
-  type: 'move-block';
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  targetBlockId: string;
-  parentBlockId: string | null;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  beforeBlockId?: string;
-  /**
-     * Stable identity for an addressable block.
-     * @pattern ^block_[A-Za-z0-9_-]{1,64}$
-     */
-  afterBlockId?: string;
-})[];
-};
-  /** @maxLength 2000 */
-  summary: string;
-  /** @maxItems 32 */
-  citations: ({
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  citationId: string;
-  source: {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  sourceId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  snapshotId: string;
-  locator: {
-  kind: 'block';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  blockId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  start: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  end: number;
-} | {
-  kind: 'page';
-  /** @minimum 1 */
-  page: number;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  segmentId: string;
-} | {
-  kind: 'section';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  sectionId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  start: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  end: number;
-};
-};
-  /**
-     * @minLength 1
-     * @maxLength 8000
-     */
-  quote: string;
-})[];
-};
-} | {
-  protocolVersion: 2;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minimum 1
-     * @maximum 9007199254740991
-     */
-  seq: number;
-  type: 'answer';
-  payload: {
-  status: 'answered' | 'insufficient-evidence';
-  /** @maxLength 64000 */
-  text: string;
-  /** @maxItems 32 */
-  citations: ({
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  citationId: string;
-  source: {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  sourceId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  snapshotId: string;
-  locator: {
-  kind: 'block';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  blockId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  start: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  end: number;
-} | {
-  kind: 'page';
-  /** @minimum 1 */
-  page: number;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  segmentId: string;
-} | {
-  kind: 'section';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  sectionId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  start: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  end: number;
-};
-};
-  /**
-     * @minLength 1
-     * @maxLength 8000
-     */
-  quote: string;
-})[];
-};
-} | {
-  protocolVersion: 2;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minimum 1
-     * @maximum 9007199254740991
-     */
-  seq: number;
-  type: 'completed';
-  payload: {
-  resultKind: 'proposal' | 'answer' | 'chat';
-  usage?: {
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  inputTokens: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  outputTokens: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  modelCalls: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  searchCalls: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  sourceReads: number;
-};
-};
-} | {
-  protocolVersion: 2;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minimum 1
-     * @maximum 9007199254740991
-     */
-  seq: number;
-  type: 'failed';
-  payload: {
-  code: 'CANCELLED' | 'TIMEOUT' | 'RATE_LIMITED' | 'MODEL_FAILED' | 'INVALID_OUTPUT' | 'INVALID_CITATION' | 'INSUFFICIENT_EVIDENCE' | 'TARGET_CONFLICT' | 'ACCESS_REVOKED' | 'UNSUPPORTED_TARGET' | 'PROTOCOL_ERROR' | 'BUDGET_EXCEEDED' | 'CHECKPOINT_UNAVAILABLE' | 'THREAD_EXISTS' | 'INCOMPATIBLE_CHECKPOINT';
-  retryable: boolean;
-};
-} | {
-  protocolVersion: 2;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  /**
-     * @minimum 1
-     * @maximum 9007199254740991
-     */
-  seq: number;
-  type: 'chat';
-  payload: {
-  status: 'replied' | 'insufficient-evidence';
-  /**
-     * @minLength 1
-     * @maxLength 64000
-     */
-  text: string;
-  /** @maxItems 32 */
-  citations: ({
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  citationId: string;
-  source: {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  sourceId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  snapshotId: string;
-  locator: {
-  kind: 'block';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  blockId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  start: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  end: number;
-} | {
-  kind: 'page';
-  /** @minimum 1 */
-  page: number;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  segmentId: string;
-} | {
-  kind: 'section';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  sectionId: string;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  start: number;
-  /**
-     * @minimum 0
-     * @maximum 9007199254740991
-     */
-  end: number;
-};
-};
-  /**
-     * @minLength 1
-     * @maxLength 8000
-     */
-  quote: string;
-})[];
-};
-};
-
 export type ErrorResponseDetails = {[key: string]: unknown};
 
 export interface ErrorResponse {
@@ -3083,292 +1434,6 @@ export interface ErrorResponse {
   requestId: string;
   details?: ErrorResponseDetails;
 }
-
-export type WritingChatSnapshotConversation = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  id: string;
-  title: string;
-  createdAt: string;
-};
-
-export type WritingChatSnapshotMessagesItem = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  id: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  conversationId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  runId: string;
-  role: 'user' | 'assistant';
-  text: string;
-  createdAt: string;
-  status: 'committed' | 'pending' | 'failed' | 'cancelled';
-};
-
-export type WritingChatSnapshotRunsItem = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  id: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  conversationId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  inputMessageId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  idempotencyKey: string;
-  inputHash: string;
-  status: 'queued' | 'running' | 'waiting-approval' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
-  /** @minimum 1 */
-  attempt: number;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  nativeMessageId?: string;
-  turn?: number;
-  errorCode?: string;
-  cancelRequested?: boolean;
-  modelCalls: number;
-  createdAt: string;
-};
-
-export type WritingChatSnapshotApprovalsItem = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  id: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  runId: string;
-  attempt: number;
-  action: string;
-  /** @maxLength 1000 */
-  description?: string;
-  expiresAt: string;
-  status: 'pending' | 'allowed' | 'rejected' | 'cancelled' | 'expired' | 'unavailable';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  decisionId?: string;
-  decision?: 'allow-once' | 'reject';
-};
-
-export interface WritingChatSnapshot {
-  protocolVersion: 1;
-  conversation: WritingChatSnapshotConversation;
-  messages: WritingChatSnapshotMessagesItem[];
-  runs: WritingChatSnapshotRunsItem[];
-  approvals: WritingChatSnapshotApprovalsItem[];
-  /** @pattern ^(0|[1-9][0-9]*)$ */
-  cursor: string;
-}
-
-export interface SubmitWritingMessage {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  clientMessageId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  idempotencyKey: string;
-  /**
-     * @minLength 1
-     * @maxLength 32000
-     */
-  text: string;
-}
-
-export type WritingChatFrame = {
-  type: 'snapshot';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  eventId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  conversationId: string;
-  /** @pattern ^[1-9][0-9]*$ */
-  sequence: string;
-  snapshot: {
-  protocolVersion: 1;
-  conversation: {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  id: string;
-  title: string;
-  createdAt: string;
-};
-  messages: ({
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  id: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  conversationId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  runId: string;
-  role: 'user' | 'assistant';
-  text: string;
-  createdAt: string;
-  status: 'committed' | 'pending' | 'failed' | 'cancelled';
-})[];
-  runs: ({
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  id: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  conversationId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  inputMessageId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  idempotencyKey: string;
-  inputHash: string;
-  status: 'queued' | 'running' | 'waiting-approval' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
-  /** @minimum 1 */
-  attempt: number;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  nativeMessageId?: string;
-  turn?: number;
-  errorCode?: string;
-  cancelRequested?: boolean;
-  modelCalls: number;
-  createdAt: string;
-})[];
-  approvals: ({
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  id: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  runId: string;
-  attempt: number;
-  action: string;
-  /** @maxLength 1000 */
-  description?: string;
-  expiresAt: string;
-  status: 'pending' | 'allowed' | 'rejected' | 'cancelled' | 'expired' | 'unavailable';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  decisionId?: string;
-  decision?: 'allow-once' | 'reject';
-})[];
-  /** @pattern ^(0|[1-9][0-9]*)$ */
-  cursor: string;
-};
-} | {
-  type: 'assistant.delta';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  conversationId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  runId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  streamEpoch: string;
-  /** @minimum 1 */
-  attempt: number;
-  /** @minimum 1 */
-  revision: number;
-  /** @minimum 0 */
-  index: number;
-  /** @maxLength 128000 */
-  text: string;
-} | {
-  type: 'resync-required';
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  conversationId: string;
-};
-
-export type WritingImageJob = {
-  id: string;
-  status: 'pending' | 'unknown' | 'failed';
-  code?: string;
-} | {
-  id: string;
-  status: 'ready';
-  /**
-     * @minItems 1
-     * @maxItems 1
-     */
-  assets: ({
-  assetId: string;
-  mime: 'image/png' | 'image/jpeg' | 'image/webp';
-  /** @minimum 1 */
-  width: number;
-  /** @minimum 1 */
-  height: number;
-})[];
-};
 
 export type GetLiveness200Status = typeof GetLiveness200Status[keyof typeof GetLiveness200Status];
 
@@ -3490,69 +1555,6 @@ export type MockLogout204 = typeof MockLogout204[keyof typeof MockLogout204] | n
 
 
 export const MockLogout204 = {
-  null: 'null',
-} as const;
-
-export type ListProjectsParams = {
-/**
- * @minimum 1
- * @maximum 100
- */
-limit?: number;
-};
-
-export type ListProjects200ItemsItem = {
-  id: string;
-  name: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type ListProjects200 = {
-  items: ListProjects200ItemsItem[];
-};
-
-export type CreateProjectBody = {
-  /**
-     * @minLength 1
-     * @maxLength 200
-     */
-  name: string;
-};
-
-export type CreateProject201 = {
-  id: string;
-  name: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type GetProject200 = {
-  id: string;
-  name: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type UpdateProjectBody = {
-  /**
-     * @minLength 1
-     * @maxLength 200
-     */
-  name?: string;
-};
-
-export type UpdateProject200 = {
-  id: string;
-  name: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type DeleteProject204 = typeof DeleteProject204[keyof typeof DeleteProject204] | null;
-
-
-export const DeleteProject204 = {
   null: 'null',
 } as const;
 
@@ -6070,857 +4072,762 @@ export type JoinShare200 = {
   joined: boolean;
 };
 
-export type GetKnowledgeIndexStatusParams = {
-/**
- * @pattern ^ws_[A-Za-z0-9_-]{1,64}$
- */
-workspaceId?: string;
-/**
- * @maxLength 280
- * @pattern ^doc_[A-Za-z0-9_-]{1,64}(,doc_[A-Za-z0-9_-]{1,64}){0,3}$
- */
-documentIds?: string;
+export type GetQaCapabilities200RetrievalScopeLimits = {
+  maxWorkspaces: number;
+  maxDocuments: number;
+  maxAllDocuments: number;
 };
 
-export type GetKnowledgeIndexStatus200 = {
-  total: number;
-  ready: number;
-  pending: number;
-  failed: number;
-  errors: string[];
+export type GetQaCapabilities200Retrieval = {
+  contextTokenBudget: number;
+  maxEvidenceItems: number;
+  maxRepairRounds: number;
+  scopeLimits: GetQaCapabilities200RetrievalScopeLimits;
 };
 
-export type GetAiCapabilities200ChatDelivery = typeof GetAiCapabilities200ChatDelivery[keyof typeof GetAiCapabilities200ChatDelivery];
-
-
-export const GetAiCapabilities200ChatDelivery = {
-  'complete-result': 'complete-result',
-} as const;
-
-export type GetAiCapabilities200Knowledge = {
+export type GetQaCapabilities200 = {
   enabled: boolean;
-  reason: string | null;
+  reason?: string;
+  retrieval: GetQaCapabilities200Retrieval;
+  webSearch: false;
+  handoff: true;
 };
 
-export type GetAiCapabilities200 = {
-  enabled: boolean;
-  protocolVersions: number[];
-  reason: string | null;
-  supportsTokenPreview: boolean;
-  chatDelivery: GetAiCapabilities200ChatDelivery;
-  knowledge: GetAiCapabilities200Knowledge;
-};
-
-export type GetAiDocumentContext200Version = {
-  documentId: string;
-  generationId: string;
-  durableSeq: number;
-  contentHash: string;
-};
-
-export type GetAiDocumentContext200 = {
-  snapshot: DocumentSnapshot;
-  version: GetAiDocumentContext200Version;
-  structureRevision: number;
-  workspaceId: string;
-  title: string;
-  aiWritable: boolean;
-  reason: string | null;
-};
-
-export type StartAiAuthoringBodyProtocolVersion = typeof StartAiAuthoringBodyProtocolVersion[keyof typeof StartAiAuthoringBodyProtocolVersion];
+export type ListQaConversations200ItemPurpose = typeof ListQaConversations200ItemPurpose[keyof typeof ListQaConversations200ItemPurpose];
 
 
-export const StartAiAuthoringBodyProtocolVersion = {
-  NUMBER_1: 1,
+export const ListQaConversations200ItemPurpose = {
+  qa: 'qa',
+  writing: 'writing',
 } as const;
 
-export type StartAiAuthoringBody = {
-  protocolVersion?: StartAiAuthoringBodyProtocolVersion;
-  request: AuthoringRequest;
-  /**
-     * @maxItems 16
-     * @items.minLength 1
-     * @items.maxLength 160
-     */
-  previousRequestIds?: string[];
-  /**
-     * @maxItems 4
-     * @items.pattern ^doc_[A-Za-z0-9_-]{1,64}$
-     */
-  sourceDocumentIds?: string[];
-};
-
-export type StartAiAuthoring200OneStatus = typeof StartAiAuthoring200OneStatus[keyof typeof StartAiAuthoring200OneStatus];
-
-
-export const StartAiAuthoring200OneStatus = {
-  running: 'running',
-  interrupted: 'interrupted',
-  completed: 'completed',
-  failed: 'failed',
-  cancelled: 'cancelled',
-} as const;
-
-export type StartAiAuthoring200OneKind = typeof StartAiAuthoring200OneKind[keyof typeof StartAiAuthoring200OneKind];
-
-
-export const StartAiAuthoring200OneKind = {
-  authoring: 'authoring',
-  chat: 'chat',
-  answer: 'answer',
-} as const;
-
-export type StartAiAuthoring200OneReviewDecisionsItemAction = typeof StartAiAuthoring200OneReviewDecisionsItemAction[keyof typeof StartAiAuthoring200OneReviewDecisionsItemAction];
-
-
-export const StartAiAuthoring200OneReviewDecisionsItemAction = {
-  accept: 'accept',
-  reject: 'reject',
-} as const;
-
-export type StartAiAuthoring200OneReviewDecisionsItem = {
-  blockId: string;
-  action: StartAiAuthoring200OneReviewDecisionsItemAction;
-};
-
-export type StartAiAuthoring200OneReviewVersion = {
-  documentId: string;
-  generationId: string;
-  /** @minimum 0 */
-  durableSeq: number;
-  contentHash: string;
-};
-
-export type StartAiAuthoring200OneReview = {
-  /** @minimum 0 */
-  revision: number;
-  decisions: StartAiAuthoring200OneReviewDecisionsItem[];
-  version: StartAiAuthoring200OneReviewVersion;
-  /** @minimum 0 */
-  structureRevision: number;
-} | null;
-
-export type StartAiAuthoring200OneApplicationState = typeof StartAiAuthoring200OneApplicationState[keyof typeof StartAiAuthoring200OneApplicationState];
-
-
-export const StartAiAuthoring200OneApplicationState = {
-  none: 'none',
-  pending: 'pending',
-  partial: 'partial',
-  rejected: 'rejected',
-  applied: 'applied',
-  conflict: 'conflict',
-  blocked: 'blocked',
-} as const;
-
-export type StartAiAuthoring200OneApplicationReceipt = {
-  operationId: string;
-  generationId: string;
-  /** @minimum 0 */
-  durableSeq: number;
-  /** @minimum 0 */
-  structureRevision: number;
-} | null;
-
-export type StartAiAuthoring200OneApplication = {
-  state: StartAiAuthoring200OneApplicationState;
-  code: string | null;
-  receipt: StartAiAuthoring200OneApplicationReceipt;
-};
-
-export type StartAiAuthoring200OneUsage = {
-  modelCalls: number;
-  inputTokens: number;
-  outputTokens: number;
-  searchCalls: number;
-  sourceReads: number;
-};
-
-export type StartAiAuthoring200One = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  status: StartAiAuthoring200OneStatus;
-  kind: StartAiAuthoring200OneKind;
-  review: StartAiAuthoring200OneReview;
-  result: AuthoringProposal | ChatResult | null;
-  errorCode: string | null;
-  application: StartAiAuthoring200OneApplication;
-  usage: StartAiAuthoring200OneUsage;
-  createdAt: string;
-  expiresAt: string;
-};
-
-export type StartAiChatBodyProtocolVersion = typeof StartAiChatBodyProtocolVersion[keyof typeof StartAiChatBodyProtocolVersion];
-
-
-export const StartAiChatBodyProtocolVersion = {
-  NUMBER_2: 2,
-} as const;
-
-export type StartAiChatBody = {
-  protocolVersion: StartAiChatBodyProtocolVersion;
-  request: ChatRequest;
-  /**
-     * @maxItems 4
-     * @items.pattern ^doc_[A-Za-z0-9_-]{1,64}$
-     */
-  sourceDocumentIds?: string[];
-  /** @pattern ^ws_[A-Za-z0-9_-]{1,64}$ */
-  sourceWorkspaceId?: string;
-};
-
-export type StartAiChat200OneStatus = typeof StartAiChat200OneStatus[keyof typeof StartAiChat200OneStatus];
-
-
-export const StartAiChat200OneStatus = {
-  running: 'running',
-  interrupted: 'interrupted',
-  completed: 'completed',
-  failed: 'failed',
-  cancelled: 'cancelled',
-} as const;
-
-export type StartAiChat200OneKind = typeof StartAiChat200OneKind[keyof typeof StartAiChat200OneKind];
-
-
-export const StartAiChat200OneKind = {
-  authoring: 'authoring',
-  chat: 'chat',
-  answer: 'answer',
-} as const;
-
-export type StartAiChat200OneReviewDecisionsItemAction = typeof StartAiChat200OneReviewDecisionsItemAction[keyof typeof StartAiChat200OneReviewDecisionsItemAction];
-
-
-export const StartAiChat200OneReviewDecisionsItemAction = {
-  accept: 'accept',
-  reject: 'reject',
-} as const;
-
-export type StartAiChat200OneReviewDecisionsItem = {
-  blockId: string;
-  action: StartAiChat200OneReviewDecisionsItemAction;
-};
-
-export type StartAiChat200OneReviewVersion = {
-  documentId: string;
-  generationId: string;
-  /** @minimum 0 */
-  durableSeq: number;
-  contentHash: string;
-};
-
-export type StartAiChat200OneReview = {
-  /** @minimum 0 */
-  revision: number;
-  decisions: StartAiChat200OneReviewDecisionsItem[];
-  version: StartAiChat200OneReviewVersion;
-  /** @minimum 0 */
-  structureRevision: number;
-} | null;
-
-export type StartAiChat200OneApplicationState = typeof StartAiChat200OneApplicationState[keyof typeof StartAiChat200OneApplicationState];
-
-
-export const StartAiChat200OneApplicationState = {
-  none: 'none',
-  pending: 'pending',
-  partial: 'partial',
-  rejected: 'rejected',
-  applied: 'applied',
-  conflict: 'conflict',
-  blocked: 'blocked',
-} as const;
-
-export type StartAiChat200OneApplicationReceipt = {
-  operationId: string;
-  generationId: string;
-  /** @minimum 0 */
-  durableSeq: number;
-  /** @minimum 0 */
-  structureRevision: number;
-} | null;
-
-export type StartAiChat200OneApplication = {
-  state: StartAiChat200OneApplicationState;
-  code: string | null;
-  receipt: StartAiChat200OneApplicationReceipt;
-};
-
-export type StartAiChat200OneUsage = {
-  modelCalls: number;
-  inputTokens: number;
-  outputTokens: number;
-  searchCalls: number;
-  sourceReads: number;
-};
-
-export type StartAiChat200One = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  status: StartAiChat200OneStatus;
-  kind: StartAiChat200OneKind;
-  review: StartAiChat200OneReview;
-  result: AuthoringProposal | ChatResult | null;
-  errorCode: string | null;
-  application: StartAiChat200OneApplication;
-  usage: StartAiChat200OneUsage;
-  createdAt: string;
-  expiresAt: string;
-};
-
-export type GetAiTask200Status = typeof GetAiTask200Status[keyof typeof GetAiTask200Status];
-
-
-export const GetAiTask200Status = {
-  running: 'running',
-  interrupted: 'interrupted',
-  completed: 'completed',
-  failed: 'failed',
-  cancelled: 'cancelled',
-} as const;
-
-export type GetAiTask200Kind = typeof GetAiTask200Kind[keyof typeof GetAiTask200Kind];
-
-
-export const GetAiTask200Kind = {
-  authoring: 'authoring',
-  chat: 'chat',
-  answer: 'answer',
-} as const;
-
-export type GetAiTask200ReviewDecisionsItemAction = typeof GetAiTask200ReviewDecisionsItemAction[keyof typeof GetAiTask200ReviewDecisionsItemAction];
-
-
-export const GetAiTask200ReviewDecisionsItemAction = {
-  accept: 'accept',
-  reject: 'reject',
-} as const;
-
-export type GetAiTask200ReviewDecisionsItem = {
-  blockId: string;
-  action: GetAiTask200ReviewDecisionsItemAction;
-};
-
-export type GetAiTask200ReviewVersion = {
-  documentId: string;
-  generationId: string;
-  /** @minimum 0 */
-  durableSeq: number;
-  contentHash: string;
-};
-
-export type GetAiTask200Review = {
-  /** @minimum 0 */
-  revision: number;
-  decisions: GetAiTask200ReviewDecisionsItem[];
-  version: GetAiTask200ReviewVersion;
-  /** @minimum 0 */
-  structureRevision: number;
-} | null;
-
-export type GetAiTask200ApplicationState = typeof GetAiTask200ApplicationState[keyof typeof GetAiTask200ApplicationState];
-
-
-export const GetAiTask200ApplicationState = {
-  none: 'none',
-  pending: 'pending',
-  partial: 'partial',
-  rejected: 'rejected',
-  applied: 'applied',
-  conflict: 'conflict',
-  blocked: 'blocked',
-} as const;
-
-export type GetAiTask200ApplicationReceipt = {
-  operationId: string;
-  generationId: string;
-  /** @minimum 0 */
-  durableSeq: number;
-  /** @minimum 0 */
-  structureRevision: number;
-} | null;
-
-export type GetAiTask200Application = {
-  state: GetAiTask200ApplicationState;
-  code: string | null;
-  receipt: GetAiTask200ApplicationReceipt;
-};
-
-export type GetAiTask200Usage = {
-  modelCalls: number;
-  inputTokens: number;
-  outputTokens: number;
-  searchCalls: number;
-  sourceReads: number;
-};
-
-export type GetAiTask200 = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  status: GetAiTask200Status;
-  kind: GetAiTask200Kind;
-  review: GetAiTask200Review;
-  result: AuthoringProposal | ChatResult | null;
-  errorCode: string | null;
-  application: GetAiTask200Application;
-  usage: GetAiTask200Usage;
-  createdAt: string;
-  expiresAt: string;
-};
-
-export type AcceptAiProposal200Status = typeof AcceptAiProposal200Status[keyof typeof AcceptAiProposal200Status];
-
-
-export const AcceptAiProposal200Status = {
-  running: 'running',
-  interrupted: 'interrupted',
-  completed: 'completed',
-  failed: 'failed',
-  cancelled: 'cancelled',
-} as const;
-
-export type AcceptAiProposal200Kind = typeof AcceptAiProposal200Kind[keyof typeof AcceptAiProposal200Kind];
-
-
-export const AcceptAiProposal200Kind = {
-  authoring: 'authoring',
-  chat: 'chat',
-  answer: 'answer',
-} as const;
-
-export type AcceptAiProposal200ReviewDecisionsItemAction = typeof AcceptAiProposal200ReviewDecisionsItemAction[keyof typeof AcceptAiProposal200ReviewDecisionsItemAction];
-
-
-export const AcceptAiProposal200ReviewDecisionsItemAction = {
-  accept: 'accept',
-  reject: 'reject',
-} as const;
-
-export type AcceptAiProposal200ReviewDecisionsItem = {
-  blockId: string;
-  action: AcceptAiProposal200ReviewDecisionsItemAction;
-};
-
-export type AcceptAiProposal200ReviewVersion = {
-  documentId: string;
-  generationId: string;
-  /** @minimum 0 */
-  durableSeq: number;
-  contentHash: string;
-};
-
-export type AcceptAiProposal200Review = {
-  /** @minimum 0 */
-  revision: number;
-  decisions: AcceptAiProposal200ReviewDecisionsItem[];
-  version: AcceptAiProposal200ReviewVersion;
-  /** @minimum 0 */
-  structureRevision: number;
-} | null;
-
-export type AcceptAiProposal200ApplicationState = typeof AcceptAiProposal200ApplicationState[keyof typeof AcceptAiProposal200ApplicationState];
-
-
-export const AcceptAiProposal200ApplicationState = {
-  none: 'none',
-  pending: 'pending',
-  partial: 'partial',
-  rejected: 'rejected',
-  applied: 'applied',
-  conflict: 'conflict',
-  blocked: 'blocked',
-} as const;
-
-export type AcceptAiProposal200ApplicationReceipt = {
-  operationId: string;
-  generationId: string;
-  /** @minimum 0 */
-  durableSeq: number;
-  /** @minimum 0 */
-  structureRevision: number;
-} | null;
-
-export type AcceptAiProposal200Application = {
-  state: AcceptAiProposal200ApplicationState;
-  code: string | null;
-  receipt: AcceptAiProposal200ApplicationReceipt;
-};
-
-export type AcceptAiProposal200Usage = {
-  modelCalls: number;
-  inputTokens: number;
-  outputTokens: number;
-  searchCalls: number;
-  sourceReads: number;
-};
-
-export type AcceptAiProposal200 = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  status: AcceptAiProposal200Status;
-  kind: AcceptAiProposal200Kind;
-  review: AcceptAiProposal200Review;
-  result: AuthoringProposal | ChatResult | null;
-  errorCode: string | null;
-  application: AcceptAiProposal200Application;
-  usage: AcceptAiProposal200Usage;
-  createdAt: string;
-  expiresAt: string;
-};
-
-export type CancelAiTask200Status = typeof CancelAiTask200Status[keyof typeof CancelAiTask200Status];
-
-
-export const CancelAiTask200Status = {
-  running: 'running',
-  interrupted: 'interrupted',
-  completed: 'completed',
-  failed: 'failed',
-  cancelled: 'cancelled',
-} as const;
-
-export type CancelAiTask200Kind = typeof CancelAiTask200Kind[keyof typeof CancelAiTask200Kind];
-
-
-export const CancelAiTask200Kind = {
-  authoring: 'authoring',
-  chat: 'chat',
-  answer: 'answer',
-} as const;
-
-export type CancelAiTask200ReviewDecisionsItemAction = typeof CancelAiTask200ReviewDecisionsItemAction[keyof typeof CancelAiTask200ReviewDecisionsItemAction];
-
-
-export const CancelAiTask200ReviewDecisionsItemAction = {
-  accept: 'accept',
-  reject: 'reject',
-} as const;
-
-export type CancelAiTask200ReviewDecisionsItem = {
-  blockId: string;
-  action: CancelAiTask200ReviewDecisionsItemAction;
-};
-
-export type CancelAiTask200ReviewVersion = {
-  documentId: string;
-  generationId: string;
-  /** @minimum 0 */
-  durableSeq: number;
-  contentHash: string;
-};
-
-export type CancelAiTask200Review = {
-  /** @minimum 0 */
-  revision: number;
-  decisions: CancelAiTask200ReviewDecisionsItem[];
-  version: CancelAiTask200ReviewVersion;
-  /** @minimum 0 */
-  structureRevision: number;
-} | null;
-
-export type CancelAiTask200ApplicationState = typeof CancelAiTask200ApplicationState[keyof typeof CancelAiTask200ApplicationState];
-
-
-export const CancelAiTask200ApplicationState = {
-  none: 'none',
-  pending: 'pending',
-  partial: 'partial',
-  rejected: 'rejected',
-  applied: 'applied',
-  conflict: 'conflict',
-  blocked: 'blocked',
-} as const;
-
-export type CancelAiTask200ApplicationReceipt = {
-  operationId: string;
-  generationId: string;
-  /** @minimum 0 */
-  durableSeq: number;
-  /** @minimum 0 */
-  structureRevision: number;
-} | null;
-
-export type CancelAiTask200Application = {
-  state: CancelAiTask200ApplicationState;
-  code: string | null;
-  receipt: CancelAiTask200ApplicationReceipt;
-};
-
-export type CancelAiTask200Usage = {
-  modelCalls: number;
-  inputTokens: number;
-  outputTokens: number;
-  searchCalls: number;
-  sourceReads: number;
-};
-
-export type CancelAiTask200 = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  status: CancelAiTask200Status;
-  kind: CancelAiTask200Kind;
-  review: CancelAiTask200Review;
-  result: AuthoringProposal | ChatResult | null;
-  errorCode: string | null;
-  application: CancelAiTask200Application;
-  usage: CancelAiTask200Usage;
-  createdAt: string;
-  expiresAt: string;
-};
-
-export type ReviewAiProposalBodyAction = typeof ReviewAiProposalBodyAction[keyof typeof ReviewAiProposalBodyAction];
-
-
-export const ReviewAiProposalBodyAction = {
-  accept: 'accept',
-  reject: 'reject',
-} as const;
-
-export type ReviewAiProposalBody = {
-  decisionId: string;
-  /**
-     * @minimum 0
-     * @maximum 256
-     */
-  revision: number;
-  action: ReviewAiProposalBodyAction;
+export type ListQaConversations200ItemScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
   /**
      * @minItems 1
-     * @maxItems 256
-     * @items.minLength 1
-     * @items.maxLength 160
+     * @maxItems 8
      */
-  blockIds?: string[];
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
 };
 
-export type ReviewAiProposal200Status = typeof ReviewAiProposal200Status[keyof typeof ReviewAiProposal200Status];
+export type ListQaConversations200ItemStatus = typeof ListQaConversations200ItemStatus[keyof typeof ListQaConversations200ItemStatus];
 
 
-export const ReviewAiProposal200Status = {
+export const ListQaConversations200ItemStatus = {
+  active: 'active',
+  'target-unavailable': 'target-unavailable',
+  closed: 'closed',
+} as const;
+
+export type ListQaConversations200Item = {
+  id: string;
+  purpose: ListQaConversations200ItemPurpose;
+  title: string;
+  scope: ListQaConversations200ItemScope;
+  contextRevision: number;
+  status: ListQaConversations200ItemStatus;
+  targetDocumentId?: string | null;
+  siteId?: string;
+  eventSequence: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateQaConversationBody = unknown | {
+  scope?: {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  creationKey?: string;
+};
+
+export type CreateQaConversation201Purpose = typeof CreateQaConversation201Purpose[keyof typeof CreateQaConversation201Purpose];
+
+
+export const CreateQaConversation201Purpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type CreateQaConversation201Scope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type CreateQaConversation201Status = typeof CreateQaConversation201Status[keyof typeof CreateQaConversation201Status];
+
+
+export const CreateQaConversation201Status = {
+  active: 'active',
+  'target-unavailable': 'target-unavailable',
+  closed: 'closed',
+} as const;
+
+export type CreateQaConversation201 = {
+  id: string;
+  purpose: CreateQaConversation201Purpose;
+  title: string;
+  scope: CreateQaConversation201Scope;
+  contextRevision: number;
+  status: CreateQaConversation201Status;
+  targetDocumentId?: string | null;
+  siteId?: string;
+  eventSequence: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GetQaConversationParams = {
+not?: unknown;
+/**
+ * @maxLength 160
+ */
+before?: string;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+};
+
+export type GetQaConversation200ConversationPurpose = typeof GetQaConversation200ConversationPurpose[keyof typeof GetQaConversation200ConversationPurpose];
+
+
+export const GetQaConversation200ConversationPurpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type GetQaConversation200ConversationScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type GetQaConversation200ConversationStatus = typeof GetQaConversation200ConversationStatus[keyof typeof GetQaConversation200ConversationStatus];
+
+
+export const GetQaConversation200ConversationStatus = {
+  active: 'active',
+  'target-unavailable': 'target-unavailable',
+  closed: 'closed',
+} as const;
+
+export type GetQaConversation200Conversation = {
+  id: string;
+  purpose: GetQaConversation200ConversationPurpose;
+  title: string;
+  scope: GetQaConversation200ConversationScope;
+  contextRevision: number;
+  status: GetQaConversation200ConversationStatus;
+  targetDocumentId?: string | null;
+  siteId?: string;
+  eventSequence: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GetQaConversation200MessagesItemRole = typeof GetQaConversation200MessagesItemRole[keyof typeof GetQaConversation200MessagesItemRole];
+
+
+export const GetQaConversation200MessagesItemRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export type GetQaConversation200MessagesItemPartsItem = {
+  kind: 'text';
+  text: string;
+} | {
+  kind: 'citation';
+  citation: {
+  citationId: string;
+  evidenceArtifactId: string;
+  evidenceId: string;
+  locator: {
+  kind: 'block';
+  blockId: string;
+  start: number;
+  end: number;
+} | {
+  kind: 'page';
+  page: number;
+  segmentId: string;
+} | {
+  kind: 'section';
+  sectionId: string;
+  start: number;
+  end: number;
+};
+  quote: string;
+};
+} | {
+  kind: 'artifact';
+  artifactId: string;
+  artifactKind: 'evidence' | 'draft' | 'proposal' | 'image';
+  summary?: string;
+};
+
+export type GetQaConversation200MessagesItem = {
+  id: string;
+  conversationId: string;
+  runId: string;
+  role: GetQaConversation200MessagesItemRole;
+  parts: GetQaConversation200MessagesItemPartsItem[];
+  clientMessageId?: string;
+  createdAt: string;
+  committedAt?: string;
+};
+
+export type GetQaConversation200RunsItemPurpose = typeof GetQaConversation200RunsItemPurpose[keyof typeof GetQaConversation200RunsItemPurpose];
+
+
+export const GetQaConversation200RunsItemPurpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type GetQaConversation200RunsItemStatus = typeof GetQaConversation200RunsItemStatus[keyof typeof GetQaConversation200RunsItemStatus];
+
+
+export const GetQaConversation200RunsItemStatus = {
+  queued: 'queued',
   running: 'running',
-  interrupted: 'interrupted',
+  'waiting-approval': 'waiting-approval',
   completed: 'completed',
+  interrupted: 'interrupted',
   failed: 'failed',
   cancelled: 'cancelled',
 } as const;
 
-export type ReviewAiProposal200Kind = typeof ReviewAiProposal200Kind[keyof typeof ReviewAiProposal200Kind];
-
-
-export const ReviewAiProposal200Kind = {
-  authoring: 'authoring',
-  chat: 'chat',
-  answer: 'answer',
-} as const;
-
-export type ReviewAiProposal200ReviewDecisionsItemAction = typeof ReviewAiProposal200ReviewDecisionsItemAction[keyof typeof ReviewAiProposal200ReviewDecisionsItemAction];
-
-
-export const ReviewAiProposal200ReviewDecisionsItemAction = {
-  accept: 'accept',
-  reject: 'reject',
-} as const;
-
-export type ReviewAiProposal200ReviewDecisionsItem = {
-  blockId: string;
-  action: ReviewAiProposal200ReviewDecisionsItemAction;
-};
-
-export type ReviewAiProposal200ReviewVersion = {
-  documentId: string;
-  generationId: string;
-  /** @minimum 0 */
-  durableSeq: number;
-  contentHash: string;
-};
-
-export type ReviewAiProposal200Review = {
-  /** @minimum 0 */
-  revision: number;
-  decisions: ReviewAiProposal200ReviewDecisionsItem[];
-  version: ReviewAiProposal200ReviewVersion;
-  /** @minimum 0 */
-  structureRevision: number;
-} | null;
-
-export type ReviewAiProposal200ApplicationState = typeof ReviewAiProposal200ApplicationState[keyof typeof ReviewAiProposal200ApplicationState];
-
-
-export const ReviewAiProposal200ApplicationState = {
-  none: 'none',
-  pending: 'pending',
-  partial: 'partial',
-  rejected: 'rejected',
-  applied: 'applied',
-  conflict: 'conflict',
-  blocked: 'blocked',
-} as const;
-
-export type ReviewAiProposal200ApplicationReceipt = {
-  operationId: string;
-  generationId: string;
-  /** @minimum 0 */
-  durableSeq: number;
-  /** @minimum 0 */
-  structureRevision: number;
-} | null;
-
-export type ReviewAiProposal200Application = {
-  state: ReviewAiProposal200ApplicationState;
-  code: string | null;
-  receipt: ReviewAiProposal200ApplicationReceipt;
-};
-
-export type ReviewAiProposal200Usage = {
+export type GetQaConversation200RunsItemUsage = {
   modelCalls: number;
   inputTokens: number;
   outputTokens: number;
   searchCalls: number;
   sourceReads: number;
+  webSearchCalls: number;
+  webReadCalls: number;
+  providerCredits?: number;
+  unknownCalls: number;
 };
 
-export type ReviewAiProposal200 = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  requestId: string;
-  status: ReviewAiProposal200Status;
-  kind: ReviewAiProposal200Kind;
-  review: ReviewAiProposal200Review;
-  result: AuthoringProposal | ChatResult | null;
-  errorCode: string | null;
-  application: ReviewAiProposal200Application;
-  usage: ReviewAiProposal200Usage;
-  createdAt: string;
+export type GetQaConversation200RunsItemApprovalStatus = typeof GetQaConversation200RunsItemApprovalStatus[keyof typeof GetQaConversation200RunsItemApprovalStatus];
+
+
+export const GetQaConversation200RunsItemApprovalStatus = {
+  pending: 'pending',
+  allowed: 'allowed',
+  rejected: 'rejected',
+  cancelled: 'cancelled',
+  expired: 'expired',
+  unavailable: 'unavailable',
+} as const;
+
+export type GetQaConversation200RunsItemApprovalDecision = typeof GetQaConversation200RunsItemApprovalDecision[keyof typeof GetQaConversation200RunsItemApprovalDecision];
+
+
+export const GetQaConversation200RunsItemApprovalDecision = {
+  'allow-once': 'allow-once',
+  reject: 'reject',
+} as const;
+
+export type GetQaConversation200RunsItemApproval = {
+  id: string;
+  attempt: number;
+  action: string;
+  description?: string;
+  status: GetQaConversation200RunsItemApprovalStatus;
+  decisionId?: string;
+  decision?: GetQaConversation200RunsItemApprovalDecision;
+  requestedAt: string;
   expiresAt: string;
 };
 
-export type ResumeAiTask202Status = typeof ResumeAiTask202Status[keyof typeof ResumeAiTask202Status];
+export type GetQaConversation200RunsItem = {
+  id: string;
+  conversationId: string;
+  purpose: GetQaConversation200RunsItemPurpose;
+  status: GetQaConversation200RunsItemStatus;
+  attempt: number;
+  contextRevision: number;
+  inputHash: string;
+  errorCode?: string;
+  usage?: GetQaConversation200RunsItemUsage;
+  cancelRequested?: boolean;
+  approval?: GetQaConversation200RunsItemApproval;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GetQaConversation200ArtifactsItemPurpose = typeof GetQaConversation200ArtifactsItemPurpose[keyof typeof GetQaConversation200ArtifactsItemPurpose];
 
 
-export const ResumeAiTask202Status = {
-  running: 'running',
-  interrupted: 'interrupted',
-  completed: 'completed',
-  failed: 'failed',
-  cancelled: 'cancelled',
+export const GetQaConversation200ArtifactsItemPurpose = {
+  qa: 'qa',
+  writing: 'writing',
 } as const;
 
-export type ResumeAiTask202Kind = typeof ResumeAiTask202Kind[keyof typeof ResumeAiTask202Kind];
+export type GetQaConversation200ArtifactsItemKind = typeof GetQaConversation200ArtifactsItemKind[keyof typeof GetQaConversation200ArtifactsItemKind];
 
 
-export const ResumeAiTask202Kind = {
-  authoring: 'authoring',
-  chat: 'chat',
-  answer: 'answer',
+export const GetQaConversation200ArtifactsItemKind = {
+  evidence: 'evidence',
+  draft: 'draft',
+  proposal: 'proposal',
+  image: 'image',
 } as const;
 
-export type ResumeAiTask202ReviewDecisionsItemAction = typeof ResumeAiTask202ReviewDecisionsItemAction[keyof typeof ResumeAiTask202ReviewDecisionsItemAction];
+export type GetQaConversation200ArtifactsItemReviewDecisionsItemAction = typeof GetQaConversation200ArtifactsItemReviewDecisionsItemAction[keyof typeof GetQaConversation200ArtifactsItemReviewDecisionsItemAction];
 
 
-export const ResumeAiTask202ReviewDecisionsItemAction = {
+export const GetQaConversation200ArtifactsItemReviewDecisionsItemAction = {
   accept: 'accept',
   reject: 'reject',
 } as const;
 
-export type ResumeAiTask202ReviewDecisionsItem = {
+export type GetQaConversation200ArtifactsItemReviewDecisionsItem = {
   blockId: string;
-  action: ResumeAiTask202ReviewDecisionsItemAction;
+  action: GetQaConversation200ArtifactsItemReviewDecisionsItemAction;
 };
 
-export type ResumeAiTask202ReviewVersion = {
-  documentId: string;
-  generationId: string;
-  /** @minimum 0 */
-  durableSeq: number;
-  contentHash: string;
-};
+export type GetQaConversation200ArtifactsItemReviewReceipts = {[key: string]: string};
 
-export type ResumeAiTask202Review = {
-  /** @minimum 0 */
+export type GetQaConversation200ArtifactsItemReview = {
   revision: number;
-  decisions: ResumeAiTask202ReviewDecisionsItem[];
-  version: ResumeAiTask202ReviewVersion;
-  /** @minimum 0 */
-  structureRevision: number;
-} | null;
+  decisions: GetQaConversation200ArtifactsItemReviewDecisionsItem[];
+  payloadHash?: string;
+  receipts?: GetQaConversation200ArtifactsItemReviewReceipts;
+};
 
-export type ResumeAiTask202ApplicationState = typeof ResumeAiTask202ApplicationState[keyof typeof ResumeAiTask202ApplicationState];
+export type GetQaConversation200ArtifactsItemApplicationState = typeof GetQaConversation200ArtifactsItemApplicationState[keyof typeof GetQaConversation200ArtifactsItemApplicationState];
 
 
-export const ResumeAiTask202ApplicationState = {
-  none: 'none',
+export const GetQaConversation200ArtifactsItemApplicationState = {
   pending: 'pending',
   partial: 'partial',
-  rejected: 'rejected',
   applied: 'applied',
+  rejected: 'rejected',
   conflict: 'conflict',
-  blocked: 'blocked',
+  unknown: 'unknown',
 } as const;
 
-export type ResumeAiTask202ApplicationReceipt = {
+export type GetQaConversation200ArtifactsItemReceipt = {
   operationId: string;
   generationId: string;
-  /** @minimum 0 */
   durableSeq: number;
-  /** @minimum 0 */
   structureRevision: number;
-} | null;
-
-export type ResumeAiTask202Application = {
-  state: ResumeAiTask202ApplicationState;
-  code: string | null;
-  receipt: ResumeAiTask202ApplicationReceipt;
 };
 
-export type ResumeAiTask202Usage = {
+export type GetQaConversation200ArtifactsItem = {
+  id: string;
+  conversationId: string;
+  runId: string;
+  purpose: GetQaConversation200ArtifactsItemPurpose;
+  kind: GetQaConversation200ArtifactsItemKind;
+  schemaVersion: number;
+  summary?: string;
+  evidenceRefs?: string[];
+  reviewRevision?: number;
+  review?: GetQaConversation200ArtifactsItemReview;
+  applicationState?: GetQaConversation200ArtifactsItemApplicationState;
+  receipt?: GetQaConversation200ArtifactsItemReceipt;
+};
+
+export type GetQaConversation200 = {
+  conversation: GetQaConversation200Conversation;
+  messages: GetQaConversation200MessagesItem[];
+  runs: GetQaConversation200RunsItem[];
+  artifacts: GetQaConversation200ArtifactsItem[];
+  cursor: string;
+  hasMoreMessages?: boolean;
+};
+
+export type SubmitQaMessageBodyScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type SubmitQaMessageBodyDetail = typeof SubmitQaMessageBodyDetail[keyof typeof SubmitQaMessageBodyDetail];
+
+
+export const SubmitQaMessageBodyDetail = {
+  brief: 'brief',
+  detailed: 'detailed',
+} as const;
+
+export type SubmitQaMessageBody = {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  clientMessageId: string;
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  idempotencyKey: string;
+  /**
+     * @minLength 1
+     * @maxLength 32000
+     */
+  text: string;
+  /** @minimum 1 */
+  expectedContextRevision: number;
+  scope?: SubmitQaMessageBodyScope;
+  detail?: SubmitQaMessageBodyDetail;
+};
+
+export type SubmitQaMessage202 = {
+  runId: string;
+  conversationId: string;
+  contextRevision: number;
+};
+
+export type UpdateQaScopeBodyScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type UpdateQaScopeBody = {
+  scope: UpdateQaScopeBodyScope;
+  /** @minimum 1 */
+  expectedContextRevision: number;
+};
+
+export type UpdateQaScope200Scope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type UpdateQaScope200 = {
+  contextRevision: number;
+  scope: UpdateQaScope200Scope;
+  cancelledRunIds: string[];
+};
+
+export type ObserveQaConversationParams = {
+/**
+ * @pattern ^(0|[1-9][0-9]*)$
+ */
+cursor: string;
+};
+
+export type CancelQaRun200Purpose = typeof CancelQaRun200Purpose[keyof typeof CancelQaRun200Purpose];
+
+
+export const CancelQaRun200Purpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type CancelQaRun200Status = typeof CancelQaRun200Status[keyof typeof CancelQaRun200Status];
+
+
+export const CancelQaRun200Status = {
+  queued: 'queued',
+  running: 'running',
+  'waiting-approval': 'waiting-approval',
+  completed: 'completed',
+  interrupted: 'interrupted',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type CancelQaRun200Usage = {
   modelCalls: number;
   inputTokens: number;
   outputTokens: number;
   searchCalls: number;
   sourceReads: number;
+  webSearchCalls: number;
+  webReadCalls: number;
+  providerCredits?: number;
+  unknownCalls: number;
 };
 
-export type ResumeAiTask202 = {
+export type CancelQaRun200ApprovalStatus = typeof CancelQaRun200ApprovalStatus[keyof typeof CancelQaRun200ApprovalStatus];
+
+
+export const CancelQaRun200ApprovalStatus = {
+  pending: 'pending',
+  allowed: 'allowed',
+  rejected: 'rejected',
+  cancelled: 'cancelled',
+  expired: 'expired',
+  unavailable: 'unavailable',
+} as const;
+
+export type CancelQaRun200ApprovalDecision = typeof CancelQaRun200ApprovalDecision[keyof typeof CancelQaRun200ApprovalDecision];
+
+
+export const CancelQaRun200ApprovalDecision = {
+  'allow-once': 'allow-once',
+  reject: 'reject',
+} as const;
+
+export type CancelQaRun200Approval = {
+  id: string;
+  attempt: number;
+  action: string;
+  description?: string;
+  status: CancelQaRun200ApprovalStatus;
+  decisionId?: string;
+  decision?: CancelQaRun200ApprovalDecision;
+  requestedAt: string;
+  expiresAt: string;
+};
+
+export type CancelQaRun200 = {
+  id: string;
+  conversationId: string;
+  purpose: CancelQaRun200Purpose;
+  status: CancelQaRun200Status;
+  attempt: number;
+  contextRevision: number;
+  inputHash: string;
+  errorCode?: string;
+  usage?: CancelQaRun200Usage;
+  cancelRequested?: boolean;
+  approval?: CancelQaRun200Approval;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RetryQaRun202Kind = typeof RetryQaRun202Kind[keyof typeof RetryQaRun202Kind];
+
+
+export const RetryQaRun202Kind = {
+  'already-terminal': 'already-terminal',
+  queued: 'queued',
+  'redeliver-staged': 'redeliver-staged',
+} as const;
+
+export type RetryQaRun202RunPurpose = typeof RetryQaRun202RunPurpose[keyof typeof RetryQaRun202RunPurpose];
+
+
+export const RetryQaRun202RunPurpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type RetryQaRun202RunStatus = typeof RetryQaRun202RunStatus[keyof typeof RetryQaRun202RunStatus];
+
+
+export const RetryQaRun202RunStatus = {
+  queued: 'queued',
+  running: 'running',
+  'waiting-approval': 'waiting-approval',
+  completed: 'completed',
+  interrupted: 'interrupted',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type RetryQaRun202RunUsage = {
+  modelCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  searchCalls: number;
+  sourceReads: number;
+  webSearchCalls: number;
+  webReadCalls: number;
+  providerCredits?: number;
+  unknownCalls: number;
+};
+
+export type RetryQaRun202RunApprovalStatus = typeof RetryQaRun202RunApprovalStatus[keyof typeof RetryQaRun202RunApprovalStatus];
+
+
+export const RetryQaRun202RunApprovalStatus = {
+  pending: 'pending',
+  allowed: 'allowed',
+  rejected: 'rejected',
+  cancelled: 'cancelled',
+  expired: 'expired',
+  unavailable: 'unavailable',
+} as const;
+
+export type RetryQaRun202RunApprovalDecision = typeof RetryQaRun202RunApprovalDecision[keyof typeof RetryQaRun202RunApprovalDecision];
+
+
+export const RetryQaRun202RunApprovalDecision = {
+  'allow-once': 'allow-once',
+  reject: 'reject',
+} as const;
+
+export type RetryQaRun202RunApproval = {
+  id: string;
+  attempt: number;
+  action: string;
+  description?: string;
+  status: RetryQaRun202RunApprovalStatus;
+  decisionId?: string;
+  decision?: RetryQaRun202RunApprovalDecision;
+  requestedAt: string;
+  expiresAt: string;
+};
+
+export type RetryQaRun202Run = {
+  id: string;
+  conversationId: string;
+  purpose: RetryQaRun202RunPurpose;
+  status: RetryQaRun202RunStatus;
+  attempt: number;
+  contextRevision: number;
+  inputHash: string;
+  errorCode?: string;
+  usage?: RetryQaRun202RunUsage;
+  cancelRequested?: boolean;
+  approval?: RetryQaRun202RunApproval;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RetryQaRun202 = {
+  kind: RetryQaRun202Kind;
+  run: RetryQaRun202Run;
+};
+
+export type GetQaArtifactParams = {
+/**
+ * @pattern ^ai_[a-f0-9]{32}$
+ */
+conversationId: string;
+};
+
+export type GetQaArtifact200 = {[key: string]: unknown};
+
+export type CreateWritingFromQaMessageBodyIntent = typeof CreateWritingFromQaMessageBodyIntent[keyof typeof CreateWritingFromQaMessageBodyIntent];
+
+
+export const CreateWritingFromQaMessageBodyIntent = {
+  auto: 'auto',
+  create: 'create',
+  continue: 'continue',
+  rewrite: 'rewrite',
+  summarize: 'summarize',
+  translate: 'translate',
+  research: 'research',
+} as const;
+
+export type CreateWritingFromQaMessageBody = {
+  /**
+     * @minLength 1
+     * @maxLength 8000
+     */
+  instruction: string;
+  intent?: CreateWritingFromQaMessageBodyIntent;
+  /** @maxLength 160 */
+  targetDocumentId?: string | null;
   /**
      * @minLength 1
      * @maxLength 160
      */
-  requestId: string;
-  status: ResumeAiTask202Status;
-  kind: ResumeAiTask202Kind;
-  review: ResumeAiTask202Review;
-  result: AuthoringProposal | ChatResult | null;
-  errorCode: string | null;
-  application: ResumeAiTask202Application;
-  usage: ResumeAiTask202Usage;
-  createdAt: string;
-  expiresAt: string;
+  creationKey: string;
+};
+
+export type CreateWritingFromQaMessage201 = {
+  conversationId: string;
+  runId: string;
+  replayed: boolean;
 };
 
 export type GetWritingCapabilities200Engine = typeof GetWritingCapabilities200Engine[keyof typeof GetWritingCapabilities200Engine];
 
 
 export const GetWritingCapabilities200Engine = {
-  'dsh-v1': 'dsh-v1',
+  'dsh-native-v1': 'dsh-native-v1',
 } as const;
 
 export type GetWritingCapabilities200Image = {
@@ -6928,23 +4835,801 @@ export type GetWritingCapabilities200Image = {
   reason: string;
 };
 
+export type GetWritingCapabilities200WebSearchLimits = {
+  searchCallsPerRun: number;
+  resultsPerSearch: number;
+  readPagesPerRun: number;
+};
+
 export type GetWritingCapabilities200 = {
   enabled: boolean;
   engine: GetWritingCapabilities200Engine;
+  reason?: string;
   image: GetWritingCapabilities200Image;
+  webSearchAvailable: boolean;
+  webSearchLimits?: GetWritingCapabilities200WebSearchLimits;
+  configurationId: string;
+};
+
+export type ListWritingConversationsParams = {
+not?: unknown;
+/**
+ * @maxLength 160
+ */
+targetDocumentId?: string;
+};
+
+export type ListWritingConversations200ItemPurpose = typeof ListWritingConversations200ItemPurpose[keyof typeof ListWritingConversations200ItemPurpose];
+
+
+export const ListWritingConversations200ItemPurpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type ListWritingConversations200ItemScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type ListWritingConversations200ItemStatus = typeof ListWritingConversations200ItemStatus[keyof typeof ListWritingConversations200ItemStatus];
+
+
+export const ListWritingConversations200ItemStatus = {
+  active: 'active',
+  'target-unavailable': 'target-unavailable',
+  closed: 'closed',
+} as const;
+
+export type ListWritingConversations200Item = {
+  id: string;
+  purpose: ListWritingConversations200ItemPurpose;
+  title: string;
+  scope: ListWritingConversations200ItemScope;
+  contextRevision: number;
+  status: ListWritingConversations200ItemStatus;
+  targetDocumentId?: string | null;
+  siteId?: string;
+  eventSequence: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateWritingConversationBodyScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
 };
 
 export type CreateWritingConversationBody = {
+  /** @maxLength 160 */
+  targetDocumentId?: string | null;
+  scope?: CreateWritingConversationBodyScope;
   /**
-     * @maxItems 4
-     * @items.pattern ^doc_[A-Za-z0-9_-]{1,64}$
+     * @minLength 1
+     * @maxLength 160
      */
-  sourceDocumentIds?: string[];
+  creationKey?: string;
+};
+
+export type CreateWritingConversation201Purpose = typeof CreateWritingConversation201Purpose[keyof typeof CreateWritingConversation201Purpose];
+
+
+export const CreateWritingConversation201Purpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type CreateWritingConversation201Scope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type CreateWritingConversation201Status = typeof CreateWritingConversation201Status[keyof typeof CreateWritingConversation201Status];
+
+
+export const CreateWritingConversation201Status = {
+  active: 'active',
+  'target-unavailable': 'target-unavailable',
+  closed: 'closed',
+} as const;
+
+export type CreateWritingConversation201 = {
+  id: string;
+  purpose: CreateWritingConversation201Purpose;
+  title: string;
+  scope: CreateWritingConversation201Scope;
+  contextRevision: number;
+  status: CreateWritingConversation201Status;
+  targetDocumentId?: string | null;
+  siteId?: string;
+  eventSequence: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GetWritingConversationParams = {
+not?: unknown;
+/**
+ * @maxLength 160
+ */
+before?: string;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
+};
+
+export type GetWritingConversation200ConversationPurpose = typeof GetWritingConversation200ConversationPurpose[keyof typeof GetWritingConversation200ConversationPurpose];
+
+
+export const GetWritingConversation200ConversationPurpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type GetWritingConversation200ConversationScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type GetWritingConversation200ConversationStatus = typeof GetWritingConversation200ConversationStatus[keyof typeof GetWritingConversation200ConversationStatus];
+
+
+export const GetWritingConversation200ConversationStatus = {
+  active: 'active',
+  'target-unavailable': 'target-unavailable',
+  closed: 'closed',
+} as const;
+
+export type GetWritingConversation200Conversation = {
+  id: string;
+  purpose: GetWritingConversation200ConversationPurpose;
+  title: string;
+  scope: GetWritingConversation200ConversationScope;
+  contextRevision: number;
+  status: GetWritingConversation200ConversationStatus;
+  targetDocumentId?: string | null;
+  siteId?: string;
+  eventSequence: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GetWritingConversation200MessagesItemRole = typeof GetWritingConversation200MessagesItemRole[keyof typeof GetWritingConversation200MessagesItemRole];
+
+
+export const GetWritingConversation200MessagesItemRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export type GetWritingConversation200MessagesItemPartsItem = {
+  kind: 'text';
+  text: string;
+} | {
+  kind: 'citation';
+  citation: {
+  citationId: string;
+  evidenceArtifactId: string;
+  evidenceId: string;
+  locator: {
+  kind: 'block';
+  blockId: string;
+  start: number;
+  end: number;
+} | {
+  kind: 'page';
+  page: number;
+  segmentId: string;
+} | {
+  kind: 'section';
+  sectionId: string;
+  start: number;
+  end: number;
+};
+  quote: string;
+};
+} | {
+  kind: 'artifact';
+  artifactId: string;
+  artifactKind: 'evidence' | 'draft' | 'proposal' | 'image';
+  summary?: string;
+};
+
+export type GetWritingConversation200MessagesItem = {
+  id: string;
+  conversationId: string;
+  runId: string;
+  role: GetWritingConversation200MessagesItemRole;
+  parts: GetWritingConversation200MessagesItemPartsItem[];
+  clientMessageId?: string;
+  createdAt: string;
+  committedAt?: string;
+};
+
+export type GetWritingConversation200RunsItemPurpose = typeof GetWritingConversation200RunsItemPurpose[keyof typeof GetWritingConversation200RunsItemPurpose];
+
+
+export const GetWritingConversation200RunsItemPurpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type GetWritingConversation200RunsItemStatus = typeof GetWritingConversation200RunsItemStatus[keyof typeof GetWritingConversation200RunsItemStatus];
+
+
+export const GetWritingConversation200RunsItemStatus = {
+  queued: 'queued',
+  running: 'running',
+  'waiting-approval': 'waiting-approval',
+  completed: 'completed',
+  interrupted: 'interrupted',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type GetWritingConversation200RunsItemUsage = {
+  modelCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  searchCalls: number;
+  sourceReads: number;
+  webSearchCalls: number;
+  webReadCalls: number;
+  providerCredits?: number;
+  unknownCalls: number;
+};
+
+export type GetWritingConversation200RunsItemApprovalStatus = typeof GetWritingConversation200RunsItemApprovalStatus[keyof typeof GetWritingConversation200RunsItemApprovalStatus];
+
+
+export const GetWritingConversation200RunsItemApprovalStatus = {
+  pending: 'pending',
+  allowed: 'allowed',
+  rejected: 'rejected',
+  cancelled: 'cancelled',
+  expired: 'expired',
+  unavailable: 'unavailable',
+} as const;
+
+export type GetWritingConversation200RunsItemApprovalDecision = typeof GetWritingConversation200RunsItemApprovalDecision[keyof typeof GetWritingConversation200RunsItemApprovalDecision];
+
+
+export const GetWritingConversation200RunsItemApprovalDecision = {
+  'allow-once': 'allow-once',
+  reject: 'reject',
+} as const;
+
+export type GetWritingConversation200RunsItemApproval = {
+  id: string;
+  attempt: number;
+  action: string;
+  description?: string;
+  status: GetWritingConversation200RunsItemApprovalStatus;
+  decisionId?: string;
+  decision?: GetWritingConversation200RunsItemApprovalDecision;
+  requestedAt: string;
+  expiresAt: string;
+};
+
+export type GetWritingConversation200RunsItem = {
+  id: string;
+  conversationId: string;
+  purpose: GetWritingConversation200RunsItemPurpose;
+  status: GetWritingConversation200RunsItemStatus;
+  attempt: number;
+  contextRevision: number;
+  inputHash: string;
+  errorCode?: string;
+  usage?: GetWritingConversation200RunsItemUsage;
+  cancelRequested?: boolean;
+  approval?: GetWritingConversation200RunsItemApproval;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GetWritingConversation200ArtifactsItemPurpose = typeof GetWritingConversation200ArtifactsItemPurpose[keyof typeof GetWritingConversation200ArtifactsItemPurpose];
+
+
+export const GetWritingConversation200ArtifactsItemPurpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type GetWritingConversation200ArtifactsItemKind = typeof GetWritingConversation200ArtifactsItemKind[keyof typeof GetWritingConversation200ArtifactsItemKind];
+
+
+export const GetWritingConversation200ArtifactsItemKind = {
+  evidence: 'evidence',
+  draft: 'draft',
+  proposal: 'proposal',
+  image: 'image',
+} as const;
+
+export type GetWritingConversation200ArtifactsItemReviewDecisionsItemAction = typeof GetWritingConversation200ArtifactsItemReviewDecisionsItemAction[keyof typeof GetWritingConversation200ArtifactsItemReviewDecisionsItemAction];
+
+
+export const GetWritingConversation200ArtifactsItemReviewDecisionsItemAction = {
+  accept: 'accept',
+  reject: 'reject',
+} as const;
+
+export type GetWritingConversation200ArtifactsItemReviewDecisionsItem = {
+  blockId: string;
+  action: GetWritingConversation200ArtifactsItemReviewDecisionsItemAction;
+};
+
+export type GetWritingConversation200ArtifactsItemReviewReceipts = {[key: string]: string};
+
+export type GetWritingConversation200ArtifactsItemReview = {
+  revision: number;
+  decisions: GetWritingConversation200ArtifactsItemReviewDecisionsItem[];
+  payloadHash?: string;
+  receipts?: GetWritingConversation200ArtifactsItemReviewReceipts;
+};
+
+export type GetWritingConversation200ArtifactsItemApplicationState = typeof GetWritingConversation200ArtifactsItemApplicationState[keyof typeof GetWritingConversation200ArtifactsItemApplicationState];
+
+
+export const GetWritingConversation200ArtifactsItemApplicationState = {
+  pending: 'pending',
+  partial: 'partial',
+  applied: 'applied',
+  rejected: 'rejected',
+  conflict: 'conflict',
+  unknown: 'unknown',
+} as const;
+
+export type GetWritingConversation200ArtifactsItemReceipt = {
+  operationId: string;
+  generationId: string;
+  durableSeq: number;
+  structureRevision: number;
+};
+
+export type GetWritingConversation200ArtifactsItem = {
+  id: string;
+  conversationId: string;
+  runId: string;
+  purpose: GetWritingConversation200ArtifactsItemPurpose;
+  kind: GetWritingConversation200ArtifactsItemKind;
+  schemaVersion: number;
+  summary?: string;
+  evidenceRefs?: string[];
+  reviewRevision?: number;
+  review?: GetWritingConversation200ArtifactsItemReview;
+  applicationState?: GetWritingConversation200ArtifactsItemApplicationState;
+  receipt?: GetWritingConversation200ArtifactsItemReceipt;
+};
+
+export type GetWritingConversation200 = {
+  conversation: GetWritingConversation200Conversation;
+  messages: GetWritingConversation200MessagesItem[];
+  runs: GetWritingConversation200RunsItem[];
+  artifacts: GetWritingConversation200ArtifactsItem[];
+  cursor: string;
+  hasMoreMessages?: boolean;
+};
+
+export type SubmitWritingMessageBodyIntent = typeof SubmitWritingMessageBodyIntent[keyof typeof SubmitWritingMessageBodyIntent];
+
+
+export const SubmitWritingMessageBodyIntent = {
+  auto: 'auto',
+  create: 'create',
+  continue: 'continue',
+  rewrite: 'rewrite',
+  'rewrite-document': 'rewrite-document',
+  summarize: 'summarize',
+  translate: 'translate',
+  research: 'research',
+} as const;
+
+export type SubmitWritingMessageBodyEditorContextTarget = {
+  kind: 'document';
+} | {
+  kind: 'selection';
+  /**
+     * @minItems 1
+     * @maxItems 256
+     */
+  blockIds: string[];
+} | {
+  kind: 'blocks';
+  /**
+     * @minItems 1
+     * @maxItems 256
+     */
+  blockIds: string[];
+} | {
+  kind: 'document-end';
+  /** @maxLength 160 */
+  afterBlockId: string | null;
+};
+
+export type SubmitWritingMessageBodyEditorContext = {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  documentId: string;
+  target: SubmitWritingMessageBodyEditorContextTarget;
+};
+
+export type SubmitWritingMessageBody = {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  clientMessageId: string;
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  idempotencyKey: string;
+  /**
+     * @minLength 1
+     * @maxLength 32000
+     */
+  text: string;
+  /** @minimum 1 */
+  expectedContextRevision: number;
+  intent?: SubmitWritingMessageBodyIntent;
+  editorContext?: SubmitWritingMessageBodyEditorContext;
+  webSearch?: boolean;
+  /** @maxItems 8 */
+  referenceArtifactIds?: string[];
 };
 
 export type SubmitWritingMessage202 = {
   runId: string;
-  snapshot: WritingChatSnapshot;
+  conversationId: string;
+  contextRevision: number;
+};
+
+export type UpdateWritingScopeBodyScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type UpdateWritingScopeBody = {
+  scope: UpdateWritingScopeBodyScope;
+  /** @minimum 1 */
+  expectedContextRevision: number;
+};
+
+export type UpdateWritingScope200Scope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type UpdateWritingScope200 = {
+  contextRevision: number;
+  scope: UpdateWritingScope200Scope;
+  cancelledRunIds: string[];
+};
+
+export type ObserveWritingConversationParams = {
+/**
+ * @pattern ^(0|[1-9][0-9]*)$
+ */
+cursor: string;
+};
+
+export type CancelWritingRun200Purpose = typeof CancelWritingRun200Purpose[keyof typeof CancelWritingRun200Purpose];
+
+
+export const CancelWritingRun200Purpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type CancelWritingRun200Status = typeof CancelWritingRun200Status[keyof typeof CancelWritingRun200Status];
+
+
+export const CancelWritingRun200Status = {
+  queued: 'queued',
+  running: 'running',
+  'waiting-approval': 'waiting-approval',
+  completed: 'completed',
+  interrupted: 'interrupted',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type CancelWritingRun200Usage = {
+  modelCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  searchCalls: number;
+  sourceReads: number;
+  webSearchCalls: number;
+  webReadCalls: number;
+  providerCredits?: number;
+  unknownCalls: number;
+};
+
+export type CancelWritingRun200ApprovalStatus = typeof CancelWritingRun200ApprovalStatus[keyof typeof CancelWritingRun200ApprovalStatus];
+
+
+export const CancelWritingRun200ApprovalStatus = {
+  pending: 'pending',
+  allowed: 'allowed',
+  rejected: 'rejected',
+  cancelled: 'cancelled',
+  expired: 'expired',
+  unavailable: 'unavailable',
+} as const;
+
+export type CancelWritingRun200ApprovalDecision = typeof CancelWritingRun200ApprovalDecision[keyof typeof CancelWritingRun200ApprovalDecision];
+
+
+export const CancelWritingRun200ApprovalDecision = {
+  'allow-once': 'allow-once',
+  reject: 'reject',
+} as const;
+
+export type CancelWritingRun200Approval = {
+  id: string;
+  attempt: number;
+  action: string;
+  description?: string;
+  status: CancelWritingRun200ApprovalStatus;
+  decisionId?: string;
+  decision?: CancelWritingRun200ApprovalDecision;
+  requestedAt: string;
+  expiresAt: string;
+};
+
+export type CancelWritingRun200 = {
+  id: string;
+  conversationId: string;
+  purpose: CancelWritingRun200Purpose;
+  status: CancelWritingRun200Status;
+  attempt: number;
+  contextRevision: number;
+  inputHash: string;
+  errorCode?: string;
+  usage?: CancelWritingRun200Usage;
+  cancelRequested?: boolean;
+  approval?: CancelWritingRun200Approval;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RetryWritingRun202Kind = typeof RetryWritingRun202Kind[keyof typeof RetryWritingRun202Kind];
+
+
+export const RetryWritingRun202Kind = {
+  'already-terminal': 'already-terminal',
+  queued: 'queued',
+  'redeliver-staged': 'redeliver-staged',
+} as const;
+
+export type RetryWritingRun202RunPurpose = typeof RetryWritingRun202RunPurpose[keyof typeof RetryWritingRun202RunPurpose];
+
+
+export const RetryWritingRun202RunPurpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type RetryWritingRun202RunStatus = typeof RetryWritingRun202RunStatus[keyof typeof RetryWritingRun202RunStatus];
+
+
+export const RetryWritingRun202RunStatus = {
+  queued: 'queued',
+  running: 'running',
+  'waiting-approval': 'waiting-approval',
+  completed: 'completed',
+  interrupted: 'interrupted',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type RetryWritingRun202RunUsage = {
+  modelCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  searchCalls: number;
+  sourceReads: number;
+  webSearchCalls: number;
+  webReadCalls: number;
+  providerCredits?: number;
+  unknownCalls: number;
+};
+
+export type RetryWritingRun202RunApprovalStatus = typeof RetryWritingRun202RunApprovalStatus[keyof typeof RetryWritingRun202RunApprovalStatus];
+
+
+export const RetryWritingRun202RunApprovalStatus = {
+  pending: 'pending',
+  allowed: 'allowed',
+  rejected: 'rejected',
+  cancelled: 'cancelled',
+  expired: 'expired',
+  unavailable: 'unavailable',
+} as const;
+
+export type RetryWritingRun202RunApprovalDecision = typeof RetryWritingRun202RunApprovalDecision[keyof typeof RetryWritingRun202RunApprovalDecision];
+
+
+export const RetryWritingRun202RunApprovalDecision = {
+  'allow-once': 'allow-once',
+  reject: 'reject',
+} as const;
+
+export type RetryWritingRun202RunApproval = {
+  id: string;
+  attempt: number;
+  action: string;
+  description?: string;
+  status: RetryWritingRun202RunApprovalStatus;
+  decisionId?: string;
+  decision?: RetryWritingRun202RunApprovalDecision;
+  requestedAt: string;
+  expiresAt: string;
+};
+
+export type RetryWritingRun202Run = {
+  id: string;
+  conversationId: string;
+  purpose: RetryWritingRun202RunPurpose;
+  status: RetryWritingRun202RunStatus;
+  attempt: number;
+  contextRevision: number;
+  inputHash: string;
+  errorCode?: string;
+  usage?: RetryWritingRun202RunUsage;
+  cancelRequested?: boolean;
+  approval?: RetryWritingRun202RunApproval;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RetryWritingRun202 = {
+  kind: RetryWritingRun202Kind;
+  run: RetryWritingRun202Run;
+};
+
+export type GetWritingArtifactParams = {
+/**
+ * @pattern ^ai_[a-f0-9]{32}$
+ */
+conversationId: string;
+};
+
+export type GetWritingArtifact200 = {[key: string]: unknown};
+
+export type ReviewWritingProposalBodyAction = typeof ReviewWritingProposalBodyAction[keyof typeof ReviewWritingProposalBodyAction];
+
+
+export const ReviewWritingProposalBodyAction = {
+  accept: 'accept',
+  reject: 'reject',
+} as const;
+
+export type ReviewWritingProposalBody = {
+  /**
+     * @minLength 8
+     * @maxLength 64
+     */
+  decisionId: string;
+  /**
+     * @minimum 0
+     * @maximum 256
+     */
+  revision: number;
+  action: ReviewWritingProposalBodyAction;
+  /**
+     * @maxItems 256
+     * @items.minLength 1
+     * @items.maxLength 160
+     */
+  blockIds?: string[];
+};
+
+export type ReviewWritingProposal200ApplicationState = typeof ReviewWritingProposal200ApplicationState[keyof typeof ReviewWritingProposal200ApplicationState];
+
+
+export const ReviewWritingProposal200ApplicationState = {
+  pending: 'pending',
+  partial: 'partial',
+  applied: 'applied',
+  rejected: 'rejected',
+  conflict: 'conflict',
+  unknown: 'unknown',
+} as const;
+
+export type ReviewWritingProposal200Receipt = {
+  operationId: string;
+  generationId: string;
+  durableSeq: number;
+  structureRevision: number;
+};
+
+export type ReviewWritingProposal200 = {
+  applicationState: ReviewWritingProposal200ApplicationState;
+  receipt?: ReviewWritingProposal200Receipt;
 };
 
 export type DecideWritingApprovalBodyDecision = typeof DecideWritingApprovalBodyDecision[keyof typeof DecideWritingApprovalBodyDecision];
@@ -6956,21 +5641,1276 @@ export const DecideWritingApprovalBodyDecision = {
 } as const;
 
 export type DecideWritingApprovalBody = {
-  approvalId: string;
+  /**
+     * @minLength 8
+     * @maxLength 64
+     */
   decisionId: string;
   decision: DecideWritingApprovalBodyDecision;
 };
+
+export type DecideWritingApproval200Status = typeof DecideWritingApproval200Status[keyof typeof DecideWritingApproval200Status];
+
+
+export const DecideWritingApproval200Status = {
+  pending: 'pending',
+  allowed: 'allowed',
+  rejected: 'rejected',
+  cancelled: 'cancelled',
+  expired: 'expired',
+  unavailable: 'unavailable',
+} as const;
+
+export type DecideWritingApproval200 = {
+  status: DecideWritingApproval200Status;
+};
+
+export type ListWritingImages200ItemJob = {
+  id: string;
+  status: 'pending' | 'unknown' | 'failed';
+  code?: string;
+} | {
+  id: string;
+  status: 'ready';
+  /** @maxItems 1 */
+  assets: ({
+  assetId: string;
+  mime: 'image/png' | 'image/jpeg' | 'image/webp';
+  width: number;
+  height: number;
+})[];
+};
+
+export type ListWritingImages200Item = {
+  key: string;
+  runId: string;
+  job: ListWritingImages200ItemJob;
+};
+
+export type RefreshWritingImage200Status = typeof RefreshWritingImage200Status[keyof typeof RefreshWritingImage200Status];
+
+
+export const RefreshWritingImage200Status = {
+  pending: 'pending',
+  unknown: 'unknown',
+  ready: 'ready',
+  failed: 'failed',
+} as const;
+
+export type RefreshWritingImage200 = {
+  status: RefreshWritingImage200Status;
+  assetId?: string;
+  [key: string]: unknown;
+ };
 
 export type GetWritingImageAccess200 = {
   url: string;
   expiresAt: string;
 };
 
-export type ObserveWritingConversationParams = {
+export type ListQaSites200ItemAccessMode = typeof ListQaSites200ItemAccessMode[keyof typeof ListQaSites200ItemAccessMode];
+
+
+export const ListQaSites200ItemAccessMode = {
+  public: 'public',
+  code: 'code',
+} as const;
+
+export type ListQaSites200ItemStatus = typeof ListQaSites200ItemStatus[keyof typeof ListQaSites200ItemStatus];
+
+
+export const ListQaSites200ItemStatus = {
+  draft: 'draft',
+  pending: 'pending',
+  active: 'active',
+  paused: 'paused',
+  disabled: 'disabled',
+} as const;
+
+export type ListQaSites200ItemQuotaPolicy = {[key: string]: number};
+
+export type ListQaSites200Item = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  welcome: string;
+  suggestedQuestions: string[];
+  accessMode: ListQaSites200ItemAccessMode;
+  status: ListQaSites200ItemStatus;
+  revision: number;
+  accessRevision: number;
+  quotaPolicy: ListQaSites200ItemQuotaPolicy;
+  ownerWorkspaceId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateQaSiteBodyAccessMode = typeof CreateQaSiteBodyAccessMode[keyof typeof CreateQaSiteBodyAccessMode];
+
+
+export const CreateQaSiteBodyAccessMode = {
+  public: 'public',
+  code: 'code',
+} as const;
+
+export type CreateQaSiteBody = {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  ownerWorkspaceId: string;
+  /**
+     * @minLength 2
+     * @maxLength 64
+     */
+  slug: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name: string;
+  /** @maxLength 2000 */
+  description?: string;
+  /** @maxLength 2000 */
+  welcome?: string;
+  /**
+     * @maxItems 6
+     * @items.maxLength 300
+     */
+  suggestedQuestions?: string[];
+  accessMode?: CreateQaSiteBodyAccessMode;
+  /**
+     * @minLength 4
+     * @maxLength 64
+     */
+  accessCode?: string;
+};
+
+export type CreateQaSite201AccessMode = typeof CreateQaSite201AccessMode[keyof typeof CreateQaSite201AccessMode];
+
+
+export const CreateQaSite201AccessMode = {
+  public: 'public',
+  code: 'code',
+} as const;
+
+export type CreateQaSite201Status = typeof CreateQaSite201Status[keyof typeof CreateQaSite201Status];
+
+
+export const CreateQaSite201Status = {
+  draft: 'draft',
+  pending: 'pending',
+  active: 'active',
+  paused: 'paused',
+  disabled: 'disabled',
+} as const;
+
+export type CreateQaSite201QuotaPolicy = {[key: string]: number};
+
+export type CreateQaSite201 = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  welcome: string;
+  suggestedQuestions: string[];
+  accessMode: CreateQaSite201AccessMode;
+  status: CreateQaSite201Status;
+  revision: number;
+  accessRevision: number;
+  quotaPolicy: CreateQaSite201QuotaPolicy;
+  ownerWorkspaceId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GetQaSite200SiteAccessMode = typeof GetQaSite200SiteAccessMode[keyof typeof GetQaSite200SiteAccessMode];
+
+
+export const GetQaSite200SiteAccessMode = {
+  public: 'public',
+  code: 'code',
+} as const;
+
+export type GetQaSite200SiteStatus = typeof GetQaSite200SiteStatus[keyof typeof GetQaSite200SiteStatus];
+
+
+export const GetQaSite200SiteStatus = {
+  draft: 'draft',
+  pending: 'pending',
+  active: 'active',
+  paused: 'paused',
+  disabled: 'disabled',
+} as const;
+
+export type GetQaSite200SiteQuotaPolicy = {[key: string]: number};
+
+export type GetQaSite200Site = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  welcome: string;
+  suggestedQuestions: string[];
+  accessMode: GetQaSite200SiteAccessMode;
+  status: GetQaSite200SiteStatus;
+  revision: number;
+  accessRevision: number;
+  quotaPolicy: GetQaSite200SiteQuotaPolicy;
+  ownerWorkspaceId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GetQaSite200SourcesItem = {
+  id: string;
+  workspaceId: string;
+  publicLabel: string;
+  grantedBy: string;
+};
+
+export type GetQaSite200DocumentsItemState = typeof GetQaSite200DocumentsItemState[keyof typeof GetQaSite200DocumentsItemState];
+
+
+export const GetQaSite200DocumentsItemState = {
+  active: 'active',
+  suspended: 'suspended',
+} as const;
+
+export type GetQaSite200DocumentsItem = {
+  id: string;
+  sourceId: string;
+  workspaceId: string;
+  documentId: string;
+  state: GetQaSite200DocumentsItemState;
+  suspensionReason: string | null;
+};
+
+export type GetQaSite200 = {
+  site: GetQaSite200Site;
+  sources: GetQaSite200SourcesItem[];
+  documents: GetQaSite200DocumentsItem[];
+};
+
+export type UpdateQaSiteBodyAccessMode = typeof UpdateQaSiteBodyAccessMode[keyof typeof UpdateQaSiteBodyAccessMode];
+
+
+export const UpdateQaSiteBodyAccessMode = {
+  public: 'public',
+  code: 'code',
+} as const;
+
+export type UpdateQaSiteBodyQuotaPolicy = {
+  /**
+     * @minimum 1
+     * @maximum 10000
+     */
+  messagesPerHour?: number;
+  /**
+     * @minimum 1
+     * @maximum 32
+     */
+  concurrentRuns?: number;
+};
+
+export type UpdateQaSiteBody = {
+  /** @minimum 1 */
+  expectedRevision: number;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name?: string;
+  /** @maxLength 2000 */
+  description?: string;
+  /** @maxLength 2000 */
+  welcome?: string;
+  /**
+     * @maxItems 6
+     * @items.maxLength 300
+     */
+  suggestedQuestions?: string[];
+  accessMode?: UpdateQaSiteBodyAccessMode;
+  /**
+     * @minLength 4
+     * @maxLength 64
+     */
+  accessCode?: string;
+  quotaPolicy?: UpdateQaSiteBodyQuotaPolicy;
+};
+
+export type UpdateQaSite200AccessMode = typeof UpdateQaSite200AccessMode[keyof typeof UpdateQaSite200AccessMode];
+
+
+export const UpdateQaSite200AccessMode = {
+  public: 'public',
+  code: 'code',
+} as const;
+
+export type UpdateQaSite200Status = typeof UpdateQaSite200Status[keyof typeof UpdateQaSite200Status];
+
+
+export const UpdateQaSite200Status = {
+  draft: 'draft',
+  pending: 'pending',
+  active: 'active',
+  paused: 'paused',
+  disabled: 'disabled',
+} as const;
+
+export type UpdateQaSite200QuotaPolicy = {[key: string]: number};
+
+export type UpdateQaSite200 = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  welcome: string;
+  suggestedQuestions: string[];
+  accessMode: UpdateQaSite200AccessMode;
+  status: UpdateQaSite200Status;
+  revision: number;
+  accessRevision: number;
+  quotaPolicy: UpdateQaSite200QuotaPolicy;
+  ownerWorkspaceId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SetQaSiteSourcesBodySourcesItem = {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  workspaceId: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  publicLabel: string;
+};
+
+export type SetQaSiteSourcesBody = {
+  /** @minimum 1 */
+  expectedRevision: number;
+  /** @maxItems 8 */
+  sources: SetQaSiteSourcesBodySourcesItem[];
+};
+
+export type SetQaSiteSources200AccessMode = typeof SetQaSiteSources200AccessMode[keyof typeof SetQaSiteSources200AccessMode];
+
+
+export const SetQaSiteSources200AccessMode = {
+  public: 'public',
+  code: 'code',
+} as const;
+
+export type SetQaSiteSources200Status = typeof SetQaSiteSources200Status[keyof typeof SetQaSiteSources200Status];
+
+
+export const SetQaSiteSources200Status = {
+  draft: 'draft',
+  pending: 'pending',
+  active: 'active',
+  paused: 'paused',
+  disabled: 'disabled',
+} as const;
+
+export type SetQaSiteSources200QuotaPolicy = {[key: string]: number};
+
+export type SetQaSiteSources200 = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  welcome: string;
+  suggestedQuestions: string[];
+  accessMode: SetQaSiteSources200AccessMode;
+  status: SetQaSiteSources200Status;
+  revision: number;
+  accessRevision: number;
+  quotaPolicy: SetQaSiteSources200QuotaPolicy;
+  ownerWorkspaceId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SetQaSiteSourceDocumentsBodyItemsItemAction = typeof SetQaSiteSourceDocumentsBodyItemsItemAction[keyof typeof SetQaSiteSourceDocumentsBodyItemsItemAction];
+
+
+export const SetQaSiteSourceDocumentsBodyItemsItemAction = {
+  approve: 'approve',
+  suspend: 'suspend',
+  withdraw: 'withdraw',
+} as const;
+
+export type SetQaSiteSourceDocumentsBodyItemsItem = {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  documentId: string;
+  action: SetQaSiteSourceDocumentsBodyItemsItemAction;
+  /** @maxLength 300 */
+  reason?: string;
+};
+
+export type SetQaSiteSourceDocumentsBody = {
+  /** @maxItems 200 */
+  items: SetQaSiteSourceDocumentsBodyItemsItem[];
+};
+
+export type SetQaSiteSourceDocuments200 = typeof SetQaSiteSourceDocuments200[keyof typeof SetQaSiteSourceDocuments200] | null;
+
+
+export const SetQaSiteSourceDocuments200 = {
+  null: 'null',
+} as const;
+
+export type ActivateQaSiteBody = {
+  /** @minimum 1 */
+  expectedRevision: number;
+};
+
+export type ActivateQaSite200AccessMode = typeof ActivateQaSite200AccessMode[keyof typeof ActivateQaSite200AccessMode];
+
+
+export const ActivateQaSite200AccessMode = {
+  public: 'public',
+  code: 'code',
+} as const;
+
+export type ActivateQaSite200Status = typeof ActivateQaSite200Status[keyof typeof ActivateQaSite200Status];
+
+
+export const ActivateQaSite200Status = {
+  draft: 'draft',
+  pending: 'pending',
+  active: 'active',
+  paused: 'paused',
+  disabled: 'disabled',
+} as const;
+
+export type ActivateQaSite200QuotaPolicy = {[key: string]: number};
+
+export type ActivateQaSite200 = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  welcome: string;
+  suggestedQuestions: string[];
+  accessMode: ActivateQaSite200AccessMode;
+  status: ActivateQaSite200Status;
+  revision: number;
+  accessRevision: number;
+  quotaPolicy: ActivateQaSite200QuotaPolicy;
+  ownerWorkspaceId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PauseQaSiteBody = {
+  /** @minimum 1 */
+  expectedRevision: number;
+};
+
+export type PauseQaSite200AccessMode = typeof PauseQaSite200AccessMode[keyof typeof PauseQaSite200AccessMode];
+
+
+export const PauseQaSite200AccessMode = {
+  public: 'public',
+  code: 'code',
+} as const;
+
+export type PauseQaSite200Status = typeof PauseQaSite200Status[keyof typeof PauseQaSite200Status];
+
+
+export const PauseQaSite200Status = {
+  draft: 'draft',
+  pending: 'pending',
+  active: 'active',
+  paused: 'paused',
+  disabled: 'disabled',
+} as const;
+
+export type PauseQaSite200QuotaPolicy = {[key: string]: number};
+
+export type PauseQaSite200 = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  welcome: string;
+  suggestedQuestions: string[];
+  accessMode: PauseQaSite200AccessMode;
+  status: PauseQaSite200Status;
+  revision: number;
+  accessRevision: number;
+  quotaPolicy: PauseQaSite200QuotaPolicy;
+  ownerWorkspaceId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RevokeQaSiteBody = {
+  /** @minimum 1 */
+  expectedRevision: number;
+};
+
+export type RevokeQaSite200AccessMode = typeof RevokeQaSite200AccessMode[keyof typeof RevokeQaSite200AccessMode];
+
+
+export const RevokeQaSite200AccessMode = {
+  public: 'public',
+  code: 'code',
+} as const;
+
+export type RevokeQaSite200Status = typeof RevokeQaSite200Status[keyof typeof RevokeQaSite200Status];
+
+
+export const RevokeQaSite200Status = {
+  draft: 'draft',
+  pending: 'pending',
+  active: 'active',
+  paused: 'paused',
+  disabled: 'disabled',
+} as const;
+
+export type RevokeQaSite200QuotaPolicy = {[key: string]: number};
+
+export type RevokeQaSite200 = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  welcome: string;
+  suggestedQuestions: string[];
+  accessMode: RevokeQaSite200AccessMode;
+  status: RevokeQaSite200Status;
+  revision: number;
+  accessRevision: number;
+  quotaPolicy: RevokeQaSite200QuotaPolicy;
+  ownerWorkspaceId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PreviewQaSiteBodyMessageScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type PreviewQaSiteBodyMessageDetail = typeof PreviewQaSiteBodyMessageDetail[keyof typeof PreviewQaSiteBodyMessageDetail];
+
+
+export const PreviewQaSiteBodyMessageDetail = {
+  brief: 'brief',
+  detailed: 'detailed',
+} as const;
+
+export type PreviewQaSiteBodyMessage = {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  clientMessageId: string;
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  idempotencyKey: string;
+  /**
+     * @minLength 1
+     * @maxLength 32000
+     */
+  text: string;
+  /** @minimum 1 */
+  expectedContextRevision: number;
+  scope?: PreviewQaSiteBodyMessageScope;
+  detail?: PreviewQaSiteBodyMessageDetail;
+};
+
+export type PreviewQaSiteBodyScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type PreviewQaSiteBody = {
+  message?: PreviewQaSiteBodyMessage;
+  scope?: PreviewQaSiteBodyScope;
+};
+
+export type PreviewQaSite201 = {
+  conversationId?: string;
+  runId?: string;
+  approvedDocuments: number;
+};
+
+export type GetPublicQaSiteBySlug200AccessMode = typeof GetPublicQaSiteBySlug200AccessMode[keyof typeof GetPublicQaSiteBySlug200AccessMode];
+
+
+export const GetPublicQaSiteBySlug200AccessMode = {
+  public: 'public',
+  code: 'code',
+} as const;
+
+export type GetPublicQaSiteBySlug200 = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  welcome: string;
+  suggestedQuestions: string[];
+  accessMode: GetPublicQaSiteBySlug200AccessMode;
+  revision: number;
+};
+
+export type StartPublicQaVisitorSessionBody = {
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  accessCode?: string;
+};
+
+export type StartPublicQaVisitorSession201 = {
+  visitorId: string;
+  expiresAt: string;
+};
+
+export type ListPublicQaConversations200ItemPurpose = typeof ListPublicQaConversations200ItemPurpose[keyof typeof ListPublicQaConversations200ItemPurpose];
+
+
+export const ListPublicQaConversations200ItemPurpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type ListPublicQaConversations200ItemScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type ListPublicQaConversations200ItemStatus = typeof ListPublicQaConversations200ItemStatus[keyof typeof ListPublicQaConversations200ItemStatus];
+
+
+export const ListPublicQaConversations200ItemStatus = {
+  active: 'active',
+  'target-unavailable': 'target-unavailable',
+  closed: 'closed',
+} as const;
+
+export type ListPublicQaConversations200Item = {
+  id: string;
+  purpose: ListPublicQaConversations200ItemPurpose;
+  title: string;
+  scope: ListPublicQaConversations200ItemScope;
+  contextRevision: number;
+  status: ListPublicQaConversations200ItemStatus;
+  targetDocumentId?: string | null;
+  siteId?: string;
+  eventSequence: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreatePublicQaConversationBodyScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type CreatePublicQaConversationBody = {
+  scope?: CreatePublicQaConversationBodyScope;
+};
+
+export type CreatePublicQaConversation201Purpose = typeof CreatePublicQaConversation201Purpose[keyof typeof CreatePublicQaConversation201Purpose];
+
+
+export const CreatePublicQaConversation201Purpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type CreatePublicQaConversation201Scope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type CreatePublicQaConversation201Status = typeof CreatePublicQaConversation201Status[keyof typeof CreatePublicQaConversation201Status];
+
+
+export const CreatePublicQaConversation201Status = {
+  active: 'active',
+  'target-unavailable': 'target-unavailable',
+  closed: 'closed',
+} as const;
+
+export type CreatePublicQaConversation201 = {
+  id: string;
+  purpose: CreatePublicQaConversation201Purpose;
+  title: string;
+  scope: CreatePublicQaConversation201Scope;
+  contextRevision: number;
+  status: CreatePublicQaConversation201Status;
+  targetDocumentId?: string | null;
+  siteId?: string;
+  eventSequence: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GetPublicQaConversation200ConversationPurpose = typeof GetPublicQaConversation200ConversationPurpose[keyof typeof GetPublicQaConversation200ConversationPurpose];
+
+
+export const GetPublicQaConversation200ConversationPurpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type GetPublicQaConversation200ConversationScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type GetPublicQaConversation200ConversationStatus = typeof GetPublicQaConversation200ConversationStatus[keyof typeof GetPublicQaConversation200ConversationStatus];
+
+
+export const GetPublicQaConversation200ConversationStatus = {
+  active: 'active',
+  'target-unavailable': 'target-unavailable',
+  closed: 'closed',
+} as const;
+
+export type GetPublicQaConversation200Conversation = {
+  id: string;
+  purpose: GetPublicQaConversation200ConversationPurpose;
+  title: string;
+  scope: GetPublicQaConversation200ConversationScope;
+  contextRevision: number;
+  status: GetPublicQaConversation200ConversationStatus;
+  targetDocumentId?: string | null;
+  siteId?: string;
+  eventSequence: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GetPublicQaConversation200MessagesItemRole = typeof GetPublicQaConversation200MessagesItemRole[keyof typeof GetPublicQaConversation200MessagesItemRole];
+
+
+export const GetPublicQaConversation200MessagesItemRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export type GetPublicQaConversation200MessagesItemPartsItem = {
+  kind: 'text';
+  text: string;
+} | {
+  kind: 'citation';
+  citation: {
+  citationId: string;
+  evidenceArtifactId: string;
+  evidenceId: string;
+  locator: {
+  kind: 'block';
+  blockId: string;
+  start: number;
+  end: number;
+} | {
+  kind: 'page';
+  page: number;
+  segmentId: string;
+} | {
+  kind: 'section';
+  sectionId: string;
+  start: number;
+  end: number;
+};
+  quote: string;
+};
+} | {
+  kind: 'artifact';
+  artifactId: string;
+  artifactKind: 'evidence' | 'draft' | 'proposal' | 'image';
+  summary?: string;
+};
+
+export type GetPublicQaConversation200MessagesItem = {
+  id: string;
+  conversationId: string;
+  runId: string;
+  role: GetPublicQaConversation200MessagesItemRole;
+  parts: GetPublicQaConversation200MessagesItemPartsItem[];
+  clientMessageId?: string;
+  createdAt: string;
+  committedAt?: string;
+};
+
+export type GetPublicQaConversation200RunsItemPurpose = typeof GetPublicQaConversation200RunsItemPurpose[keyof typeof GetPublicQaConversation200RunsItemPurpose];
+
+
+export const GetPublicQaConversation200RunsItemPurpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type GetPublicQaConversation200RunsItemStatus = typeof GetPublicQaConversation200RunsItemStatus[keyof typeof GetPublicQaConversation200RunsItemStatus];
+
+
+export const GetPublicQaConversation200RunsItemStatus = {
+  queued: 'queued',
+  running: 'running',
+  'waiting-approval': 'waiting-approval',
+  completed: 'completed',
+  interrupted: 'interrupted',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type GetPublicQaConversation200RunsItemUsage = {
+  modelCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  searchCalls: number;
+  sourceReads: number;
+  webSearchCalls: number;
+  webReadCalls: number;
+  providerCredits?: number;
+  unknownCalls: number;
+};
+
+export type GetPublicQaConversation200RunsItemApprovalStatus = typeof GetPublicQaConversation200RunsItemApprovalStatus[keyof typeof GetPublicQaConversation200RunsItemApprovalStatus];
+
+
+export const GetPublicQaConversation200RunsItemApprovalStatus = {
+  pending: 'pending',
+  allowed: 'allowed',
+  rejected: 'rejected',
+  cancelled: 'cancelled',
+  expired: 'expired',
+  unavailable: 'unavailable',
+} as const;
+
+export type GetPublicQaConversation200RunsItemApprovalDecision = typeof GetPublicQaConversation200RunsItemApprovalDecision[keyof typeof GetPublicQaConversation200RunsItemApprovalDecision];
+
+
+export const GetPublicQaConversation200RunsItemApprovalDecision = {
+  'allow-once': 'allow-once',
+  reject: 'reject',
+} as const;
+
+export type GetPublicQaConversation200RunsItemApproval = {
+  id: string;
+  attempt: number;
+  action: string;
+  description?: string;
+  status: GetPublicQaConversation200RunsItemApprovalStatus;
+  decisionId?: string;
+  decision?: GetPublicQaConversation200RunsItemApprovalDecision;
+  requestedAt: string;
+  expiresAt: string;
+};
+
+export type GetPublicQaConversation200RunsItem = {
+  id: string;
+  conversationId: string;
+  purpose: GetPublicQaConversation200RunsItemPurpose;
+  status: GetPublicQaConversation200RunsItemStatus;
+  attempt: number;
+  contextRevision: number;
+  inputHash: string;
+  errorCode?: string;
+  usage?: GetPublicQaConversation200RunsItemUsage;
+  cancelRequested?: boolean;
+  approval?: GetPublicQaConversation200RunsItemApproval;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GetPublicQaConversation200ArtifactsItemPurpose = typeof GetPublicQaConversation200ArtifactsItemPurpose[keyof typeof GetPublicQaConversation200ArtifactsItemPurpose];
+
+
+export const GetPublicQaConversation200ArtifactsItemPurpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type GetPublicQaConversation200ArtifactsItemKind = typeof GetPublicQaConversation200ArtifactsItemKind[keyof typeof GetPublicQaConversation200ArtifactsItemKind];
+
+
+export const GetPublicQaConversation200ArtifactsItemKind = {
+  evidence: 'evidence',
+  draft: 'draft',
+  proposal: 'proposal',
+  image: 'image',
+} as const;
+
+export type GetPublicQaConversation200ArtifactsItemReviewDecisionsItemAction = typeof GetPublicQaConversation200ArtifactsItemReviewDecisionsItemAction[keyof typeof GetPublicQaConversation200ArtifactsItemReviewDecisionsItemAction];
+
+
+export const GetPublicQaConversation200ArtifactsItemReviewDecisionsItemAction = {
+  accept: 'accept',
+  reject: 'reject',
+} as const;
+
+export type GetPublicQaConversation200ArtifactsItemReviewDecisionsItem = {
+  blockId: string;
+  action: GetPublicQaConversation200ArtifactsItemReviewDecisionsItemAction;
+};
+
+export type GetPublicQaConversation200ArtifactsItemReviewReceipts = {[key: string]: string};
+
+export type GetPublicQaConversation200ArtifactsItemReview = {
+  revision: number;
+  decisions: GetPublicQaConversation200ArtifactsItemReviewDecisionsItem[];
+  payloadHash?: string;
+  receipts?: GetPublicQaConversation200ArtifactsItemReviewReceipts;
+};
+
+export type GetPublicQaConversation200ArtifactsItemApplicationState = typeof GetPublicQaConversation200ArtifactsItemApplicationState[keyof typeof GetPublicQaConversation200ArtifactsItemApplicationState];
+
+
+export const GetPublicQaConversation200ArtifactsItemApplicationState = {
+  pending: 'pending',
+  partial: 'partial',
+  applied: 'applied',
+  rejected: 'rejected',
+  conflict: 'conflict',
+  unknown: 'unknown',
+} as const;
+
+export type GetPublicQaConversation200ArtifactsItemReceipt = {
+  operationId: string;
+  generationId: string;
+  durableSeq: number;
+  structureRevision: number;
+};
+
+export type GetPublicQaConversation200ArtifactsItem = {
+  id: string;
+  conversationId: string;
+  runId: string;
+  purpose: GetPublicQaConversation200ArtifactsItemPurpose;
+  kind: GetPublicQaConversation200ArtifactsItemKind;
+  schemaVersion: number;
+  summary?: string;
+  evidenceRefs?: string[];
+  reviewRevision?: number;
+  review?: GetPublicQaConversation200ArtifactsItemReview;
+  applicationState?: GetPublicQaConversation200ArtifactsItemApplicationState;
+  receipt?: GetPublicQaConversation200ArtifactsItemReceipt;
+};
+
+export type GetPublicQaConversation200 = {
+  conversation: GetPublicQaConversation200Conversation;
+  messages: GetPublicQaConversation200MessagesItem[];
+  runs: GetPublicQaConversation200RunsItem[];
+  artifacts: GetPublicQaConversation200ArtifactsItem[];
+  cursor: string;
+  hasMoreMessages?: boolean;
+};
+
+export type SubmitPublicQaMessageBodyScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type SubmitPublicQaMessageBodyDetail = typeof SubmitPublicQaMessageBodyDetail[keyof typeof SubmitPublicQaMessageBodyDetail];
+
+
+export const SubmitPublicQaMessageBodyDetail = {
+  brief: 'brief',
+  detailed: 'detailed',
+} as const;
+
+export type SubmitPublicQaMessageBody = {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  clientMessageId: string;
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  idempotencyKey: string;
+  /**
+     * @minLength 1
+     * @maxLength 32000
+     */
+  text: string;
+  /** @minimum 1 */
+  expectedContextRevision: number;
+  scope?: SubmitPublicQaMessageBodyScope;
+  detail?: SubmitPublicQaMessageBodyDetail;
+};
+
+export type SubmitPublicQaMessage202 = {
+  runId: string;
+  conversationId: string;
+  contextRevision: number;
+};
+
+export type UpdatePublicQaScopeBodyScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type UpdatePublicQaScopeBody = {
+  scope: UpdatePublicQaScopeBodyScope;
+  /** @minimum 1 */
+  expectedContextRevision: number;
+};
+
+export type UpdatePublicQaScope200Scope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type UpdatePublicQaScope200 = {
+  contextRevision: number;
+  scope: UpdatePublicQaScope200Scope;
+  cancelledRunIds: string[];
+};
+
+export type ObservePublicQaConversationParams = {
 /**
- * @maxLength 20
  * @pattern ^(0|[1-9][0-9]*)$
  */
-cursor?: string;
+cursor: string;
+};
+
+export type CancelPublicQaRun200Purpose = typeof CancelPublicQaRun200Purpose[keyof typeof CancelPublicQaRun200Purpose];
+
+
+export const CancelPublicQaRun200Purpose = {
+  qa: 'qa',
+  writing: 'writing',
+} as const;
+
+export type CancelPublicQaRun200Status = typeof CancelPublicQaRun200Status[keyof typeof CancelPublicQaRun200Status];
+
+
+export const CancelPublicQaRun200Status = {
+  queued: 'queued',
+  running: 'running',
+  'waiting-approval': 'waiting-approval',
+  completed: 'completed',
+  interrupted: 'interrupted',
+  failed: 'failed',
+  cancelled: 'cancelled',
+} as const;
+
+export type CancelPublicQaRun200Usage = {
+  modelCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  searchCalls: number;
+  sourceReads: number;
+  webSearchCalls: number;
+  webReadCalls: number;
+  providerCredits?: number;
+  unknownCalls: number;
+};
+
+export type CancelPublicQaRun200ApprovalStatus = typeof CancelPublicQaRun200ApprovalStatus[keyof typeof CancelPublicQaRun200ApprovalStatus];
+
+
+export const CancelPublicQaRun200ApprovalStatus = {
+  pending: 'pending',
+  allowed: 'allowed',
+  rejected: 'rejected',
+  cancelled: 'cancelled',
+  expired: 'expired',
+  unavailable: 'unavailable',
+} as const;
+
+export type CancelPublicQaRun200ApprovalDecision = typeof CancelPublicQaRun200ApprovalDecision[keyof typeof CancelPublicQaRun200ApprovalDecision];
+
+
+export const CancelPublicQaRun200ApprovalDecision = {
+  'allow-once': 'allow-once',
+  reject: 'reject',
+} as const;
+
+export type CancelPublicQaRun200Approval = {
+  id: string;
+  attempt: number;
+  action: string;
+  description?: string;
+  status: CancelPublicQaRun200ApprovalStatus;
+  decisionId?: string;
+  decision?: CancelPublicQaRun200ApprovalDecision;
+  requestedAt: string;
+  expiresAt: string;
+};
+
+export type CancelPublicQaRun200 = {
+  id: string;
+  conversationId: string;
+  purpose: CancelPublicQaRun200Purpose;
+  status: CancelPublicQaRun200Status;
+  attempt: number;
+  contextRevision: number;
+  inputHash: string;
+  errorCode?: string;
+  usage?: CancelPublicQaRun200Usage;
+  cancelRequested?: boolean;
+  approval?: CancelPublicQaRun200Approval;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GetPublicQaArtifactParams = {
+/**
+ * @pattern ^ai_[a-f0-9]{32}$
+ */
+conversationId: string;
+};
+
+export type GetPublicQaArtifact200SourcesItemSourceKind = typeof GetPublicQaArtifact200SourcesItemSourceKind[keyof typeof GetPublicQaArtifact200SourcesItemSourceKind];
+
+
+export const GetPublicQaArtifact200SourcesItemSourceKind = {
+  document: 'document',
+} as const;
+
+export type GetPublicQaArtifact200SourcesItem = {
+  sourceKind: GetPublicQaArtifact200SourcesItemSourceKind;
+  title: string;
+  label?: string;
+};
+
+export type GetPublicQaArtifact200ItemsItemLocator = {[key: string]: unknown};
+
+export type GetPublicQaArtifact200ItemsItem = {
+  evidenceId: string;
+  locator: GetPublicQaArtifact200ItemsItemLocator;
+  text: string;
+};
+
+export type GetPublicQaArtifact200 = {
+  sources: GetPublicQaArtifact200SourcesItem[];
+  items: GetPublicQaArtifact200ItemsItem[];
 };
 

@@ -18,7 +18,6 @@ import {
   DocumentProjectionWorker,
 } from "./modules/documents/index.js";
 import { assetsModule } from "./modules/assets/index.js";
-import { projectsModule } from "./modules/projects/index.js";
 import { databasePlugin } from "./plugins/database.js";
 import { registerErrorHandlers } from "./plugins/errors.js";
 import { registerOpenApi } from "./plugins/openapi.js";
@@ -26,7 +25,11 @@ import type { CollaborationSessionRevoker } from "./modules/collaboration/sessio
 import type { PrincipalAuthenticator } from "./modules/identity/identity.types.js";
 import type { CollaborationOwner } from "./modules/collaboration/owner.js";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { aiModule } from "./modules/ai/index.js";
+import { assembleAiSystems } from "./ai-systems.js";
+import type { RagService } from "./modules/rag/rag.service.js";
+import { qaModule } from "./modules/qa/index.js";
+import { writingModule } from "./modules/writing/index.js";
+import { qaSitesModule } from "./modules/qa-sites/index.js";
 import { DomainError } from "./shared/domain-error.js";
 import { notificationsModule } from "./modules/notifications/index.js";
 import { invitationsModule } from "./modules/invitations/index.js";
@@ -43,6 +46,8 @@ export async function buildApp(
     collaborationOwner?: CollaborationOwner;
     aiModel?: BaseChatModel;
     writingAdapter?: LlmAdapter;
+    /** Test seam: scripted retrieval for the AI smoke runner (production never sets this). */
+    ragStub?: RagService | null;
   } = {},
 ) {
   const mockIdentityService =
@@ -64,6 +69,8 @@ export async function buildApp(
         "req.headers.cookie",
         "req.body.password",
         "req.body.token",
+        // Tavily and visitor secrets must never reach logs even in structured payloads.
+        "req.headers.x-tavily-key",
       ],
     },
     requestIdHeader: false,
@@ -94,6 +101,21 @@ export async function buildApp(
     await app.register(async (scope) =>
       healthRoutes(scope, operationsMetrics, config.METRICS_BEARER_TOKEN),
     );
+    // AI systems are assembled before route registration so ownership-change
+    // transactions receive the public-linkage port from the root assembly.
+    const unavailable = async () => {
+      throw new DomainError("SERVICE_UNAVAILABLE", "协同服务尚未就绪");
+    };
+    const ai = assembleAiSystems(app, config, {
+      exportMode: options.exportMode,
+      collaborationOwner: options.collaborationOwner ?? {
+        snapshot: unavailable,
+        apply: unavailable,
+      },
+      aiModel: options.aiModel,
+      writingAdapter: options.writingAdapter,
+      ragStub: options.ragStub,
+    });
     await app.register(
       async (api) => {
         registerIdentityGuard(api, identityAuthenticator);
@@ -101,7 +123,6 @@ export async function buildApp(
           service: mockIdentityService ?? undefined,
           prefix: "/auth",
         });
-        await api.register(projectsModule);
         await api.register((scope) =>
           authorizationModule(scope, options.sessionRevoker ?? { revokeDocumentSessions() {} }),
         );
@@ -110,24 +131,16 @@ export async function buildApp(
         await api.register((scope) => assetsModule(scope, config, options.exportMode));
         const sessionRevoker = options.sessionRevoker ?? { revokeDocumentSessions() {} };
         await api.register((scope) => workspacesModule(scope, sessionRevoker));
-        await api.register((scope) => catalogsModule(scope, sessionRevoker));
-        await api.register((scope) => knowledgeModule(scope, config, sessionRevoker));
-        await api.register(async (scope) =>
-          documentsModule(scope, config, sessionRevoker, options.exportMode),
-        );
-        const unavailable = async () => {
-          throw new DomainError("SERVICE_UNAVAILABLE", "协同服务尚未就绪");
-        };
+        await api.register((scope) => catalogsModule(scope, sessionRevoker, ai.publicLinkage));
         await api.register((scope) =>
-          aiModule(
-            scope,
-            config,
-            options.collaborationOwner ?? { snapshot: unavailable, apply: unavailable },
-            options.exportMode,
-            options.aiModel,
-            options.writingAdapter,
-          ),
+          knowledgeModule(scope, config, sessionRevoker, ai.publicLinkage),
         );
+        await api.register(async (scope) =>
+          documentsModule(scope, config, sessionRevoker, options.exportMode, ai.publicLinkage),
+        );
+        await api.register((scope) => qaModule(scope, ai.qa));
+        await api.register((scope) => writingModule(scope, ai.writing));
+        await api.register((scope) => qaSitesModule(scope, ai.sites, ai.qa));
       },
       { prefix: "/api" },
     );
@@ -146,7 +159,9 @@ export async function buildApp(
       );
       app.addHook("onReady", async () => projectionWorker.start());
       app.addHook("preClose", async () => projectionWorker.stop());
+      app.addHook("onReady", async () => ai.start());
     }
+    app.addHook("preClose", async () => ai.stop());
     return app;
   } catch (error) {
     await app.close().catch((err: unknown) => {

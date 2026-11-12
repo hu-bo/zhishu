@@ -118,19 +118,17 @@ test("LangChain chunking preserves Chinese, emoji UTF-16 ranges, duplicate headi
     ["block_table", prepared.blocks.find((block) => block.id === "block_table").text],
   ]);
   for (const item of items) {
-    const { blockId, start, end } = item.source.locator;
+    const { blockId, start, end } = item.locator;
     assert.equal(texts.get(blockId).slice(start, end), item.text);
-    assert.ok(Buffer.byteLength(`${item.title}\n${item.text}`) <= index.maxTokens);
+    assert.ok(Buffer.byteLength(`${item.headingPath}\n${item.text}`) <= index.maxTokens);
     assert.ok(!/[\uD800-\uDBFF]$/.test(item.text));
     assert.ok(!/^[\uDC00-\uDFFF]/.test(item.text));
   }
-  assert.equal(items.filter((item) => item.source.locator.blockId === "block_li").length, 1);
+  assert.equal(items.filter((item) => item.locator.blockId === "block_li").length, 1);
   assert.ok(
-    items.some(
-      (item) => item.source.locator.blockId === "block_table" && item.text.includes("单元格"),
-    ),
+    items.some((item) => item.locator.blockId === "block_table" && item.text.includes("单元格")),
   );
-  assert.equal(items.filter((item) => item.source.locator.blockId === "block_cell").length, 0);
+  assert.equal(items.filter((item) => item.locator.blockId === "block_cell").length, 0);
   assert.equal(new Set(items.map((item) => item.evidenceId)).size, items.length);
   assert.deepEqual(await prepareDocumentChunks(snapshot([]), index), []);
   assert.throws(
@@ -157,7 +155,7 @@ test("empty authorization keys skip query embedding and Qdrant entirely", async 
       contextTokenBudget: 100,
       signal: AbortSignal.timeout(1_000),
     }),
-    { freshness: "current", items: [] },
+    { sources: [], items: [], freshness: "current" },
   );
   assert.equal(embeddings.queries, 0);
 });
@@ -180,6 +178,7 @@ test(
         snapshot: snapshot(),
         tenantId: "tenant_a",
         workspaceId: "space_a",
+        documentTitle: "测试文档",
         indexVersion: "v1",
         metadataRevision: "1",
         aclRevision: "1",
@@ -250,7 +249,7 @@ test(
             candidates.every(
               (c) =>
                 !Object.hasOwn(c, "content") &&
-                !Object.hasOwn(c, "title") &&
+                !Object.hasOwn(c, "headingPath") &&
                 c.tenantId === "tenant_a",
             ),
           );
@@ -270,7 +269,7 @@ test(
         queryCalls.every(
           (call) =>
             !call.with_payload.include.includes("content") &&
-            !call.with_payload.include.includes("metadata.title"),
+            !call.with_payload.include.includes("metadata.headingPath"),
         ),
       );
       allowed = false;
@@ -330,9 +329,13 @@ test(
       assert.ok(csvEvidence.items.some((item) => item.text.includes("https://oss.example/x.png")));
       assert.ok(
         csvEvidence.items.every(
-          (item) => item.source.sourceId === "doc_csv" && item.source.locator.kind === "section",
+          (item) => item.sourceId === "doc_csv" && item.locator.kind === "section",
         ),
       );
+      // The document source descriptor travels with items so citations resolve without re-lookup.
+      assert.equal(csvEvidence.sources.length, 1);
+      assert.equal(csvEvidence.sources[0].sourceId, "doc_csv");
+      assert.equal(csvEvidence.sources[0].sourceKind, "document");
       const badEmbeddings = new TestEmbeddings();
       badEmbeddings.embedDocuments = async () => [[Number.NaN, 0, 0]];
       await assert.rejects(

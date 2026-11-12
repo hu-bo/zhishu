@@ -21,7 +21,9 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.34.41"
+    "@sinclair/typebox": "^0.34.41",
+    "@zhishu/ai-contracts": "workspace:*",
+    "@zhishu/document-contracts": "workspace:*"
   },
   "license": "UNLICENSED"
 }

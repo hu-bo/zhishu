@@ -228,9 +228,7 @@ export function DocumentTopbar({
           <Users size={15} aria-hidden="true" />
           <span className="hidden text-xs sm:inline">成员</span>
           {onlineCount > 0 && (
-            <span className="hidden text-xs text-muted-foreground md:inline">
-              {onlineCount}
-            </span>
+            <span className="hidden text-xs text-muted-foreground md:inline">{onlineCount}</span>
           )}
         </Button>
       )}

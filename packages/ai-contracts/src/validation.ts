@@ -8,17 +8,19 @@ import {
   type DocumentSnapshot,
 } from "@zhishu/document-contracts";
 import {
-  AiTaskRequestSchema,
-  ChatRequestSchema,
-  ChatResultSchema,
-  AuthoringProposalSchema,
-  AnswerResultSchema,
   EvidenceBundleSchema,
+  QaAnswerSchema,
+  ScopeSelectionSchema,
+  WritingProposalPayloadSchema,
+  WritingRequestSchema,
+  type Citation,
+  type DocumentVersion,
   type EvidenceBundle,
-  type SourceCitation,
-  type AuthoringRequest,
-  type AiTaskRequestV2,
-  type ChatRequest,
+  type EvidenceItem,
+  type QaAnswer,
+  type ScopeSelection,
+  type WritingProposalPayload,
+  type WritingRequest,
 } from "./schema.js";
 
 export type ValidationResult<T> =
@@ -50,146 +52,197 @@ export function validateSchema<S extends TSchema>(
     return invalid("INVALID_PAYLOAD");
   }
 }
-export function validateAiTaskRequest(
-  value: unknown,
-  limits: { maxBytes?: number; maxInstructionCharacters?: number } = {},
-) {
-  const result = validateSchema(AiTaskRequestSchema, value, limits.maxBytes ?? 65_536);
+
+export function validateScopeSelection(value: unknown): ValidationResult<ScopeSelection> {
+  const result = validateSchema(ScopeSelectionSchema, value, 32_768);
   if (!result.success) return result;
-  const request = result.data;
-  if (
-    (request.kind === "answer" ? request.question : request.instruction).length >
-    (limits.maxInstructionCharacters ?? 8_000)
-  )
-    return invalid<typeof request>("LIMIT_EXCEEDED");
-  if (
-    request.kind === "authoring" &&
-    ((["rewrite", "translate"].includes(request.intent) &&
-      (request.target.kind !== "blocks" || request.target.blocks.length !== 1)) ||
-      (["auto", "research"].includes(request.intent) && request.target.kind !== "document-end") ||
-      (request.intent === "rewrite-document") !== (request.target.kind === "document") ||
-      request.target.kind === "selection")
-  )
-    return invalid<typeof request>("UNSUPPORTED_TARGET");
+  const ids =
+    result.data.kind === "all"
+      ? []
+      : result.data.kind === "workspaces"
+        ? result.data.workspaceIds
+        : result.data.documentIds;
+  if (ids.some((id) => !id.trim() || id !== id.trim())) return invalid("INVALID_PAYLOAD");
   return result;
 }
+
+/** Only validated public web addresses may back web evidence. */
+export function validatePublicHttpUrl(value: string): boolean {
+  if (value.length > 2_048) return false;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+  if (url.username || url.password) return false;
+  const host = url.hostname.toLowerCase();
+  if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local"))
+    return false;
+  // Reject literal private/loopback/link-local IPv4 and IPv6 addresses.
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (ipv4) {
+    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+    if (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 192 && b === 168) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 169 && b === 254)
+    )
+      return false;
+  }
+  if (host.startsWith("[") || host === "::1") return false;
+  return true;
+}
+
 export function validateEvidenceBundle(value: unknown): ValidationResult<EvidenceBundle> {
   const result = validateSchema(EvidenceBundleSchema, value, 1_048_576);
   if (!result.success) return result;
-  const ids = new Set<string>();
-  for (const item of result.data.items) {
-    const locator = item.source.locator;
-    if (
-      ids.has(item.evidenceId) ||
-      (locator.kind !== "page" &&
-        (locator.end < locator.start || locator.end - locator.start !== item.text.length))
-    )
+  const bundle = result.data;
+  if ((bundle.items.length === 0) !== (bundle.sources.length === 0))
+    return invalid("INVALID_CITATION");
+  const sourceKeys = new Set<string>();
+  for (const source of bundle.sources) {
+    const key = `${source.sourceId}\u0000${source.snapshotId}`;
+    if (sourceKeys.has(key)) return invalid("INVALID_CITATION");
+    sourceKeys.add(key);
+    if (source.sourceKind === "web" && !validatePublicHttpUrl(source.canonicalUrl))
+      return invalid("INVALID_PAYLOAD");
+  }
+  const evidenceIds = new Set<string>();
+  for (const item of bundle.items) {
+    if (evidenceIds.has(item.evidenceId)) return invalid("INVALID_CITATION");
+    evidenceIds.add(item.evidenceId);
+    if (!sourceKeys.has(`${item.sourceId}\u0000${item.snapshotId}`))
       return invalid("INVALID_CITATION");
-    ids.add(item.evidenceId);
+    const locator = item.locator;
+    if (locator.kind !== "page" && locator.end - locator.start !== item.text.length)
+      return invalid("INVALID_CITATION");
   }
   return result;
 }
-export function validateChatRequest(
-  value: unknown,
-  limits: { maxBytes?: number; maxInstructionCharacters?: number } = {},
-) {
-  const result = validateSchema(ChatRequestSchema, value, limits.maxBytes ?? 65_536);
-  if (!result.success) return result;
-  const request = result.data;
-  if (request.message.length > (limits.maxInstructionCharacters ?? 8_000))
-    return invalid<typeof request>("LIMIT_EXCEEDED");
-  if (
-    !request.message.trim() ||
-    (request.responseMode === "grounded" && !request.contextRef) ||
-    request.previousRequestIds?.includes(request.requestId)
-  )
-    return invalid<typeof request>("INVALID_PAYLOAD");
-  return result;
+
+/**
+ * A citation is only legitimate when it names registered evidence of this bundle and its
+ * quote matches the stored slice of that snapshot verbatim. Artifact identity is either one
+ * fixed id (single-batch QA) or resolved per evidenceId (multi-batch writing runs).
+ */
+export type EvidenceArtifactResolver =
+  string | undefined | ((evidenceId: string) => string | undefined);
+
+function artifactForEvidence(
+  resolver: EvidenceArtifactResolver,
+  evidenceId: string,
+): string | undefined {
+  if (typeof resolver === "function") return resolver(evidenceId);
+  return resolver;
 }
-export function validateAiTaskRequestV2(
-  value: unknown,
-  limits: { maxBytes?: number; maxInstructionCharacters?: number } = {},
-): ValidationResult<AiTaskRequestV2> {
-  if (value && typeof value === "object" && "kind" in value && value.kind === "chat")
-    return validateChatRequest(value, limits);
-  return validateAiTaskRequest(value, limits);
-}
-export function citationsMatch(
-  citations: readonly SourceCitation[],
+
+export function citationsMatchEvidence(
+  citations: readonly Citation[],
   evidence: EvidenceBundle,
+  artifactResolver: EvidenceArtifactResolver = undefined,
 ): boolean {
+  const byId = new Map<string, EvidenceItem>();
+  for (const item of evidence.items) byId.set(item.evidenceId, item);
   const ids = new Set<string>();
   return citations.every((citation) => {
     if (ids.has(citation.citationId)) return false;
     ids.add(citation.citationId);
-    return evidence.items.some((item) => {
-      if (
-        item.source.sourceId !== citation.source.sourceId ||
-        item.source.snapshotId !== citation.source.snapshotId
-      )
-        return false;
-      const from = item.source.locator,
-        to = citation.source.locator;
-      if (from.kind === "page" || to.kind === "page")
-        return canonicalJson(from) === canonicalJson(to) && item.text.includes(citation.quote);
-      if (
-        from.kind !== to.kind ||
-        (from.kind === "block" && to.kind === "block" && from.blockId !== to.blockId) ||
-        (from.kind === "section" && to.kind === "section" && from.sectionId !== to.sectionId)
-      )
-        return false;
+    if (citation.evidenceArtifactId !== artifactForEvidence(artifactResolver, citation.evidenceId))
+      return false;
+    const item = byId.get(citation.evidenceId);
+    if (!item) return false;
+    if (citation.locator.kind === "page" || item.locator.kind === "page")
       return (
-        to.start >= from.start &&
-        to.end <= from.end &&
-        to.end > to.start &&
-        item.text.slice(to.start - from.start, to.end - from.start) === citation.quote
+        canonicalJson(citation.locator) === canonicalJson(item.locator) &&
+        item.text.includes(citation.quote)
       );
-    });
+    if (citation.locator.kind !== item.locator.kind) return false;
+    if (citation.locator.kind === "block" && item.locator.kind === "block") {
+      if (citation.locator.blockId !== item.locator.blockId) return false;
+    }
+    if (citation.locator.kind === "section" && item.locator.kind === "section") {
+      if (citation.locator.sectionId !== item.locator.sectionId) return false;
+    }
+    const from = item.locator,
+      to = citation.locator;
+    return (
+      to.start >= from.start &&
+      to.end <= from.end &&
+      to.end > to.start &&
+      item.text.slice(to.start - from.start, to.end - from.start) === citation.quote
+    );
   });
 }
-export function validateAnswerResult(value: unknown, evidence: EvidenceBundle) {
-  const result = validateSchema(AnswerResultSchema, value);
+
+/** intent ↔ target matrix; selection is resolved to blocks before a Run is admitted. */
+export function validateWritingRequest(
+  value: unknown,
+  limits: { maxBytes?: number; maxInstructionCharacters?: number } = {},
+): ValidationResult<WritingRequest> {
+  const result = validateSchema(WritingRequestSchema, value, limits.maxBytes ?? 65_536);
   if (!result.success) return result;
+  const request = result.data;
+  if (request.instruction.length > (limits.maxInstructionCharacters ?? 8_000))
+    return invalid<typeof request>("LIMIT_EXCEEDED");
   if (
-    !validateEvidenceBundle(evidence).success ||
-    !citationsMatch(result.data.citations, evidence) ||
-    (result.data.status === "answered" && result.data.citations.length === 0) ||
-    (evidence.items.length === 0 && result.data.status !== "insufficient-evidence")
+    (["rewrite", "translate"].includes(request.intent) &&
+      (request.target.kind !== "blocks" || request.target.blocks.length !== 1)) ||
+    (["auto", "research", "create", "continue", "summarize"].includes(request.intent) &&
+      request.target.kind !== "document-end") ||
+    (request.intent === "rewrite-document") !== (request.target.kind === "document")
   )
-    return invalid<typeof result.data>("INVALID_CITATION");
+    return invalid<typeof request>("UNSUPPORTED_TARGET");
   return result;
 }
-export function validateChatResult(
+
+export function validateQaAnswer(
   value: unknown,
-  context: { request: ChatRequest; evidence: EvidenceBundle },
-) {
-  const result = validateSchema(ChatResultSchema, value);
+  context: { evidence: EvidenceBundle; evidenceArtifactId?: string },
+): ValidationResult<QaAnswer> {
+  const result = validateSchema(QaAnswerSchema, value);
   if (!result.success) return result;
-  const { request, evidence } = context;
-  if (!validateChatRequest(request).success) return invalid<typeof result.data>("INVALID_PAYLOAD");
+  const answer = result.data;
   if (
-    !validateEvidenceBundle(evidence).success ||
-    !citationsMatch(result.data.citations, evidence) ||
-    (request.responseMode === "grounded" &&
-      result.data.status === "replied" &&
-      result.data.citations.length === 0) ||
-    (result.data.status === "insufficient-evidence" && result.data.citations.length > 0)
+    !validateEvidenceBundle(context.evidence).success ||
+    !citationsMatchEvidence(answer.citations, context.evidence, context.evidenceArtifactId) ||
+    (answer.status === "answered" && answer.citations.length === 0) ||
+    (answer.status === "insufficient-evidence" && answer.citations.length > 0)
   )
-    return invalid<typeof result.data>("INVALID_CITATION");
+    return invalid<QaAnswer>("INVALID_CITATION");
   return result;
 }
-export function validateAuthoringProposal(
+
+export interface ProposalValidationContext {
+  request: WritingRequest;
+  /** Baseline document version captured at Run admission. */
+  document: DocumentVersion;
+  baseStructureRevision: number;
+  snapshot: DocumentSnapshot;
+  evidence: EvidenceBundle;
+  artifactResolver: EvidenceArtifactResolver;
+}
+
+/**
+ * Validates the proposal against the accepted request and target snapshot. Identity lives on
+ * the artifact row, so payload checks are content and preconditions only.
+ */
+export function validateWritingProposalPayload(
   value: unknown,
-  context: { request: AuthoringRequest; snapshot: DocumentSnapshot; evidence: EvidenceBundle },
-) {
-  const result = validateSchema(AuthoringProposalSchema, value);
+  context: ProposalValidationContext,
+): ValidationResult<WritingProposalPayload> {
+  const result = validateSchema(WritingProposalPayloadSchema, value);
   if (!result.success) return result;
   const proposal = result.data;
   let { request } = context;
   const batch = proposal.operationBatch;
   if (request.intent === "auto") {
     if (request.target.kind !== "document-end")
-      return invalid<typeof proposal>("UNSUPPORTED_TARGET");
+      return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
     if (proposal.target.kind === "document") {
       request = { ...request, intent: "rewrite-document", target: proposal.target };
     } else if (proposal.target.kind === "blocks") {
@@ -200,37 +253,34 @@ export function validateAuthoringProposal(
         !block ||
         !["paragraph", "heading"].includes(block.type)
       )
-        return invalid<typeof proposal>("UNSUPPORTED_TARGET");
+        return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
       request = { ...request, intent: "rewrite", target: proposal.target };
     }
   }
   if (
-    proposal.requestId !== request.requestId ||
-    canonicalJson(proposal.document) !== canonicalJson(request.document) ||
+    canonicalJson(proposal.document) !== canonicalJson(context.document) ||
+    proposal.baseStructureRevision !== context.baseStructureRevision ||
     canonicalJson(proposal.target) !== canonicalJson(request.target) ||
-    proposal.baseStructureRevision !== request.baseStructureRevision ||
     batch.origin !== "ai-accept" ||
-    batch.documentId !== request.document.documentId ||
-    batch.generationId !== request.document.generationId
+    batch.documentId !== proposal.document.documentId ||
+    batch.generationId !== proposal.document.generationId
   )
-    return invalid<typeof proposal>("TARGET_CONFLICT");
+    return invalid<WritingProposalPayload>("TARGET_CONFLICT");
   if (
-    !citationsMatch(proposal.citations, context.evidence) ||
+    !citationsMatchEvidence(proposal.citations, context.evidence, context.artifactResolver) ||
     (request.intent === "research" && proposal.citations.length === 0)
   )
-    return invalid<typeof proposal>("INVALID_CITATION");
+    return invalid<WritingProposalPayload>("INVALID_CITATION");
   const target = request.target;
   const allowedBlocks = ["paragraph", "heading", "codeBlock"];
-  if (context.snapshot.schemaVersion >= MATHEMATICS_DOCUMENT_SCHEMA_VERSION) {
+  if (context.snapshot.schemaVersion >= MATHEMATICS_DOCUMENT_SCHEMA_VERSION)
     allowedBlocks.push("blockMath");
-  }
-  if (target.kind === "selection") return invalid<typeof proposal>("UNSUPPORTED_TARGET");
   if (target.kind === "document") {
     if (request.intent !== "rewrite-document")
-      return invalid<typeof proposal>("UNSUPPORTED_TARGET");
+      return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
     const oldBlocks = context.snapshot.content.content;
     if (oldBlocks.length > 256 || batch.operations.length < oldBlocks.length)
-      return invalid<typeof proposal>("UNSUPPORTED_TARGET");
+      return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
     let deleting = false,
       outputs = 0;
     let after: string | null = null;
@@ -239,7 +289,7 @@ export function validateAuthoringProposal(
       const old = oldBlocks[index];
       if (old) {
         if (!batch.preconditions?.some((p) => p.blockId === old.attrs.blockId))
-          return invalid<typeof proposal>("TARGET_CONFLICT");
+          return invalid<WritingProposalPayload>("TARGET_CONFLICT");
         if (operation.type === "delete-block" && operation.targetBlockId === old.attrs.blockId) {
           deleting = true;
           continue;
@@ -250,7 +300,7 @@ export function validateAuthoringProposal(
           operation.targetBlockId !== old.attrs.blockId ||
           operation.block.attrs.blockId !== old.attrs.blockId
         )
-          return invalid<typeof proposal>("UNSUPPORTED_TARGET");
+          return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
       } else if (
         deleting ||
         operation.type !== "insert-block" ||
@@ -258,12 +308,12 @@ export function validateAuthoringProposal(
         operation.beforeBlockId !== undefined ||
         (operation.afterBlockId ?? null) !== after
       )
-        return invalid<typeof proposal>("UNSUPPORTED_TARGET");
+        return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
       if (
         (operation.type !== "insert-block" && operation.type !== "replace-block") ||
         !allowedBlocks.includes(operation.block.type)
       )
-        return invalid<typeof proposal>("INVALID_OUTPUT");
+        return invalid<WritingProposalPayload>("INVALID_OUTPUT");
       outputs++;
       after = operation.block.attrs.blockId;
     }
@@ -271,15 +321,17 @@ export function validateAuthoringProposal(
       !outputs ||
       !applyOperationBatch(context.snapshot.content, batch, {
         documentId: context.snapshot.documentId,
-        generationId: request.document.generationId,
+        generationId: proposal.document.generationId,
       }).success
     )
-      return invalid<typeof proposal>("INVALID_OUTPUT");
+      return invalid<WritingProposalPayload>("INVALID_OUTPUT");
     return result;
   }
   const replacing = request.intent === "rewrite" || request.intent === "translate";
   let after =
-    target.kind === "document-end" ? target.afterBlockId : (target.blocks.at(-1)?.blockId ?? null);
+    target.kind === "document-end"
+      ? target.afterBlockId
+      : ((target.kind === "blocks" ? target.blocks.at(-1)?.blockId : undefined) ?? null);
   const anchor = after;
   for (const operation of batch.operations) {
     if (replacing) {
@@ -290,7 +342,7 @@ export function validateAuthoringProposal(
         operation.targetBlockId !== target.blocks[0]?.blockId ||
         operation.block.attrs.blockId !== operation.targetBlockId
       )
-        return invalid<typeof proposal>("UNSUPPORTED_TARGET");
+        return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
     } else {
       if (
         operation.type !== "insert-block" ||
@@ -298,27 +350,21 @@ export function validateAuthoringProposal(
         operation.beforeBlockId !== undefined ||
         (operation.afterBlockId ?? null) !== after
       )
-        return invalid<typeof proposal>("UNSUPPORTED_TARGET");
+        return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
       after = operation.block.attrs.blockId;
     }
     if (
       (operation.type === "insert-block" || operation.type === "replace-block") &&
       !allowedBlocks.includes(operation.block.type)
     )
-      return invalid<typeof proposal>("INVALID_OUTPUT");
+      return invalid<WritingProposalPayload>("INVALID_OUTPUT");
   }
   if (anchor && !batch.preconditions?.some((p) => p.blockId === anchor))
-    return invalid<typeof proposal>("TARGET_CONFLICT");
+    return invalid<WritingProposalPayload>("TARGET_CONFLICT");
   const applied = applyOperationBatch(context.snapshot.content, batch, {
     documentId: context.snapshot.documentId,
-    generationId: request.document.generationId,
+    generationId: proposal.document.generationId,
   });
-  if (!applied.success) return invalid<typeof proposal>("INVALID_OUTPUT");
+  if (!applied.success) return invalid<WritingProposalPayload>("INVALID_OUTPUT");
   return result;
-}
-export function checkAiProtocolCompatibility(
-  version: unknown,
-  supportedVersions: readonly (1 | 2)[] = [1],
-): boolean {
-  return (version === 1 || version === 2) && supportedVersions.includes(version);
 }

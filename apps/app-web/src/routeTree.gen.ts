@@ -13,6 +13,8 @@ import { Route as AppRouteImport } from './routes/_app';
 import { Route as AppIndexRouteImport } from './routes/_app/index';
 import { Route as AppAiRouteImport } from './routes/_app/ai';
 import { Route as AppInvitationsRouteImport } from './routes/_app/invitations';
+import { Route as AppQaSitesRouteImport } from './routes/_app/qa-sites';
+import { Route as AskSlugRouteImport } from './routes/ask/$slug';
 import { Route as ShareShareIdRouteImport } from './routes/share/$shareId';
 import { Route as AppDocumentsIndexRouteImport } from './routes/_app/documents/index';
 import { Route as AppDocumentsDocumentIdRouteImport } from './routes/_app/documents/$documentId';
@@ -38,6 +40,16 @@ const AppInvitationsRoute = AppInvitationsRouteImport.update({
   id: '/invitations',
   path: '/invitations',
   getParentRoute: () => AppRoute,
+} as any);
+const AppQaSitesRoute = AppQaSitesRouteImport.update({
+  id: '/qa-sites',
+  path: '/qa-sites',
+  getParentRoute: () => AppRoute,
+} as any);
+const AskSlugRoute = AskSlugRouteImport.update({
+  id: '/ask/$slug',
+  path: '/ask/$slug',
+  getParentRoute: () => rootRouteImport,
 } as any);
 const ShareShareIdRoute = ShareShareIdRouteImport.update({
   id: '/share/$shareId',
@@ -75,6 +87,8 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute;
   '/ai': typeof AppAiRoute;
   '/invitations': typeof AppInvitationsRoute;
+  '/qa-sites': typeof AppQaSitesRoute;
+  '/ask/$slug': typeof AskSlugRoute;
   '/share/$shareId': typeof ShareShareIdRoute;
   '/documents/$documentId': typeof AppDocumentsDocumentIdRoute;
   '/spaces/$workspaceId': typeof AppSpacesWorkspaceIdRouteWithChildren;
@@ -85,6 +99,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/ai': typeof AppAiRoute;
   '/invitations': typeof AppInvitationsRoute;
+  '/qa-sites': typeof AppQaSitesRoute;
+  '/ask/$slug': typeof AskSlugRoute;
   '/share/$shareId': typeof ShareShareIdRoute;
   '/': typeof AppIndexRoute;
   '/documents/$documentId': typeof AppDocumentsDocumentIdRoute;
@@ -98,6 +114,8 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren;
   '/_app/ai': typeof AppAiRoute;
   '/_app/invitations': typeof AppInvitationsRoute;
+  '/_app/qa-sites': typeof AppQaSitesRoute;
+  '/ask/$slug': typeof AskSlugRoute;
   '/share/$shareId': typeof ShareShareIdRoute;
   '/_app/': typeof AppIndexRoute;
   '/_app/documents/$documentId': typeof AppDocumentsDocumentIdRoute;
@@ -112,6 +130,8 @@ export interface FileRouteTypes {
     | '/'
     | '/ai'
     | '/invitations'
+    | '/qa-sites'
+    | '/ask/$slug'
     | '/share/$shareId'
     | '/documents/$documentId'
     | '/spaces/$workspaceId'
@@ -122,6 +142,8 @@ export interface FileRouteTypes {
   to:
     | '/ai'
     | '/invitations'
+    | '/qa-sites'
+    | '/ask/$slug'
     | '/share/$shareId'
     | '/'
     | '/documents/$documentId'
@@ -134,6 +156,8 @@ export interface FileRouteTypes {
     | '/_app'
     | '/_app/ai'
     | '/_app/invitations'
+    | '/_app/qa-sites'
+    | '/ask/$slug'
     | '/share/$shareId'
     | '/_app/'
     | '/_app/documents/$documentId'
@@ -145,6 +169,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren;
+  AskSlugRoute: typeof AskSlugRoute;
   ShareShareIdRoute: typeof ShareShareIdRoute;
 }
 
@@ -177,6 +202,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/invitations';
       preLoaderRoute: typeof AppInvitationsRouteImport;
       parentRoute: typeof AppRoute;
+    };
+    '/_app/qa-sites': {
+      id: '/_app/qa-sites';
+      path: '/qa-sites';
+      fullPath: '/qa-sites';
+      preLoaderRoute: typeof AppQaSitesRouteImport;
+      parentRoute: typeof AppRoute;
+    };
+    '/ask/$slug': {
+      id: '/ask/$slug';
+      path: '/ask/$slug';
+      fullPath: '/ask/$slug';
+      preLoaderRoute: typeof AskSlugRouteImport;
+      parentRoute: typeof rootRouteImport;
     };
     '/share/$shareId': {
       id: '/share/$shareId';
@@ -238,6 +277,7 @@ const AppSpacesWorkspaceIdRouteWithChildren =
 interface AppRouteChildren {
   AppAiRoute: typeof AppAiRoute;
   AppInvitationsRoute: typeof AppInvitationsRoute;
+  AppQaSitesRoute: typeof AppQaSitesRoute;
   AppIndexRoute: typeof AppIndexRoute;
   AppDocumentsDocumentIdRoute: typeof AppDocumentsDocumentIdRoute;
   AppSpacesWorkspaceIdRoute: typeof AppSpacesWorkspaceIdRouteWithChildren;
@@ -248,6 +288,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAiRoute: AppAiRoute,
   AppInvitationsRoute: AppInvitationsRoute,
+  AppQaSitesRoute: AppQaSitesRoute,
   AppIndexRoute: AppIndexRoute,
   AppDocumentsDocumentIdRoute: AppDocumentsDocumentIdRoute,
   AppSpacesWorkspaceIdRoute: AppSpacesWorkspaceIdRouteWithChildren,
@@ -259,6 +300,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren);
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
+  AskSlugRoute: AskSlugRoute,
   ShareShareIdRoute: ShareShareIdRoute,
 };
 export const routeTree = rootRouteImport

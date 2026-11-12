@@ -9,10 +9,18 @@ export { previewTransfer } from "./transfer-policy.js";
 export type { TransferRequest } from "./transfer-policy.js";
 export { documentLocateSchema } from "./catalog.schema.js";
 export type { CatalogService } from "./catalog.service.js";
-export function createCatalogService(db: Database, revoker: CollaborationSessionRevoker) {
-  return new CatalogService(db, revoker);
+export function createCatalogService(
+  db: Database,
+  revoker: CollaborationSessionRevoker,
+  publicLinkage?: import("../../shared/public-linkage.js").DocumentPublicLinkage,
+) {
+  return new CatalogService(db, revoker, publicLinkage);
 }
-export async function catalogsModule(app: FastifyInstance, revoker: CollaborationSessionRevoker) {
-  const service = createCatalogService(app.db, revoker);
+export async function catalogsModule(
+  app: FastifyInstance,
+  revoker: CollaborationSessionRevoker,
+  publicLinkage?: import("../../shared/public-linkage.js").DocumentPublicLinkage,
+) {
+  const service = createCatalogService(app.db, revoker, publicLinkage);
   await app.register((scope) => catalogRoutes(scope, service), { prefix: "/knowledge" });
 }

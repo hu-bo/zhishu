@@ -35,6 +35,15 @@ const environmentSchema = z
     AI_REASONING_EFFORT: z.enum(["low", "medium", "high", "max"]).optional(),
     AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(600000).default(120000),
     AI_MAX_CONCURRENT: z.coerce.number().int().min(1).max(16).default(4),
+    // Server-only web research secret. Never enters VITE config, capabilities, logs or model input.
+    TAVILY_API_KEY: z.string().min(8).optional(),
+    // Signed visitor credentials for public QA sites.
+    QA_VISITOR_COOKIE_SECRET: z
+      .string()
+      .min(32)
+      .default("local-development-qa-visitor-secret-change-me"),
+    // Absolute origin used when the server generates citation links for adopted drafts.
+    APP_PUBLIC_URL: z.string().url().default("http://localhost:5173"),
     DATABASE_POOL_MAX: z.coerce.number().int().min(2).max(100).default(10),
     DATABASE_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
     DATABASE_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
@@ -162,6 +171,23 @@ const environmentSchema = z
         code: "custom",
         path: ["ASSET_STORAGE_ACCESS_KEY_ID"],
         message: "Object storage credentials must be provided as a pair with an endpoint.",
+      });
+    }
+    if (
+      config.NODE_ENV === "production" &&
+      config.QA_VISITOR_COOKIE_SECRET === "local-development-qa-visitor-secret-change-me"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["QA_VISITOR_COOKIE_SECRET"],
+        message: "A private visitor credential signing secret is required in production.",
+      });
+    }
+    if (config.NODE_ENV === "production" && /localhost|127\.0\.0\.1/.test(config.APP_PUBLIC_URL)) {
+      context.addIssue({
+        code: "custom",
+        path: ["APP_PUBLIC_URL"],
+        message: "Production citation links require an explicitly configured public origin.",
       });
     }
     if (config.COLLABORATION_PORT === config.PORT) {

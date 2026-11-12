@@ -1,8 +1,18 @@
 import type { QdrantClient } from "@qdrant/js-client-rest";
 import type { Embeddings } from "@langchain/core/embeddings";
 import type { DocumentSnapshot } from "@zhishu/document-contracts";
-import { validateEvidenceBundle, type EvidenceItem } from "@zhishu/ai-contracts";
-import { configurationFingerprint, digest, prepareDocument, type IndexOptions } from "./chunks.js";
+import {
+  validateEvidenceBundle,
+  type EvidenceItem,
+  type SourceLocator,
+} from "@zhishu/ai-contracts";
+import {
+  configurationFingerprint,
+  digest,
+  prepareDocument,
+  type PreparedChunk,
+  type IndexOptions,
+} from "./chunks.js";
 import type { RagDocumentSource, DocumentParseOptions, UploadedImage } from "./inputs.js";
 
 export function deterministicPointId(
@@ -70,6 +80,7 @@ export async function writeDocumentIndex(
     parsing?: DocumentParseOptions;
     tenantId: string;
     workspaceId: string;
+    documentTitle: string;
     indexVersion: string;
     metadataRevision: string;
     aclRevision: string;
@@ -95,6 +106,7 @@ export async function writeDocumentIndex(
     !input.tenantId ||
     !input.workspaceId ||
     !input.indexVersion ||
+    !input.documentTitle.trim() ||
     !validAclKeys(input.readAclKeys)
   )
     throw new Error("INVALID_INDEX_CONTEXT");
@@ -110,14 +122,14 @@ export async function writeDocumentIndex(
     throw new Error("INVALID_INDEX_CONTEXT");
   decimal(version.durableSeq);
   const prepared = await prepareDocument(source, options, { ...input.parsing, signal });
-  const items = prepared.chunks,
+  const chunks = prepared.chunks,
     fingerprint = configurationFingerprint(options);
   const batchSize = input.batchSize ?? 32;
   if (!Number.isSafeInteger(batchSize) || batchSize < 1 || batchSize > 128)
     throw new Error("INVALID_BATCH_SIZE");
-  for (let offset = 0; offset < items.length; offset += batchSize) {
+  for (let offset = 0; offset < chunks.length; offset += batchSize) {
     signal.throwIfAborted();
-    const batch = items.slice(offset, offset + batchSize),
+    const batch = chunks.slice(offset, offset + batchSize),
       texts = batch.map(embeddingText);
     const vectors = await input.embeddings.embedDocuments(texts);
     signal.throwIfAborted();
@@ -125,15 +137,18 @@ export async function writeDocumentIndex(
     await client.upsert(options.collectionName, {
       wait: true,
       update_mode: "insert_only",
-      points: batch.map((item, index) => ({
+      points: batch.map((chunk, index) => ({
         id: deterministicPointId(input.tenantId, documentId, input.indexVersion, offset + index),
         vector: vectors[index]!,
         payload: {
-          content: item.text,
+          content: chunk.text,
           metadata: {
-            ...item.source,
-            evidenceId: item.evidenceId,
-            title: item.title,
+            sourceId: chunk.sourceId,
+            snapshotId: chunk.snapshotId,
+            locator: chunk.locator,
+            evidenceId: chunk.evidenceId,
+            headingPath: chunk.headingPath,
+            documentTitle: input.documentTitle,
             tenantId: input.tenantId,
             workspaceId: input.workspaceId,
             documentId,
@@ -146,7 +161,7 @@ export async function writeDocumentIndex(
             configFingerprint: fingerprint,
             sourceState: "active",
             readAclKeys: [...input.readAclKeys],
-            textDigest: digest(item.text),
+            textDigest: digest(chunk.text),
             embeddingDigest: digest(texts[index]),
           },
         },
@@ -155,10 +170,10 @@ export async function writeDocumentIndex(
   }
   // Insert-only retries may find an existing point. Verify the immutable source/input identity
   // before a caller can publish this build; a successful write acknowledgement alone is insufficient.
-  for (let offset = 0; offset < items.length; offset += batchSize) {
+  for (let offset = 0; offset < chunks.length; offset += batchSize) {
     signal.throwIfAborted();
-    const batch = items.slice(offset, offset + batchSize);
-    const ids = batch.map((_item, index) =>
+    const batch = chunks.slice(offset, offset + batchSize);
+    const ids = batch.map((_chunk, index) =>
       deterministicPointId(input.tenantId, documentId, input.indexVersion, offset + index),
     );
     const points = await client.retrieve(options.collectionName, {
@@ -167,20 +182,20 @@ export async function writeDocumentIndex(
       with_vector: false,
     });
     const byId = new Map(points.map((point) => [point.id, point]));
-    for (const [index, item] of batch.entries()) {
+    for (const [index, chunk] of batch.entries()) {
       const point = byId.get(ids[index]!),
         m = point?.payload?.metadata as Record<string, unknown> | undefined;
       if (
         !m ||
-        point?.payload?.content !== item.text ||
+        point?.payload?.content !== chunk.text ||
         m.tenantId !== input.tenantId ||
         m.workspaceId !== input.workspaceId ||
         m.documentId !== documentId ||
         m.indexVersion !== input.indexVersion ||
-        m.snapshotId !== item.source.snapshotId ||
+        m.snapshotId !== chunk.snapshotId ||
         m.configFingerprint !== fingerprint ||
-        m.textDigest !== digest(item.text) ||
-        m.embeddingDigest !== digest(embeddingText(item)) ||
+        m.textDigest !== digest(chunk.text) ||
+        m.embeddingDigest !== digest(embeddingText(chunk)) ||
         m.metadataRevision !== input.metadataRevision
       )
         throw new Error("INDEX_VERIFICATION_FAILED");
@@ -188,14 +203,14 @@ export async function writeDocumentIndex(
   }
   signal.throwIfAborted();
   return {
-    chunkCount: items.length,
-    contentDigest: digest(items.map((item) => [item.evidenceId, digest(item.text)])),
+    chunkCount: chunks.length,
+    contentDigest: digest(chunks.map((chunk) => [chunk.evidenceId, digest(chunk.text)])),
     snapshotId: prepared.snapshotId,
     images: prepared.images,
   };
 }
-export const embeddingText = (item: EvidenceItem): string =>
-  item.title ? `${item.title}\n${item.text}` : item.text;
+export const embeddingText = (chunk: PreparedChunk): string =>
+  chunk.headingPath ? `${chunk.headingPath}\n${chunk.text}` : chunk.text;
 export function decimal(value: string): string {
   if (!/^(0|[1-9][0-9]{0,19})$/.test(value)) throw new Error("INVALID_REVISION");
   return value;
@@ -246,11 +261,36 @@ export function readPointEvidence(
   const m = metadata as Record<string, unknown>;
   const item = {
     evidenceId: m.evidenceId,
-    source: { sourceId: m.sourceId, snapshotId: m.snapshotId, locator: m.locator },
-    title: m.title,
+    sourceId: m.sourceId,
+    snapshotId: m.snapshotId,
+    locator: m.locator,
     text: payload?.content,
   };
-  const validated = validateEvidenceBundle({ freshness: "current", items: [item] });
-  if (!validated.success || digest(validated.data.items[0]!.text) !== m.textDigest) return;
+  const source = {
+    sourceKind: "document" as const,
+    sourceId: m.sourceId,
+    snapshotId: m.snapshotId,
+    title: m.documentTitle ?? "",
+    workspaceId: m.workspaceId,
+    documentId: m.documentId,
+    generationId: m.generationId,
+    durableSeq: m.durableSeq,
+    metadataRevision: m.metadataRevision,
+    indexVersion: m.indexVersion,
+  };
+  const validated = validateEvidenceBundle({
+    freshness: "current",
+    sources: [source],
+    items: [item],
+  });
+  if (
+    !validated.success ||
+    digest(validated.data.items[0]!.text) !== m.textDigest ||
+    !isSupportedLocator(validated.data.items[0]!.locator)
+  )
+    return;
   return validated.data.items[0];
+}
+function isSupportedLocator(locator: SourceLocator): boolean {
+  return locator.kind === "block" || locator.kind === "section";
 }

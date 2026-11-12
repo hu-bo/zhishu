@@ -1,5 +1,7 @@
 # app-server 设计规划
 
+2026-11-10 AI 目标以 [问答/写作技术设计](ai-assistant-and-public-qa.md)为准：qa/writing 模块分别装配 ai-qa 与 ai-writing，共用 ai 模块的产品存储、幂等、预算与事件，qa-sites 管理来源委托和批准文档。问答使用有界检索生成流程，写作使用 DSH；旧混合 AiService、authoring、LangGraph/checkpoint 与 writing-chat 装配迁移后退役。以下旧阶段记录仅用于核对现有实现与迁移来源，目标尚未实施。
+
 ## 当前模块边界（2026-11-01）
 
 知识库组织能力已从 `documents` 拆出，HTTP 路径与 OpenAPI operationId 保持不变。下面记录当前实现的归属，后文带日期的段落保留各阶段设计背景。

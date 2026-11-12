@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
@@ -71,4 +71,60 @@ test("new module entry points and the authorization domain API have no transitiv
     "authorization/permissions.ts",
   ])
     visit(join(modules, entry), []);
+});
+
+test("AI modules keep one direction: shared store below, purposes and sites above, no cross-engine imports", () => {
+  const forbidden: Record<string, string[]> = {
+    // The shared product store must stay engine-agnostic.
+    ai: ["qa", "writing", "qa-sites"],
+    // The two purposes never import each other's internals; sites own their public layer.
+    qa: ["writing", "qa-sites"],
+    writing: ["qa", "qa-sites"],
+    "qa-sites": ["writing"],
+    // Business documents never reverse-import the public site module.
+    documents: ["qa-sites"],
+    knowledge: ["qa-sites"],
+    catalogs: ["qa-sites"],
+  };
+  for (const [module, banned] of Object.entries(forbidden)) {
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(join(modules, dir), { withFileTypes: true })) {
+        const path = join(modules, dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(join(dir, entry.name));
+          continue;
+        }
+        if (!entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) continue;
+        for (const dependency of runtimeImports(path))
+          assert.ok(
+            !banned.includes(owner(dependency)),
+            `${relative(modules, path)} must not depend on ${relative(modules, dependency)}`,
+          );
+      }
+    };
+    if (existsSync(join(modules, module))) walk(module);
+  }
+});
+
+test("retired AI engines, legacy product protocols and the template module are gone from the server", () => {
+  const serverRoot = resolve(modules, "../..");
+  const sources = readdirSync(join(serverRoot, "src/modules"), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+  for (const retired of ["writing-chat", "projects"])
+    assert.ok(!sources.includes(retired), `module ${retired} must be retired`);
+  const rootManifest = JSON.parse(
+    readFileSync(resolve(serverRoot, "../../package.json"), "utf8"),
+  ) as { dependencies?: Record<string, string> };
+  for (const retired of ["@zhishu/ai-runtime", "@zhishu/ai-plugins", "@zhishu/dsh-agent"])
+    assert.ok(!(rootManifest.dependencies ?? {})[retired], `${retired} must not be a dependency`);
+  // Database schema may only import pure contracts and its own files.
+  for (const file of readdirSync(resolve(serverRoot, "database/schema"))) {
+    if (!file.endsWith(".table.ts")) continue;
+    for (const dependency of runtimeImports(resolve(serverRoot, "database/schema", file)))
+      assert.ok(
+        !relative(serverRoot, dependency).startsWith("src") && !dependency.includes("node_modules"),
+        `database/schema/${file} must not import server modules or engine packages`,
+      );
+  }
 });

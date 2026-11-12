@@ -1,9 +1,19 @@
 import { createHash } from "node:crypto";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
-import { canonicalJson, type EvidenceItem } from "@zhishu/ai-contracts";
+import { canonicalJson, type SourceLocator } from "@zhishu/ai-contracts";
 import { normalizeSource } from "./documents.js";
 import { imageAtoms } from "./markdown.js";
 import type { DocumentParseOptions, RagDocumentSource } from "./inputs.js";
+
+/** Internal prepared slice: item fields plus a per-chunk heading breadcrumb for embedding. */
+export interface PreparedChunk {
+  evidenceId: string;
+  sourceId: string;
+  snapshotId: string;
+  locator: SourceLocator;
+  headingPath: string;
+  text: string;
+}
 
 export interface IndexOptions {
   collectionName: string;
@@ -114,14 +124,17 @@ export async function prepareDocument(
       throw new Error("INVALID_TOKEN_COUNT");
     return value;
   };
-  const chunks: EvidenceItem[] = [];
+  const chunks: PreparedChunk[] = [];
   for (const block of normalized.blocks) {
     parsing.signal?.throwIfAborted();
     const atoms = block.kind === "code" ? [] : imageAtoms(block.text);
-    let title = Array.from(block.titlePath.join(" / ")).slice(0, 256).join("");
-    while (title && count(`${title}\n`) > Math.min(128, Math.floor(options.maxTokens / 3)))
-      title = Array.from(title).slice(0, -1).join("");
-    const reserved = count(title ? `${title}\n` : "");
+    let headingPath = Array.from(block.titlePath.join(" / ")).slice(0, 256).join("");
+    while (
+      headingPath &&
+      count(`${headingPath}\n`) > Math.min(128, Math.floor(options.maxTokens / 3))
+    )
+      headingPath = Array.from(headingPath).slice(0, -1).join("");
+    const reserved = count(headingPath ? `${headingPath}\n` : "");
     const chunkSize = Math.min(options.targetTokens, options.maxTokens - reserved);
     if (chunkSize < 4) throw new Error("CONTEXT_BUDGET_EXCEEDED");
     if (atoms.some((atom) => count(atom) > chunkSize))
@@ -153,15 +166,13 @@ export async function prepareDocument(
       previousStart = start;
       chunks.push({
         evidenceId: `ev_${digest([snapshotId, block.id, start, end])}`,
-        source: {
-          sourceId: normalized.sourceId,
-          snapshotId,
-          locator:
-            block.locatorKind === "block"
-              ? { kind: "block", blockId: block.id, start, end }
-              : { kind: "section", sectionId: block.id, start, end },
-        },
-        title,
+        sourceId: normalized.sourceId,
+        snapshotId,
+        locator:
+          block.locatorKind === "block"
+            ? { kind: "block", blockId: block.id, start, end }
+            : { kind: "section", sectionId: block.id, start, end },
+        headingPath,
         text: part,
       });
     }
@@ -172,7 +183,7 @@ export async function prepareDocument(
     snapshotId,
     text: normalized.blocks.map((block) => block.text).join("\n\n"),
     blocks: normalized.blocks.map(({ id, locatorKind, text }) => ({ id, locatorKind, text })),
-    chunks: chunks as readonly EvidenceItem[],
+    chunks: chunks as readonly PreparedChunk[],
     images: normalized.images,
   };
 }
@@ -181,6 +192,6 @@ export async function prepareDocumentChunks(
   source: RagDocumentSource,
   options: IndexOptions,
   parsing?: DocumentParseOptions,
-): Promise<readonly EvidenceItem[]> {
+): Promise<readonly PreparedChunk[]> {
   return (await prepareDocument(source, options, parsing)).chunks;
 }

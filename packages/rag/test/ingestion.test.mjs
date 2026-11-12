@@ -46,12 +46,34 @@ const snapshot = (content) => ({
 });
 const checkLocators = (prepared) => {
   for (const chunk of prepared.chunks) {
-    const locator = chunk.source.locator,
+    const locator = chunk.locator,
       id = locator.kind === "block" ? locator.blockId : locator.sectionId;
     const block = prepared.blocks.find((block) => block.id === id);
     assert.equal(block.text.slice(locator.start, locator.end), chunk.text);
-    assert.ok(Buffer.byteLength(`${chunk.title}\n${chunk.text}`) <= index.maxTokens);
-    assert.equal(validateEvidenceBundle({ freshness: "current", items: [chunk] }).success, true);
+    assert.ok(Buffer.byteLength(`${chunk.headingPath}\n${chunk.text}`) <= index.maxTokens);
+    const item = { ...chunk };
+    delete item.headingPath;
+    assert.equal(
+      validateEvidenceBundle({
+        freshness: "current",
+        sources: [
+          {
+            sourceKind: "document",
+            sourceId: chunk.sourceId,
+            snapshotId: chunk.snapshotId,
+            title: "文档标题",
+            workspaceId: "ws_test",
+            documentId: chunk.sourceId,
+            generationId: "gen_test",
+            durableSeq: "1",
+            metadataRevision: "1",
+            indexVersion: "iv_test",
+          },
+        ],
+        items: [item],
+      }).success,
+      true,
+    );
   }
 };
 
@@ -85,7 +107,7 @@ test("native tables preserve row relationships, merged-cell values and exact nor
   assert.ok(prepared.text.includes("|产品|小李|开发|"));
   assert.ok(
     prepared.chunks.every(
-      (chunk) => chunk.source.locator.blockId === "block_table" && chunk.title.includes("部门"),
+      (chunk) => chunk.locator.blockId === "block_table" && chunk.headingPath.includes("部门"),
     ),
   );
   checkLocators(prepared);
@@ -310,6 +332,7 @@ test("CSV and uploaded image text reaches the same Qdrant indexing path with a t
     version: { generationId: "gen_import", durableSeq: "9007199254740993" },
     tenantId: "tenant_a",
     workspaceId: "space_a",
+    documentTitle: "导入文档",
     indexVersion: "v_import",
     metadataRevision: "1",
     aclRevision: "1",

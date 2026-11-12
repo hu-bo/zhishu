@@ -90,9 +90,10 @@ export function createDocumentService(
   db: Database,
   config: AppConfig,
   sessionRevoker: CollaborationSessionRevoker,
+  publicLinkage?: import("../../shared/public-linkage.js").DocumentPublicLinkage,
 ): DocumentService {
   return new DocumentService(
-    new DocumentRepository(db),
+    new DocumentRepository(db, publicLinkage),
     new DocumentHistoryRepository(db),
     {
       tokenSecret: config.COLLABORATION_TOKEN_SECRET,
@@ -115,9 +116,10 @@ export async function documentsModule(
   config: AppConfig,
   sessionRevoker: CollaborationSessionRevoker,
   exportMode = false,
+  publicLinkage?: import("../../shared/public-linkage.js").DocumentPublicLinkage,
 ): Promise<void> {
-  const repository = new DocumentRepository(app.db);
-  const service = createDocumentService(app.db, config, sessionRevoker);
+  const repository = new DocumentRepository(app.db, publicLinkage);
+  const service = createDocumentService(app.db, config, sessionRevoker, publicLinkage);
   await app.register(async (scope) => documentRoutes(scope, service), { prefix: "/documents" });
   const community = new DocumentCommunityService(app.db, sessionRevoker);
   await app.register(async (scope) => documentCommunityRoutes(scope, community), {

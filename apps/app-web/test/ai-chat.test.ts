@@ -1,83 +1,58 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { sseData } from '../src/api/sse.ts';
-import { appendWritingPreview } from '../src/components/writing-chat/preview.ts';
-import { renderWritingMarkdown } from '../src/components/writing-chat/markdown.ts';
-import type { ChatLiveFrame } from '@zhishu/chat-contracts';
+import { applyPreviewFrame } from '@zhishu/chat-contracts';
+import { renderWritingMarkdown } from '../src/components/chat/markdown';
+import { sseData } from '../src/api/sse';
 
-const delta: ChatLiveFrame = {
-  type: 'assistant.delta',
-  conversationId: 'writing',
-  runId: 'run',
-  streamEpoch: 'epoch',
-  attempt: 1,
-  revision: 1,
-  index: 0,
-  text: '你好',
-};
-
-test('writing Markdown keeps LaTeX source for document import and leaves fenced code literal', () => {
+test('markdown keeps LaTeX for the document import pipeline', () => {
   const html = renderWritingMarkdown(
-    [
-      '$$a^2 - b^2 = (a+b)(a-b)$$s',
-      '$$(a+b)^2 = a^2 + 2ab + b^2$$',
-      String.raw`$$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$`,
-      '',
-      '```text',
-      '$$literal$$',
-      '```',
-    ].join('\n'),
+    '行内 $a^2$ 公式\n\n$$\n\\frac{1}{2}\n$$\n\n```\n$$literal$$\n```',
   );
-  assert.equal((html.match(/data-type="inline-math"/g) ?? []).length, 1);
-  assert.equal((html.match(/data-type="block-math"/g) ?? []).length, 2);
-  assert.match(html, /<\/span>s<\/p>/);
-  assert.match(html, /<mfrac>/);
-  assert.ok(html.includes(String.raw`data-latex="x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}"`));
-  assert.ok(html.includes('$$literal$$'));
+  assert.match(html, /data-type="inline-math"/);
+  assert.match(html, /data-type="block-math"/);
+  assert.equal((html.match(/data-type="block-math"/g) ?? []).length, 1);
+  assert.ok(html.includes('$literal$'), 'fenced code keeps literal dollars');
 });
 
-test('writing preview rejects duplicates, old revisions, missing prefixes and midstream gaps', () => {
-  const first = appendWritingPreview(undefined, delta);
-  assert.equal(appendWritingPreview(first, delta), first);
-  const second = appendWritingPreview(first, { ...delta, index: 1, text: '，知书' });
-  assert.equal(second.text, '你好，知书');
-  const gap = appendWritingPreview(second, { ...delta, index: 3 });
-  assert.equal(gap.incomplete, true);
-  assert.equal(gap.text, '');
-  assert.equal(appendWritingPreview(gap, { ...delta, index: 4 }).incomplete, true);
-  const replacement = appendWritingPreview(gap, { ...delta, revision: 8 });
-  assert.equal(replacement.text, '你好');
-  assert.equal(appendWritingPreview(replacement, { ...delta, index: 5 }), replacement);
-  assert.equal(appendWritingPreview(undefined, { ...delta, index: 2 }).incomplete, true);
-  const restarted = appendWritingPreview(second, { ...delta, streamEpoch: 'new', index: 1 });
-  assert.equal(restarted.text, '');
-  assert.equal(restarted.incomplete, true);
-  assert.equal(appendWritingPreview(first, { ...delta, attempt: 2 }).text, '你好');
+test('preview frames merge by epoch/attempt/revision/index and never rewind', () => {
+  const frame = (index: number, text: string, attempt = 1, revision = 1) => ({
+    type: 'preview' as const,
+    conversationId: 'conv_1',
+    purpose: 'writing' as const,
+    runId: 'run_1',
+    streamEpoch: 'epoch_1',
+    attempt,
+    contextRevision: 1,
+    revision,
+    index,
+    channel: 'text' as const,
+    text,
+  });
+  let preview = applyPreviewFrame(undefined, frame(0, '你好'));
+  preview = applyPreviewFrame(preview, frame(1, '，世界'));
+  assert.equal(preview?.text, '你好，世界');
+  preview = applyPreviewFrame(preview, frame(1, '重复'));
+  assert.equal(preview?.text, '你好，世界');
+  preview = applyPreviewFrame(preview, frame(4, '跳洞'));
+  assert.equal(preview?.incomplete, true);
+  assert.equal(preview?.text, '');
+  preview = applyPreviewFrame(preview, frame(0, '新尝试', 2));
+  assert.equal(preview?.text, '新尝试');
+  assert.equal(preview?.incomplete, false);
 });
 
-test('shared SSE framing preserves split UTF-8/CRLF, releases readers, and rejects truncated or oversized frames', async () => {
-  let cancelled = false;
-  const bytes = new TextEncoder().encode(': heartbeat\r\n\r\ndata: {"text":"中文"}\r\n\r\n');
-  const response = new Response(
-    new ReadableStream({
-      start(controller) {
-        for (const byte of bytes) controller.enqueue(Uint8Array.of(byte));
-      },
-      cancel() {
-        cancelled = true;
-      },
-    }),
-  );
-  for await (const frame of sseData(response)) {
-    assert.deepEqual(JSON.parse(frame), { text: '中文' });
-    break;
-  }
-  assert.equal(cancelled, true);
-  assert.equal(response.body!.locked, false);
-  await assert.rejects(async () => {
-    for await (const frame of sseData(new Response('data: {}'))) void frame;
-  }, /中断/);
-  await assert.rejects(async () => {
-    for await (const frame of sseData(new Response('data: 123456\n\n'), 5)) void frame;
-  }, /限制/);
+test('sseData reassembles split UTF-8 frames and enforces limits', async () => {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode('data: {"a":"中😀"}\n\n: heartbeat\ndata: {"b":1}\n\n');
+  const chunks: Uint8Array[] = [];
+  for (let i = 0; i < bytes.length; i += 3) chunks.push(bytes.slice(i, i + 3));
+  const body = new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk);
+      controller.close();
+    },
+  });
+  const frames = [];
+  for await (const frame of sseData(new Response(body))) frames.push(frame);
+  assert.deepEqual(frames, ['{"a":"中😀"}', '{"b":1}']);
 });

@@ -1,5 +1,9 @@
 # rag 设计规划
 
+> 2026-11-10 目标以 [问答/写作技术设计](../apps/ai-assistant-and-public-qa.md)为准：ai-qa 与 ai-writing 共用本包检索、证据和中立 scope/rag Skill 资源；本包保持无 DSH、无会话存储、无最终回答生成的边界。问答采用有界流程，旧 LangGraph/checkpoint 目标退役。下文带日期的说明记录历史实现，新增目标尚未实施。
+
+> 平台问答的事实结论必须有可校验的文档/段落引用，内部定位到 documentId/blockId，公开入口使用站点批准的引用投影。写作的 Tavily 网页证据与其共用纯引用合约，但由 writing 应用适配执行，不自动进入本包的平台文档索引；本期问答不自动联网补齐资料。
+
 > 2026-10-30 应用已接入 `modules/rag`、`document_indexes`（migration 0036）、独立 Embedding 配置、自动索引 Worker、空间/文档范围向量问答、索引状态及来源文档链接。当前沿用显式文档 ACL，以 `document:<id>` 稳定键过滤；未实施下文规划的 space/user 继承权限迁移。真实 `qwen3.8-flash` 写作 → `qwen3.7-text-embedding-flash` 1024 维索引 → 空间/文档问答已通过，覆盖引用、权限隔离、正文更新与删除。部署和验收说明见 [AI 知识问答验收记录](../ai-knowledge-verification.md)。下面保留的规划条目不代表全部已交付。
 
 > 2026-10-24 应用更新：RagChat 在 app-web 独立维护问答状态与草稿，共用 chat-ui，通过原 LangChain 问答 API 保留历史、取消与 checkpoint 恢复。检索包自身不持有 checkpoint；问答执行仍使用 LangGraph。当前页面基于授权所选资料，不将检索包能力等同于全库向量问答已接入。见 [实施记录](ai-chat-implementation.md)。

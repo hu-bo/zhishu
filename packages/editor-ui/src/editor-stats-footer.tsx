@@ -8,12 +8,6 @@ export interface EditorStatsFooterMessages {
   readingTime: string;
   minute: string;
   minutes: string;
-  /** @deprecated Configure the toolbar shortcut popover with EditorShell.keyboardHelpMessages. */
-  keyboardHelp: string;
-  /** @deprecated Configure the toolbar shortcut popover with EditorShell.keyboardHelpMessages. */
-  underline: string;
-  /** @deprecated Configure the toolbar shortcut popover with EditorShell.keyboardHelpMessages. */
-  highlight: string;
 }
 
 export interface EditorStatsFooterProps {
@@ -29,9 +23,6 @@ const defaultMessages: EditorStatsFooterMessages = {
   readingTime: "预计阅读",
   minute: "分钟",
   minutes: "分钟",
-  keyboardHelp: "快捷键",
-  underline: "下划线",
-  highlight: "黄色高亮",
 };
 
 export function EditorStatsFooter({ messages, className, trailingSlot }: EditorStatsFooterProps) {

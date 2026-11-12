@@ -1,0 +1,30 @@
+{
+  "name": "@zhishu/ai-qa",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "description": "知书独立问答流程：有界范围解析、检索、证据校验、生成与交付复核。不依赖 DSH、Fastify 或业务数据库。",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.41",
+    "@zhishu/ai-contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.10"
+  }
+}

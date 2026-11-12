@@ -1,5 +1,4 @@
-export { projects } from "./project.table.js";
-export { aiRuns } from "./ai.table.js";
+export { aiConversations, aiRuns, aiMessages, aiArtifacts, aiEvents } from "./ai.table.js";
 export { documentIndexes } from "./rag.table.js";
 export {
   assets,
@@ -24,6 +23,7 @@ export {
 } from "./document.table.js";
 
 export * from "./writing.table.js";
+export { qaSites, qaSiteSources, qaSiteDocuments } from "./qa-site.table.js";
 export {
   identityProfiles,
   workspaceInvitations,

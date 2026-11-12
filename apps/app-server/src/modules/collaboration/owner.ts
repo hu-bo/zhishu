@@ -1,14 +1,13 @@
-import type { DocumentSnapshot, OperationBatch } from "@zhishu/document-contracts";
+import type {
+  DocumentSnapshot,
+  OperationBatch,
+  StructureReceipt,
+} from "@zhishu/document-contracts";
 import type { Principal } from "../identity/identity.types.js";
 import type { Database } from "../../../database/index.js";
 
 export type DocumentWriteTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
-export interface StructureReceipt {
-  operationId: string;
-  generationId: string;
-  durableSeq: number;
-  structureRevision: number;
-}
+export type { StructureReceipt };
 export interface CollaborationOwner {
   snapshot(
     principal: Principal,

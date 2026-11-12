@@ -1,5 +1,7 @@
 # dsh-agent 设计方案
 
+> 2026-11-10 清理审查后的目标以 [问答/写作技术设计](../apps/ai-assistant-and-public-qa.md)为准：本包的有效官方 SDK 接入迁入 ai-writing/runtime，独立包及 ChatStore/ChatRecord 等旧产品接口退役，消费示例转向 ai-writing，不保留转发出口。产品状态归应用共享存储，writing_sessions 只保存原生恢复事实；下文仅作迁移基线，不能按其旧接口另建执行器。目标尚未实施。
+
 状态：2026-10-24 已实现进程内官方 DSH runtime、单写者持久化端口、产品投影、审批、取消和恢复，并接入 app-server。公开入口见 [包 README](../../packages/dsh-agent/README.md)，实际协议和未验证项见 [实施记录](ai-chat-implementation.md)。下文拟定接口保留为设计背景。
 
 **原设计时状态（已由上方实施更新覆盖）**：2026-10-23，文档阶段。包名为 `@zhishu/dsh-agent`，与上游 `@deepseek-ai/dsh-agent` 区分。当前仅有 package/TypeScript 配置、依赖和上游来源记录；已验证官方基础服务可以装配与释放，尚无对外实现，未接入应用。本文的 API、目录、数据库适配和验收项均为待实现设计。

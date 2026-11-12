@@ -1,5 +1,9 @@
 # ai-plugins 设计规划
 
+> 2026-11-10 目标以 [问答/写作技术设计](../apps/ai-assistant-and-public-qa.md)为准：本包的写作/编译/图片能力与原 dsh-agent 的有效接入合并到 ai-writing，research 接共享 rag；ai-qa 独立负责问答。旧包、ChatRecord 产品协议、AuthoringProposal/SourceCitation 旧格式及兼容出口在同批切换中删除，新提案使用 WritingProposalPayload，引用使用唯一 Citation。以下记录迁移基线，目标尚未实施。
+
+> 写作新增 Tavily 联网调研目标，由服务端 TAVILY_API_KEY 配置和注入的 WebSearchPort 提供 web_search/read_web_source；网页与平台文档使用统一证据和引用展示，采纳到正文后保留来源链接。只在本机服务端配置实际密钥，文档不保存密钥值；联网能力尚未实施。
+
 状态：2026-10-24 已创建 writing/research/image 子入口，应用已接 DSH 写作与知识来源工具，以及可配置的真实图片 HTTP adapter 和私有资源任务。真实收费 provider 未实调；当前图片只支持单张 PNG 和授权预览。见 [实施记录](ai-chat-implementation.md)。
 
 **原设计时状态（已由上方实施更新覆盖）**：2026-10-22 新增方案，尚未创建 `packages/ai-plugins`。拟定包名 `@zhishu/ai-plugins`。[总方案](ai-chat-architecture.md)；执行宿主见 [dsh-agent](dsh-agent.md)，文档产物见 [ai-contracts](ai-contracts.md)，检索见 [rag](rag.md)。[返回文档地图](../README.md)。

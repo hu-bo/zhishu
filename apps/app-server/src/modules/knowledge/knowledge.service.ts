@@ -47,6 +47,7 @@ export class KnowledgeService {
     private readonly db: Database,
     private readonly maxDocuments: number,
     private readonly sessions: SessionInvalidator,
+    private readonly publicLinkage?: import("../../shared/public-linkage.js").DocumentPublicLinkage,
   ) {}
   previewTransfer(principal: Principal, input: TransferRequest) {
     return previewTransfer(this.db, principal, input);
@@ -101,6 +102,8 @@ export class KnowledgeService {
         });
         if (preview.token !== input.authorizationPreview)
           throw new DomainError("CONFLICT", "请确认最新的跨空间权限影响预览后再移动");
+        // Dissolve any public site approval for this document before changing its owner space.
+        await this.publicLinkage?.detachDocuments(tx, principal.tenantId, [documentId]);
         await tx
           .update(documentShares)
           .set({ revokedAt: new Date() })

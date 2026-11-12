@@ -1,5 +1,7 @@
 # app-web 设计规划
 
+2026-11-10 AI 目标以 [问答/写作技术设计](ai-assistant-and-public-qa.md)为准：全站问答与文档写作分别维护业务会话、草稿和上下文，复用 chat-ui、纯事件归并和传输基础设施。“基于这些资料写作”创建新的写作会话并重新校验证据，对外页面复用受限问答。下文带日期的 WritingChat/RagChat 记录现有实现，其业务分工保留，旧协议、混合缓存和 proposal 独立 Chat 按目标清理；目标尚未实施。
+
 > 2026-10-30 写作复核：WritingChat 合并完整 HTTP 快照时保持 cursor 单调；实时预览忽略旧 revision/重复 index，缺前缀或断档时等待完整保存结果。界面分别呈现失败、取消、中断和已保存，审批按钮提交期间禁用，网络重试沿用原 decisionId。RagChat 保持独立的 LangChain 请求、取消/恢复与草稿。新增 `test:chat` 覆盖预览和共用 SSE 分帧，详细验收见 [实施记录](../packages/ai-chat-implementation.md)。
 
 > 2026-10-24 实施更新：AI 页面实际接入 components/writing-chat 和 components/rag-chat，两者共用 @zhishu/chat-ui，分别拥有 transport、会话和身份隔离草稿；文章提案继续组合现有协同审阅能力。见 [AI Chat 实施记录](../packages/ai-chat-implementation.md)。

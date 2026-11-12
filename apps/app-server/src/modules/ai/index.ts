@@ -1,142 +1,51 @@
-import type { FastifyInstance } from "fastify";
-import { Pool } from "pg";
-import { ChatOpenAI } from "@langchain/openai";
-import { ChatAnthropic } from "@langchain/anthropic";
-import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
-import type { AppConfig } from "../../config.js";
-import type { CollaborationOwner } from "../collaboration/owner.js";
-import { AiDocumentAccess } from "../documents/index.js";
-import { AiRepository } from "./ai.repository.js";
+import type { Database } from "../../../database/index.js";
 import { AiService } from "./ai.service.js";
-import { aiRoutes } from "./ai.routes.js";
-import type { LlmAdapter } from "@deepseek-ai/dsh-llm";
-import { WritingService } from "../writing-chat/writing.service.js";
-import { writingRoutes } from "../writing-chat/writing.routes.js";
-import { WritingImages } from "../writing-chat/writing.image.js";
-import { AssetObjectStorage } from "../assets/asset-storage.js";
-import { createRagClients, ragConfiguration } from "../rag/rag.config.js";
-import { RagRepository } from "../rag/rag.repository.js";
-import { RagService } from "../rag/rag.service.js";
+import { ConversationEventBus } from "./event-stream.js";
 
-export async function aiModule(
-  app: FastifyInstance,
-  config: AppConfig,
-  owner: CollaborationOwner,
-  exportMode = false,
-  injectedModel?: BaseChatModel,
-  writingAdapter?: LlmAdapter,
-) {
-  const saver = PostgresSaver.fromConnString(config.DATABASE_URL, { schema: "ai_checkpoint" });
-  const leases = new Pool({
-    connectionString: config.DATABASE_URL,
-    max: config.AI_MAX_CONCURRENT + 1,
-    connectionTimeoutMillis: 5000,
-  });
-  const model = exportMode
-    ? null
-    : (injectedModel ??
-      (config.AI_MODEL && config.AI_API_KEY
-        ? (config.AI_API_FORMAT ??
-            (config.AI_BASE_URL &&
-            new URL(config.AI_BASE_URL).pathname.replace(/\/+$/, "").endsWith("/anthropic")
-              ? "anthropic"
-              : "openai")) === "anthropic"
-          ? new ChatAnthropic({
-              model: config.AI_MODEL,
-              apiKey: config.AI_API_KEY,
-              clientOptions: { baseURL: config.AI_BASE_URL, timeout: config.AI_TIMEOUT_MS },
-              thinking: config.AI_THINKING ? { type: config.AI_THINKING } : undefined,
-              outputConfig: config.AI_REASONING_EFFORT
-                ? { effort: config.AI_REASONING_EFFORT }
-                : undefined,
-              maxTokens: 4096,
-              maxRetries: 0,
-            })
-          : new ChatOpenAI({
-              model: config.AI_MODEL,
-              apiKey: config.AI_API_KEY,
-              configuration: config.AI_BASE_URL ? { baseURL: config.AI_BASE_URL } : undefined,
-              maxTokens: 4096,
-              maxRetries: 0,
-              timeout: config.AI_TIMEOUT_MS,
-            })
-        : null));
-  const writingPool = new Pool({
-    connectionString: config.DATABASE_URL,
-    max: config.AI_MAX_CONCURRENT * 4 + 4,
-    connectionTimeoutMillis: 5000,
-    query_timeout: 15000,
-  });
-  writingPool.on("error", (err) => app.log.error({ err }, "Writing storage connection failed"));
-  const documentAccess = new AiDocumentAccess(app.db, owner);
-  const ragClients = exportMode ? null : createRagClients(config);
-  const rag = ragClients
-    ? new RagService(new RagRepository(app.dbPool), documentAccess, ragClients, config, (code) =>
-        app.log.error({ code }, "Document vector indexing failed"),
-      )
-    : undefined;
-  const imageStorage =
-    !exportMode &&
-    config.ASSET_STORAGE_ENDPOINT &&
-    config.ASSET_STORAGE_ACCESS_KEY_ID &&
-    config.ASSET_STORAGE_SECRET_ACCESS_KEY
-      ? new AssetObjectStorage(config)
-      : null;
-  const writing = new WritingService(
-    writingPool,
-    documentAccess,
-    config,
-    writingAdapter,
-    new WritingImages(writingPool, config, imageStorage),
-  );
-  const service = new AiService(
-    new AiRepository(app.db),
-    documentAccess,
-    owner,
-    model,
-    saver,
-    leases,
-    config,
-    writing,
-    rag,
-    ragConfiguration(config).reason,
-  );
-  let timer: ReturnType<typeof setInterval> | undefined, maintenance: Promise<void> | undefined;
-  if (!exportMode) {
-    app.addHook("onReady", async () => {
-      if (model) await saver.getTuple({ configurable: { thread_id: "__readiness__" } });
-      await service.maintain();
-      await writing.repository.recoverOrphans();
-      rag?.start();
-      timer = setInterval(() => {
-        if (!maintenance) {
-          maintenance = service
-            .maintain()
-            .catch((err: unknown) => {
-              app.log.error({ err }, "AI task maintenance failed");
-            })
-            .finally(() => {
-              maintenance = undefined;
-            });
-        }
-      }, 3600000);
-      timer.unref();
-    });
-    app.addHook("preClose", async () => {
-      if (timer) clearInterval(timer);
-      await rag?.close();
-      await service.close();
-      await writing.close();
-      if (maintenance) await maintenance;
-    });
-  }
-  app.addHook("onClose", async () => {
-    await leases.end();
-    await saver.end();
-    await writingPool.end();
-    imageStorage?.close();
-  });
-  await app.register((scope) => aiRoutes(scope, service), { prefix: "/ai" });
-  await app.register((scope) => writingRoutes(scope, writing), { prefix: "/writing" });
+/**
+ * The ai module is the shared product infrastructure only: conversation/message/Run/artifact/
+ * event transactions, leases, idempotency, budgets and configuration assembly. It does not
+ * choose user intent and never drives an execution engine; qa and writing modules compose it.
+ */
+export interface AiInfra {
+  service: AiService;
+  bus: ConversationEventBus;
+  start(): void;
+  stop(): Promise<void>;
 }
+
+export function createAiInfra(
+  db: Database,
+  log: (event: string, meta: Record<string, unknown>) => void,
+): AiInfra {
+  const bus = new ConversationEventBus();
+  const service = new AiService(db, log, (key) => bus.wake(key));
+  let timer: NodeJS.Timeout | undefined;
+  return {
+    service,
+    bus,
+    start() {
+      const maintain = async () => {
+        try {
+          await service.maintain();
+        } catch (error) {
+          log("ai_maintain_failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      };
+      void maintain();
+      timer = setInterval(() => void maintain(), 3_600_000);
+      timer.unref();
+    },
+    async stop() {
+      if (timer) clearInterval(timer);
+    },
+  };
+}
+
+export { AiService } from "./ai.service.js";
+export { AiRepository } from "./ai.repository.js";
+export type { ConversationOwner, CreateConversationCommand } from "./ai.service.js";
+export * from "./ai.types.js";
+export * from "./event-stream.js";

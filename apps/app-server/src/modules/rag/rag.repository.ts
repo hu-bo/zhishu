@@ -6,6 +6,7 @@ export interface IndexJob {
   tenantId: string;
   documentId: string;
   workspaceId: string | null;
+  documentTitle: string | null;
   leaseToken: string;
   generationId: string | null;
   durableSeq: string | null;
@@ -53,6 +54,7 @@ export class RagRepository {
       from candidate c where i.tenant_id=c.tenant_id and i.document_id=c.document_id returning i.*
     ) select i.tenant_id as "tenantId", i.document_id as "documentId", i.lease_token as "leaseToken",
       case when d.status='active' then d.workspace_id else null end as "workspaceId",
+      case when d.status='active' then d.title else null end as "documentTitle",
       g.id as "generationId", g.durable_seq::text as "durableSeq", d.metadata_revision as "metadataRevision",
       g.schema_version as "schemaVersion", p.snapshot_revision as "snapshotRevision", g.extensions, p.content
       from claimed i left join documents d on d.tenant_id=i.tenant_id and d.id=i.document_id
