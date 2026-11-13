@@ -60,6 +60,8 @@ export interface WritingTurnResult extends TurnIdentity {
   turn?: number;
   /** Trusted output text: plugin record result or assistant text, already size-checked. */
   resultText?: string;
+  /** Adapter-reported token accounting for this turn; absent when the provider reports none. */
+  usage?: { inputTokens: number; outputTokens: number };
   /** Native turn executed tools; automatic replay of side effects stays blocked. */
   hasToolFacts: boolean;
   /** Proposals compiled by tools during this turn. */
@@ -110,10 +112,19 @@ export interface WritingRuntimeOptions {
   resultText?(records: readonly PluginRecord[], turnText: string): string | undefined;
   limits?: Partial<{
     maxSessions: number;
+    /** Idle sessions are disposed after this long without turn activity (default 10 minutes). */
+    sessionIdleMs: number;
     maxModelCalls: number;
     maxInputBytes: number;
     maxOutputBytes: number;
   }>;
+  /**
+   * Hosts may still observe an idle session (live SSE); retained sessions are skipped by
+   * idle eviction and LRU, never by capacity limits on busy sessions.
+   */
+  retainSession?(nativeSessionId: string): boolean;
+  /** A session detached (dispose or eviction); hosts must drop cached handles. Idempotent. */
+  onSessionDetached?(nativeSessionId: string): void;
   onError?(code: string, conversationId: string): void;
 }
 

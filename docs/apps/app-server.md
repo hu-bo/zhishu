@@ -30,7 +30,7 @@ OpenAPI 使用同一 Zod 定义生成 `ErrorResponse` 组件，447 处响应改�
 
 > 2026-10-24 实施更新：新增 writing-chat 模块与 /api/writing 命令/SSE，官方 DSH 在本 Server 进程运行；新 authoring 记录 dsh-v1，旧任务与 RAG 保留 LangChain checkpoint。migration 0034/0035 只在隔离验收数据库执行。见 [AI Chat 实施记录](../packages/ai-chat-implementation.md)。
 
-> 2026-10-30 生命周期复核：写作 resume 同样经过并发准入；超限/失败的实时订阅立即处理拒绝，不产生未处理 Promise。每个活跃写作句柄占用产品锁和原生日志锁两个专用连接，最大句柄数为 `min(AI_MAX_CONCURRENT * 2, floor((writingPool.max - 2) / 2))`，保留临时查询连接。写作模块使用独立的 `AI_MAX_CONCURRENT * 4 + 4` 连接池，与普通 API 的 DATABASE_POOL_MAX、原 AI task 锁池及 LangChain saver 分开；默认并发 4 对应 20 个写作连接和最多 8 个活跃句柄，不代表总数据库连接数仅有 20。活跃 SSE 保留其观察的句柄；最后一个订阅离开后允许空闲回收。
+> 2026-10-30 生命周期复核：写作 resume 同样经过并发准入；超限/失败的实时订阅立即处理拒绝，不产生未处理 Promise。每个活跃写作句柄占用产品锁和原生日志锁两个专用连接，最大句柄数为 `min(AI_MAX_CONCURRENT * 2, floor((writingPool.max - 2) / 2))`，保留临时查询连接。写作模块使用独立的 `AI_MAX_CONCURRENT * 4 + 4` 连接池，与普通 API 的 DATABASE_POOL_MAX、原 AI task 锁池及 LangChain saver 分开；默认并发 4 对应 20 个写作连接和最多 8 个活跃句柄，不代表总数据库连接数仅有 20。活跃 SSE 保留其观察的句柄；最后一个订阅离开后按 `AI_SESSION_IDLE_MS`（默认 5 分钟）空闲回收：runtime 清扫器释放超时空闲句柄的专用连接与锁，容量满时优先淘汰最久未用的空闲句柄，忙碌或被订阅保留的句柄不被淘汰；回收后的会话凭原生日志 restore 重附。
 
 > 2026-10-24 两类 Chat 分别装配：协作 AI 写作使用 [dsh-agent](../packages/dsh-agent.md)封装官方 Cordis/DSH，RAG Chat 的问答与检索链路继续使用 LangChain。业务模块分别维护授权、会话、持久化、HTTP/SSE 与取消/恢复契约；共用前端组件不要求共享执行器。以下旧写作 Deep Agents/LangGraph 记录作为写作迁移依据，不代表 RAG LangChain 路线退出。边界见[总方案](../packages/ai-chat-architecture.md)。
 

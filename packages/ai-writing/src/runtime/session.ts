@@ -32,6 +32,7 @@ const APPROVAL_TTL_MS = 120_000;
 export class DshWritingSession implements NativeWritingSession, WritingSessionAccess {
   private handle!: AgentHandle;
   private closed = false;
+  private lastUsedAt = Date.now();
   private epoch = randomUUID();
   private mutations: Promise<unknown> = Promise.resolve();
   private current?: WritingTurnRequest;
@@ -233,6 +234,7 @@ export class DshWritingSession implements NativeWritingSession, WritingSessionAc
       } finally {
         this.current = undefined;
         this.host = undefined;
+        this.lastUsedAt = Date.now();
       }
     });
   }
@@ -271,6 +273,7 @@ export class DshWritingSession implements NativeWritingSession, WritingSessionAc
       } finally {
         this.current = undefined;
         this.host = undefined;
+        this.lastUsedAt = Date.now();
       }
     });
   }
@@ -346,6 +349,7 @@ export class DshWritingSession implements NativeWritingSession, WritingSessionAc
       deliveryConfirmed: true,
       turn,
       hasToolFacts: turnState?.hasTools === true,
+      ...(turnState?.usage ? { usage: turnState.usage } : {}),
       proposals: this.activeProposals.slice(),
       pluginRecords,
     };
@@ -359,26 +363,25 @@ export class DshWritingSession implements NativeWritingSession, WritingSessionAc
       reason.kind === "aborted" &&
       reason.reason.kind === "hook" &&
       (reason.reason as { reason?: string }).reason === "DEADLINE";
-    const status =
+    let status: WritingTurnResult["status"];
+    if (
       reason.kind === "interrupted" ||
       deadlineHook ||
       (reason.kind === "aborted" && reason.reason.kind === "disposed")
-        ? "interrupted"
-        : reason.kind === "aborted" && reason.reason.kind === "user"
-          ? "cancelled"
-          : "failed";
-    const errorCode =
-      status === "cancelled"
-        ? undefined
-        : reason.kind === "completed"
-          ? "OUTPUT_REQUIRED"
-          : reason.kind === "error"
-            ? reason.error.code !== "UNKNOWN" && /^[A-Z][A-Z0-9_]{0,63}$/.test(reason.error.code)
-              ? reason.error.code
-              : "ERROR"
-            : deadlineHook
-              ? "TIMEOUT"
-              : reason.kind.toUpperCase();
+    )
+      status = "interrupted";
+    else if (reason.kind === "aborted" && reason.reason.kind === "user") status = "cancelled";
+    else status = "failed";
+    let errorCode: string | undefined;
+    if (status === "cancelled") errorCode = undefined;
+    else if (reason.kind === "completed") errorCode = "OUTPUT_REQUIRED";
+    else if (reason.kind === "error")
+      errorCode =
+        reason.error.code !== "UNKNOWN" && /^[A-Z][A-Z0-9_]{0,63}$/.test(reason.error.code)
+          ? reason.error.code
+          : "ERROR";
+    else if (deadlineHook) errorCode = "TIMEOUT";
+    else errorCode = reason.kind.toUpperCase();
     return { ...base, status, errorCode, resultText: output || undefined };
   }
 
@@ -391,6 +394,7 @@ export class DshWritingSession implements NativeWritingSession, WritingSessionAc
     turn?: number,
     state = this.projection(),
   ): WritingTurnResult {
+    const turnUsage = turn !== undefined ? state?.turns[String(turn)]?.usage : undefined;
     return {
       conversationId: request.conversationId,
       runId: request.runId,
@@ -402,6 +406,7 @@ export class DshWritingSession implements NativeWritingSession, WritingSessionAc
       errorCode,
       turn,
       hasToolFacts: false,
+      ...(turnUsage ? { usage: turnUsage } : {}),
       proposals: this.activeProposals.slice(),
       pluginRecords: state?.records ?? [],
     };
@@ -410,6 +415,7 @@ export class DshWritingSession implements NativeWritingSession, WritingSessionAc
   /** Host-side entry for user decisions; the kernel hook resolves when a pending approval matches. */
   async decide(approvalId: string, decision: "allow-once" | "reject"): Promise<void> {
     this.ensureAvailable();
+    this.lastUsedAt = Date.now();
     const resolve = this.answers.get(approvalId);
     if (!resolve || !this.pendingApprovals.has(approvalId))
       throw new WritingRuntimeError("APPROVAL_EXPIRED");
@@ -420,6 +426,15 @@ export class DshWritingSession implements NativeWritingSession, WritingSessionAc
 
   cancelActive(runId: string): void {
     if (this.current?.runId === runId) this.handle.agent.cancel({ kind: "user" });
+  }
+
+  /**
+   * Last turn activity for idle eviction; undefined while a turn (or its approval) is
+   * active or after close, so recyclers never interrupt in-flight work.
+   */
+  idleSince(): number | undefined {
+    if (this.closed || this.current) return undefined;
+    return this.lastUsedAt;
   }
 
   pluginRecords(): readonly PluginRecord[] {

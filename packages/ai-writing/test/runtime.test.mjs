@@ -49,6 +49,7 @@ class Model extends LlmAdapter {
     yield { type: "reasoning-delta", index: 1, text: "PRIVATE_REASONING" };
     yield { type: "text-delta", index: 0, text };
     yield { type: "block-end", index: 0, block: { type: "text", text: `回答:${text}` } };
+    if (text === "metered") yield { type: "usage", usage: { inputTokens: 11, outputTokens: 7 } };
     yield { type: "finish", reason: { kind: text === "max" ? "max-tokens" : "stop" } };
   }
 }
@@ -314,6 +315,200 @@ test("deadline-exceeded turns fail before the model; cancellation aborts the act
     session.cancelActive("run_hold");
     const result = await executing;
     assert.equal(result.status, "cancelled");
+  } finally {
+    await f.runtime.dispose();
+  }
+});
+
+test("idle sessions are recycled and can be restored afterwards", async () => {
+  const detached = [];
+  const memory = createMemoryPersistencePlugin();
+  const f = await fixture({
+    memory,
+    options: {
+      limits: { maxSessions: 4, sessionIdleMs: 60 },
+      onSessionDetached: (id) => detached.push(id),
+    },
+  });
+  try {
+    const session = await f.runtime.attach({
+      conversationId: "conv_idle",
+      contextRevision: 1,
+      nativeSessionId: "native_idle",
+      restore: false,
+    });
+    const recorder = createRecordingHost();
+    const executed = await session.execute(
+      turnRequest({ nativeSessionId: "native_idle", inputText: "first" }),
+      recorder.host,
+      new AbortController().signal,
+    );
+    assert.equal(executed.status, "completed");
+    for (let i = 0; i < 100 && detached.length === 0; i++) await delay(20);
+    assert.deepEqual(detached, ["native_idle"]);
+    // The writer lock was released: restoring the recycled session succeeds and settles
+    // the durable turn without a new model call.
+    const calls = f.model.calls.length;
+    const restored = await f.runtime.attach({
+      conversationId: "conv_idle",
+      contextRevision: 1,
+      nativeSessionId: "native_idle",
+      restore: true,
+    });
+    const settled = await restored.settle(
+      turnRequest({
+        nativeSessionId: "native_idle",
+        inputText: "first",
+        plannedNativeMessageId: executed.nativeMessageId,
+        deliveryConfirmed: true,
+      }),
+      createRecordingHost().host,
+      new AbortController().signal,
+    );
+    assert.equal(settled.status, "completed");
+    assert.equal(f.model.calls.length, calls);
+  } finally {
+    await f.runtime.dispose();
+  }
+});
+
+test("a full session cache evicts the least recently used idle session", async () => {
+  const detached = [];
+  const f = await fixture({
+    options: {
+      limits: { maxSessions: 1, sessionIdleMs: 600_000 },
+      onSessionDetached: (id) => detached.push(id),
+    },
+  });
+  try {
+    const first = await f.runtime.attach({
+      conversationId: "conv_lru_a",
+      contextRevision: 1,
+      nativeSessionId: "native_lru_a",
+      restore: false,
+    });
+    await first.execute(
+      turnRequest({ nativeSessionId: "native_lru_a", inputText: "你好" }),
+      createRecordingHost().host,
+      new AbortController().signal,
+    );
+    const second = await f.runtime.attach({
+      conversationId: "conv_lru_b",
+      contextRevision: 1,
+      nativeSessionId: "native_lru_b",
+      restore: false,
+    });
+    assert.deepEqual(detached, ["native_lru_a"]);
+    const result = await second.execute(
+      turnRequest({ nativeSessionId: "native_lru_b", inputText: "继续" }),
+      createRecordingHost().host,
+      new AbortController().signal,
+    );
+    assert.equal(result.status, "completed");
+  } finally {
+    await f.runtime.dispose();
+  }
+});
+
+test("a busy session is never evicted to make room", async () => {
+  const detached = [];
+  const f = await fixture({
+    options: {
+      limits: { maxSessions: 1, sessionIdleMs: 1 },
+      onSessionDetached: (id) => detached.push(id),
+    },
+  });
+  try {
+    const session = await f.runtime.attach({
+      conversationId: "conv_busy",
+      contextRevision: 1,
+      nativeSessionId: "native_busy",
+      restore: false,
+    });
+    const executing = session.execute(
+      turnRequest({ nativeSessionId: "native_busy", inputText: "hold" }),
+      createRecordingHost().host,
+      new AbortController().signal,
+    );
+    await delay(30);
+    // The active turn holds the only slot: a second attach must refuse, not evict.
+    await assert.rejects(
+      f.runtime.attach({
+        conversationId: "conv_busy_b",
+        contextRevision: 1,
+        nativeSessionId: "native_busy_b",
+        restore: false,
+      }),
+      /RESOURCE_LIMIT/,
+    );
+    assert.deepEqual(detached, []);
+    session.cancelActive("run_test");
+    assert.equal((await executing).status, "cancelled");
+  } finally {
+    await f.runtime.dispose();
+  }
+});
+
+test("a host-retained idle session is not swept", async () => {
+  const detached = [];
+  const f = await fixture({
+    options: {
+      limits: { maxSessions: 1, sessionIdleMs: 30 },
+      retainSession: () => true,
+      onSessionDetached: (id) => detached.push(id),
+    },
+  });
+  try {
+    const session = await f.runtime.attach({
+      conversationId: "conv_retained",
+      contextRevision: 1,
+      nativeSessionId: "native_retained",
+      restore: false,
+    });
+    await session.execute(
+      turnRequest({ nativeSessionId: "native_retained", inputText: "你好" }),
+      createRecordingHost().host,
+      new AbortController().signal,
+    );
+    await delay(120);
+    assert.deepEqual(detached, []);
+    await assert.rejects(
+      f.runtime.attach({
+        conversationId: "conv_retained_b",
+        contextRevision: 1,
+        nativeSessionId: "native_retained_b",
+        restore: false,
+      }),
+      /RESOURCE_LIMIT/,
+    );
+  } finally {
+    await f.runtime.dispose();
+  }
+});
+
+test("adapter-reported token usage settles with the turn result", async () => {
+  const f = await fixture();
+  try {
+    const session = await f.runtime.attach({
+      conversationId: "conv_metered",
+      contextRevision: 1,
+      nativeSessionId: "native_metered",
+      restore: false,
+    });
+    const result = await session.execute(
+      turnRequest({ nativeSessionId: "native_metered", inputText: "metered" }),
+      createRecordingHost().host,
+      new AbortController().signal,
+    );
+    assert.equal(result.status, "completed");
+    assert.deepEqual(result.usage, { inputTokens: 11, outputTokens: 7 });
+    // Providers that report no accounting leave usage absent, never fabricated.
+    const second = await session.execute(
+      turnRequest({ runId: "run_unmetered", nativeSessionId: "native_metered", inputText: "你好" }),
+      createRecordingHost().host,
+      new AbortController().signal,
+    );
+    assert.equal(second.usage, undefined);
   } finally {
     await f.runtime.dispose();
   }

@@ -44,8 +44,11 @@ export function createAiInfra(
   };
 }
 
-export { AiService } from "./ai.service.js";
+export { AiService, DEFAULT_OWNER_HOURLY_MAX } from "./ai.service.js";
 export { AiRepository } from "./ai.repository.js";
 export type { ConversationOwner, CreateConversationCommand } from "./ai.service.js";
 export * from "./ai.types.js";
 export * from "./event-stream.js";
+export { mergeEvidenceBundles } from "./evidence.js";
+export { DispatchLoop } from "./dispatch.js";
+export { failureRunStatus, type DomainFailureMap } from "./failure.js";

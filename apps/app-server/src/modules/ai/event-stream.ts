@@ -1,7 +1,7 @@
 import type { FastifyReply } from "fastify";
+import { isAiEvent, type AiEvent } from "@zhishu/chat-contracts";
 import type { AiService } from "./ai.service.js";
 import type { ConversationRow } from "./ai.types.js";
-import type { AiEvent } from "@zhishu/chat-contracts";
 
 /**
  * Shared conversation transport used by qa, writing and public entry points. Same event
@@ -52,7 +52,16 @@ export interface SseHandle {
   frame(value: unknown, id?: string): void;
   heartbeat(): void;
   close(): void;
+  /** True once the transport ended, including a slow-consumer cutoff. */
+  readonly closed: boolean;
 }
+
+/**
+ * Slow-consumer backpressure: frames are bounded, but a stalled socket must not buffer
+ * without limit. Past the threshold the connection is destroyed; clients recover from
+ * the durable cursor with a snapshot refetch.
+ */
+const SSE_MAX_BUFFERED_BYTES = 1_048_576;
 
 export function startSse(reply: FastifyReply): SseHandle {
   reply.hijack();
@@ -63,20 +72,29 @@ export function startSse(reply: FastifyReply): SseHandle {
     "x-accel-buffering": "no",
   });
   let closed = false;
+  const write = (chunk: string) => {
+    if (closed) return;
+    reply.raw.write(chunk);
+    if (reply.raw.writableLength > SSE_MAX_BUFFERED_BYTES) {
+      closed = true;
+      reply.raw.destroy();
+    }
+  };
   return {
     frame(value, id) {
-      if (closed) return;
       const data = JSON.stringify(value);
-      reply.raw.write(id !== undefined ? `id: ${id}\ndata: ${data}\n\n` : `data: ${data}\n\n`);
+      write(id !== undefined ? `id: ${id}\ndata: ${data}\n\n` : `data: ${data}\n\n`);
     },
     heartbeat() {
-      if (closed) return;
-      reply.raw.write(": heartbeat\n\n");
+      write(": heartbeat\n\n");
     },
     close() {
       if (closed) return;
       closed = true;
       reply.raw.end();
+    },
+    get closed() {
+      return closed;
     },
   };
 }
@@ -85,6 +103,8 @@ export function startSse(reply: FastifyReply): SseHandle {
  * Streams durable product events from the outbox cursor, wakes on same-process commits and
  * falls back to bounded polling for cross-instance delivery. Preview frames are injected by
  * the caller between event batches; gaps require the client to refetch a snapshot.
+ * Public callers may filter events against current authorization and revalidate the gate
+ * each poll; a failed gate ends the stream with a resync frame.
  */
 export async function streamConversation(
   service: AiService,
@@ -94,14 +114,27 @@ export async function streamConversation(
   sse: SseHandle,
   signal: AbortSignal,
   extraFrames?: () => unknown[],
+  filterEvent?: (event: AiEvent) => Promise<boolean>,
+  revalidate?: () => Promise<boolean>,
 ): Promise<void> {
   let position = cursor;
   const key = conversationKey(conversation);
-  while (!signal.aborted) {
+  const resync = () => {
+    sse.frame({
+      type: "resync-required",
+      conversationId: conversation.id,
+      purpose: conversation.purpose,
+    });
+  };
+  while (!signal.aborted && !sse.closed) {
+    if (revalidate && !(await revalidate())) {
+      resync();
+      return;
+    }
     const rows = await service.events(conversation.tenantId, conversation.id, position, 128);
     for (const row of rows) {
-      if (signal.aborted) return;
-      const event: AiEvent = {
+      if (signal.aborted || sse.closed) return;
+      const candidate = {
         eventId: `evt_${row.sequence}`,
         conversationId: row.conversationId,
         purpose: conversation.purpose,
@@ -109,13 +142,20 @@ export async function streamConversation(
         type: row.type,
         entityId: row.entityId,
         createdAt: row.createdAt.toISOString(),
-        payload: row.payload as never,
+        payload: row.payload,
       };
-      sse.frame(event, event.sequence);
-      position = event.sequence;
+      // Stored events must satisfy the wire contract; a corrupt row forces a snapshot
+      // refetch instead of forwarding an untyped payload.
+      if (!isAiEvent(candidate)) {
+        resync();
+        return;
+      }
+      position = candidate.sequence;
+      if (filterEvent && !(await filterEvent(candidate))) continue;
+      sse.frame(candidate, candidate.sequence);
     }
     for (const frame of extraFrames?.() ?? []) {
-      if (signal.aborted) return;
+      if (signal.aborted || sse.closed) return;
       sse.frame(frame);
     }
     const woke = await bus.next(key, 1_000, signal);

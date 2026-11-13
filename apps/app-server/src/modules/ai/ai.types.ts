@@ -159,3 +159,25 @@ export const artifactDto = (row: ArtifactRow): Artifact => ({
 });
 
 export type { ConversationSnapshot, WritingApproval };
+
+/**
+ * QA→writing handoff contract. Lives in the shared ai module so neither purpose depends on
+ * the other's type surface; the port is installed by root assembly after both services exist.
+ */
+export interface HandoffCommand {
+  tenantId: string;
+  identityId: string;
+  sourceConversationId: string;
+  messageIds: string[];
+  artifactIds: string[];
+  instruction: string;
+  intent?: "auto" | "create" | "continue" | "rewrite" | "summarize" | "translate" | "research";
+  targetDocumentId?: string | null;
+  creationKey: string;
+}
+
+export interface WritingHandoffPort {
+  createFromHandoff(
+    cmd: HandoffCommand,
+  ): Promise<{ conversationId: string; runId: string; replayed: boolean }>;
+}

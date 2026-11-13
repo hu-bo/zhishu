@@ -218,7 +218,8 @@ export async function writingRoutes(app: FastifyInstance, writing: WritingServic
           sse,
           controller.signal,
         );
-      } catch {
+      } catch (error) {
+        request.log.error({ err: error }, "Writing event stream failed");
         sse.close();
       }
     },

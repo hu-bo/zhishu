@@ -1,10 +1,6 @@
 import { randomUUID } from "node:crypto";
-import * as Provider from "@deepseek-ai/dsh-llm-pi-ai";
-import { createLaunchEnvironmentSnapshot } from "@deepseek-ai/dsh-launch-environment";
 import { and, eq } from "drizzle-orm";
 import type { Pool } from "pg";
-import type { Context } from "@deepseek-ai/cordis";
-import type { Agent } from "@deepseek-ai/dsh-agent";
 import {
   createWritingRuntime,
   installImage,
@@ -22,6 +18,14 @@ import {
   type WritingTurnRequest,
   type WritingTurnResult,
 } from "@zhishu/ai-writing";
+import {
+  createLaunchEnvironmentSnapshot,
+  PiAiProvider,
+  type Agent,
+  type Context,
+  type LlmAdapter,
+  type PluginRecord,
+} from "@zhishu/ai-writing/kernel";
 import type { WebSearchPort } from "@zhishu/ai-writing/contracts";
 import type {
   DocumentSnapshot,
@@ -52,22 +56,32 @@ import { DomainError } from "../../shared/domain-error.js";
 import type { Database } from "../../../database/index.js";
 import {
   conversationKey,
+  DEFAULT_OWNER_HOURLY_MAX,
+  DispatchLoop,
+  failureRunStatus,
+  mergeEvidenceBundles,
   runDto,
   streamConversation,
   type AiService,
   type ConversationEventBus,
   type ConversationRow,
+  type DomainFailureMap,
+  type HandoffCommand,
   type RunRow,
   type SseHandle,
+  type WritingHandoffPort,
 } from "../ai/index.js";
 import type { CollaborationOwner, DocumentWriteTransaction } from "../collaboration/owner.js";
 import { documentActionSql } from "../authorization/document-access.js";
 import type { PermissionAction } from "../authorization/policy.js";
 import type { RagService, RetrievalScope } from "../rag/rag.service.js";
 import type { Principal } from "../identity/identity.types.js";
-import type { HandoffCommand, WritingHandoffPort } from "../qa/qa.service.js";
 import { WritingImages } from "./writing.images.js";
-import { nativeSessionIdFor, postgresNativeSessionPersistence } from "./writing.native.js";
+import {
+  nativeSessionIdFor,
+  parseNativeSessionId,
+  postgresNativeSessionPersistence,
+} from "./writing.native.js";
 import { createTavilyPort } from "./writing.tavily.js";
 
 /** Run-scoped state shared by tools installed once per attached session. */
@@ -111,17 +125,20 @@ const webSearchLimits = {
  */
 export class WritingService {
   private runtime?: Promise<WritingRuntime>;
+  /** Cached native handles keyed by nativeSessionId; eviction notifies via onSessionDetached. */
   private sessions = new Map<string, Promise<NativeWritingSession>>();
+  /** Live SSE observers per conversation; observed sessions are retained against idle eviction. */
+  private observers = new Map<string, number>();
   private turnStates = new Map<string, TurnToolState>();
   private previews = new Map<string, PreviewFrame[]>();
   private activeRuns = new Map<string, AbortController>();
-  private controller?: AbortController;
-  private timer?: ReturnType<typeof setTimeout>;
-  private running?: Promise<void>;
+  private readonly dispatch: DispatchLoop;
   /** Test seam: hosts may inject a deterministic LLM adapter like the smoke scripts do. */
-  adapter?: import("@deepseek-ai/dsh-llm").LlmAdapter;
+  adapter?: LlmAdapter;
 
-  constructor(private readonly deps: WritingServiceDeps) {}
+  constructor(private readonly deps: WritingServiceDeps) {
+    this.dispatch = new DispatchLoop(() => this.drainOnce(), deps.log, "writing");
+  }
 
   configurationId(): string {
     const c = this.deps.config;
@@ -177,9 +194,17 @@ export class WritingService {
       configurationId: this.configurationId(),
       limits: {
         maxSessions: this.sessionCapacity(),
+        sessionIdleMs: this.deps.config.AI_SESSION_IDLE_MS,
         maxModelCalls: DEFAULT_GENERATION_LIMITS.maxModelCalls,
         maxInputBytes: 128_000,
         maxOutputBytes: DEFAULT_GENERATION_LIMITS.maxOutputBytes,
+      },
+      retainSession: (nativeSessionId) => {
+        const parsed = parseNativeSessionId(nativeSessionId);
+        return !!parsed && (this.observers.get(parsed.conversationId) ?? 0) > 0;
+      },
+      onSessionDetached: (nativeSessionId) => {
+        this.sessions.delete(nativeSessionId);
       },
       configure: (ctx) => this.configureKernel(ctx),
       setup: (ctx, agent, access) => this.installTurnTools(ctx, agent, access),
@@ -206,7 +231,14 @@ export class WritingService {
   }
 
   private async configureKernel(ctx: Context): Promise<void> {
-    await ctx.plugin(postgresNativeSessionPersistence(this.deps.pool));
+    await ctx.plugin(
+      postgresNativeSessionPersistence(this.deps.pool, (sessionId, error) => {
+        this.deps.log("writing_native_append_failed", {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }),
+    );
     if (this.adapter) {
       ctx.llm.registerAdapter(["writing"], this.adapter);
       return;
@@ -222,7 +254,7 @@ export class WritingService {
       (c.AI_API_FORMAT ?? (c.AI_BASE_URL?.includes("/anthropic") ? "anthropic" : "openai")) ===
       "anthropic";
     const reasoning = c.AI_THINKING === "disabled" ? undefined : c.AI_REASONING_EFFORT;
-    await ctx.plugin(Provider, {
+    await ctx.plugin(PiAiProvider, {
       providers: {
         writing: {
           apiKeyEnv: "AI_API_KEY",
@@ -250,10 +282,7 @@ export class WritingService {
     });
   }
 
-  private trustedResultText(
-    records: readonly import("@deepseek-ai/dsh-session").PluginRecord[],
-    turnText: string,
-  ): string {
+  private trustedResultText(records: readonly PluginRecord[], turnText: string): string {
     for (let index = records.length - 1; index >= 0; index--) {
       const record = records[index];
       if (record?.type === "plugin:zhishu/writing") {
@@ -386,7 +415,7 @@ export class WritingService {
     installWriting(ctx, {
       access,
       buildInput: async () => this.buildWritingInput(access),
-      evidence: () => mergeBundles(state()?.bundles ?? []),
+      evidence: () => mergeEvidenceBundles(state()?.bundles ?? []),
       artifactOf: (evidenceId) => state()?.artifactIdByEvidence.get(evidenceId),
       verify: async (signal) => {
         const current = state();
@@ -454,7 +483,7 @@ export class WritingService {
     const bundle: EvidenceBundle = {
       sources: sources.length
         ? [...sources]
-        : mergeBundles(state.bundles).sources.filter((source) =>
+        : mergeEvidenceBundles(state.bundles).sources.filter((source) =>
             items.some(
               (item) => item.sourceId === source.sourceId && item.snapshotId === source.snapshotId,
             ),
@@ -537,7 +566,7 @@ export class WritingService {
         documentId,
         generationId: current.snapshot.generationId,
         durableSeq: current.snapshot.durableSeq,
-        contentHash: hashContent(current.snapshot.content) as `sha256:${string}`,
+        contentHash: hashContent(current.snapshot.content),
       },
       structureRevision: current.structureRevision,
     };
@@ -553,7 +582,7 @@ export class WritingService {
                 ? [
                     {
                       blockId: entry.blockId,
-                      contentHash: hashContent(block) as `sha256:${string}`,
+                      contentHash: hashContent(block),
                     },
                   ]
                 : [];
@@ -572,7 +601,7 @@ export class WritingService {
       baseStructureRevision: capture.structureRevision,
       request: { ...context.request, target },
       snapshot: current.snapshot,
-      evidence: mergeBundles(state.bundles),
+      evidence: mergeEvidenceBundles(state.bundles),
       prompt: { id: "writing", version: "2", systemInstruction: "" },
     };
   }
@@ -692,7 +721,7 @@ export class WritingService {
           documentId,
           generationId: current.snapshot.generationId,
           durableSeq: current.snapshot.durableSeq,
-          contentHash: hashContent(current.snapshot.content) as `sha256:${string}`,
+          contentHash: hashContent(current.snapshot.content),
         },
         structureRevision: current.structureRevision,
       };
@@ -705,7 +734,7 @@ export class WritingService {
           documentId: targetDocumentId,
           generationId: current.snapshot.generationId,
           durableSeq: current.snapshot.durableSeq,
-          contentHash: hashContent(current.snapshot.content) as `sha256:${string}`,
+          contentHash: hashContent(current.snapshot.content),
         },
         structureRevision: current.structureRevision,
       };
@@ -740,7 +769,10 @@ export class WritingService {
             : {}),
         },
       },
-      { tenantRunningMax: this.deps.config.AI_MAX_CONCURRENT, ownerHourlyMax: 120 },
+      {
+        tenantRunningMax: this.deps.config.AI_MAX_CONCURRENT,
+        ownerHourlyMax: DEFAULT_OWNER_HOURLY_MAX,
+      },
     );
     this.kick();
     return { runId: admitted.run.id };
@@ -760,7 +792,7 @@ export class WritingService {
     const entries = target.blockIds.map((blockId) => {
       const block = blocks.find((candidate) => candidate.attrs.blockId === blockId);
       if (!block) throw new DomainError("CONFLICT", "所选段落已不存在，请重新选择");
-      return { blockId, contentHash: hashContent(block) as `sha256:${string}` };
+      return { blockId, contentHash: hashContent(block) };
     });
     if (!entries.length) throw new DomainError("VALIDATION_ERROR", "未选择任何段落");
     return { kind: "blocks", blocks: entries };
@@ -773,11 +805,7 @@ export class WritingService {
     const intent = body.intent ?? (target.kind === "document" ? "rewrite-document" : "auto");
     const request: WritingRequest = { intent, instruction: body.text, target };
     const checked = validateWritingRequest(request);
-    if (!checked.success)
-      throw new DomainError(
-        checked.issues[0]?.code === "UNSUPPORTED_TARGET" ? "VALIDATION_ERROR" : "VALIDATION_ERROR",
-        "写作指令与目标不匹配",
-      );
+    if (!checked.success) throw new DomainError("VALIDATION_ERROR", "写作指令与目标不匹配");
     return request;
   }
 
@@ -889,15 +917,22 @@ export class WritingService {
       this.previews.set(state.run.id, []);
       return frames;
     };
-    await streamConversation(
-      this.deps.store,
-      this.deps.bus,
-      conversation,
-      cursor,
-      sse,
-      signal,
-      take,
-    );
+    this.observers.set(conversation.id, (this.observers.get(conversation.id) ?? 0) + 1);
+    try {
+      await streamConversation(
+        this.deps.store,
+        this.deps.bus,
+        conversation,
+        cursor,
+        sse,
+        signal,
+        take,
+      );
+    } finally {
+      const remaining = (this.observers.get(conversation.id) ?? 1) - 1;
+      if (remaining > 0) this.observers.set(conversation.id, remaining);
+      else this.observers.delete(conversation.id);
+    }
   }
 
   async artifact(
@@ -916,40 +951,22 @@ export class WritingService {
   // ------------------------------------------------------------- dispatch
 
   start() {
-    if (this.controller) return;
-    this.controller = new AbortController();
-    const loop = async (): Promise<void> => {
-      while (this.controller && !this.controller.signal.aborted) {
-        const processed = await this.drainOnce().catch((error: unknown) => {
-          this.deps.log("writing_dispatch_failed", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-          return false;
-        });
-        await new Promise((resolve) => setTimeout(resolve, processed ? 50 : 400));
-      }
-    };
-    this.running = loop();
+    this.dispatch.start();
   }
 
   async stop() {
-    this.controller?.abort();
-    if (this.timer) clearTimeout(this.timer);
-    await this.running;
+    await this.dispatch.stop();
     const runtime = this.runtime;
     this.runtime = undefined;
     if (runtime) await runtime.then((instance) => instance.dispose()).catch(() => undefined);
   }
 
   private kick() {
-    if (!this.controller) return;
-    this.timer = setTimeout(() => void this.drainOnce().catch(() => undefined), 50);
-    this.timer.unref();
+    this.dispatch.kick();
   }
 
   private async drainOnce(): Promise<boolean> {
-    if (!this.controller || this.activeRuns.size >= this.deps.config.AI_MAX_CONCURRENT)
-      return false;
+    if (this.activeRuns.size >= this.deps.config.AI_MAX_CONCURRENT) return false;
     if (!this.capabilities().enabled) return false;
     const claimed = await this.deps.store.claimNext(
       "writing",
@@ -963,8 +980,7 @@ export class WritingService {
   private async attachedSession(conversation: ConversationRow): Promise<NativeWritingSession> {
     const revision = conversation.contextRevision;
     const nativeSessionId = nativeSessionIdFor(conversation.id, revision);
-    const key = `${conversation.id}:${revision}`;
-    const existing = this.sessions.get(key);
+    const existing = this.sessions.get(nativeSessionId);
     if (existing) return existing;
     const runtime = await this.initRuntime();
     const persisted = await this.deps.pool.query("select 1 from writing_sessions where id=$1", [
@@ -978,10 +994,10 @@ export class WritingService {
         restore: !!persisted.rowCount,
       })
       .catch((error: unknown) => {
-        this.sessions.delete(key);
+        this.sessions.delete(nativeSessionId);
         throw error;
       });
-    this.sessions.set(key, pending);
+    this.sessions.set(nativeSessionId, pending);
     return pending;
   }
 
@@ -1045,7 +1061,7 @@ export class WritingService {
       const inputText = userMessage?.parts.find((part) => part.kind === "text");
       if (!inputText || inputText.kind !== "text") throw new WritingRuntimeError("INVALID_INPUT");
       await this.loadReferenceEvidence(state, controller.signal);
-      const session = await this.attachedSession(conversation);
+      let session = await this.attachedSession(conversation);
       const execution = (run.execution as WritingExecution | null) ?? {
         evidenceRefs: [],
         evidenceArtifactIds: [],
@@ -1070,9 +1086,22 @@ export class WritingService {
         context: run.context as WritingRunContext,
       };
       const host = this.turnHost(conversation, state);
-      const result = execution.nativeMessageId
-        ? await session.settle(request, host, controller.signal)
-        : await session.execute(request, host, controller.signal);
+      const deliver = (target: NativeWritingSession) =>
+        execution.nativeMessageId
+          ? target.settle(request, host, controller.signal)
+          : target.execute(request, host, controller.signal);
+      let result: WritingTurnResult;
+      try {
+        result = await deliver(session);
+      } catch (error) {
+        // Idle eviction can race a cached handle; SESSION_UNAVAILABLE is thrown before any
+        // delivery side effect, so exactly one re-attach is safe.
+        if (!(error instanceof WritingRuntimeError) || error.code !== "SESSION_UNAVAILABLE")
+          throw error;
+        this.sessions.delete(request.nativeSessionId);
+        session = await this.attachedSession(conversation);
+        result = await deliver(session);
+      }
       await this.finishAttempt(state, session, result);
     } catch (error) {
       if (state) await this.finishFailure(state, error, controller.signal.aborted);
@@ -1080,11 +1109,17 @@ export class WritingService {
       clearTimeout(deadline);
       this.activeRuns.delete(run.id);
       this.turnStates.delete(conversation.id);
+      this.previews.delete(run.id);
       await this.deps.pool
         .query("update writing_sessions set updated_at=now() where id=$1", [
           nativeSessionIdFor(conversation.id, conversation.contextRevision),
         ])
-        .catch(() => undefined);
+        .catch((error: unknown) => {
+          this.deps.log("writing_session_touch_failed", {
+            runId: run.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
     }
   }
 
@@ -1235,6 +1270,8 @@ export class WritingService {
       status,
       ...(errorCode ? { errorCode } : {}),
       ...(parts.length ? { assistantParts: parts } : {}),
+      // Settle adapter-reported tokens on top of the per-call reservations.
+      ...(result.usage ? { usage: result.usage } : {}),
       execution: this.executionPatch(state, {
         nativeMessageId: result.nativeMessageId,
         deliveryConfirmed: result.deliveryConfirmed,
@@ -1251,16 +1288,7 @@ export class WritingService {
     aborted: boolean,
   ): Promise<void> {
     const store = this.deps.store;
-    const code =
-      error instanceof WritingRuntimeError
-        ? error.code
-        : error instanceof DomainError
-          ? error.code === "AI_ACCESS_REVOKED"
-            ? "ACCESS_REVOKED"
-            : "MODEL_FAILED"
-          : aborted
-            ? "CANCELLED"
-            : "MODEL_FAILED";
+    const code = writingFailureCode(error, aborted);
     if (code === "PERSISTENCE_FAILED") {
       // The lease may be gone; maintain() finalizes as interrupted when this owner is stale.
       const fresh = await store.readRun(state.run.tenantId, state.run.id);
@@ -1271,12 +1299,7 @@ export class WritingService {
       )
         return;
     }
-    const status =
-      code === "CANCELLED"
-        ? "cancelled"
-        : code === "SESSION_UNAVAILABLE"
-          ? "interrupted"
-          : "failed";
+    const status = failureRunStatus(code, "SESSION_UNAVAILABLE");
     await store
       .commitRunOutput({
         run: state.run,
@@ -1286,7 +1309,13 @@ export class WritingService {
           ? { errorCode: code.slice(0, 64) }
           : {}),
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        // maintain() finalizes stale leases; the fault must still be visible.
+        this.deps.log("writing_failure_commit_lost", {
+          runId: state.run.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
     this.deps.bus.wake(conversationKey(state.conversation));
   }
 
@@ -1375,7 +1404,7 @@ export class WritingService {
           const locked = await store.repository.lockArtifact(tx, principal.tenantId, artifactId);
           if (locked?.receipt) throw new DomainError("CONFLICT", "提案已由其他决定落地");
           await this.assertDocumentAccessTx(tx, principal, documentId);
-          await this.assertSourcesDistributable(principal, payload);
+          await this.assertSourcesDistributable(tx, principal, payload);
         },
         record: async (tx, appliedReceipt) => {
           const review: ProposalReview = {
@@ -1618,12 +1647,14 @@ export class WritingService {
 
   /** Citation sources must remain readable by the adopting principal at write time. */
   private async assertSourcesDistributable(
+    tx: DocumentWriteTransaction,
     principal: Principal,
     payload: WritingProposalPayload,
   ): Promise<void> {
     const docIds = new Set<string>();
     for (const citation of payload.citations) {
-      const artifact = await this.deps.store.findArtifact(
+      const artifact = await this.deps.store.repository.findArtifact(
+        tx,
         principal.tenantId,
         citation.evidenceArtifactId,
       );
@@ -1633,7 +1664,7 @@ export class WritingService {
     }
     for (const docId of docIds) {
       if (docId === payload.document.documentId) continue;
-      const rows = await this.deps.db
+      const rows = await tx
         .select({ id: documents.id })
         .from(documents)
         .where(
@@ -1671,7 +1702,7 @@ export class WritingService {
             documentId: cmd.targetDocumentId,
             generationId: current.snapshot.generationId,
             durableSeq: current.snapshot.durableSeq,
-            contentHash: hashContent(current.snapshot.content) as `sha256:${string}`,
+            contentHash: hashContent(current.snapshot.content),
           },
           structureRevision: current.structureRevision,
         };
@@ -1724,7 +1755,10 @@ export class WritingService {
             referenceArtifactIds: cmd.artifactIds,
           },
         },
-        { tenantRunningMax: this.deps.config.AI_MAX_CONCURRENT, ownerHourlyMax: 120 },
+        {
+          tenantRunningMax: this.deps.config.AI_MAX_CONCURRENT,
+          ownerHourlyMax: DEFAULT_OWNER_HOURLY_MAX,
+        },
       );
       this.kick();
       return {
@@ -1773,23 +1807,14 @@ export class WritingService {
   }
 }
 
-function mergeBundles(bundles: EvidenceBundle[]): EvidenceBundle {
-  const sources = new Map<string, EvidenceSource>();
-  const items: EvidenceItem[] = [];
-  for (const bundle of bundles) {
-    for (const source of bundle.sources)
-      sources.set(`${source.sourceId}\u0000${source.snapshotId}`, source);
-    for (const item of bundle.items)
-      if (!items.some((existing) => existing.evidenceId === item.evidenceId)) items.push(item);
-  }
-  const keptItems = items;
-  return {
-    sources: [...sources.values()].filter((source) =>
-      keptItems.some(
-        (item) => item.sourceId === source.sourceId && item.snapshotId === source.snapshotId,
-      ),
-    ),
-    items: keptItems,
-    freshness: "current",
-  };
+const WRITING_DOMAIN_FAILURE: DomainFailureMap = {
+  AI_ACCESS_REVOKED: "ACCESS_REVOKED",
+};
+
+/** Classify a failed attempt; domain errors take precedence over the abort flag here. */
+function writingFailureCode(error: unknown, aborted: boolean): string {
+  if (error instanceof WritingRuntimeError) return error.code;
+  if (error instanceof DomainError) return WRITING_DOMAIN_FAILURE[error.code] ?? "MODEL_FAILED";
+  if (aborted) return "CANCELLED";
+  return "MODEL_FAILED";
 }

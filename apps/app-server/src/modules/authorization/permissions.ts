@@ -17,6 +17,12 @@ export {
   hasDocumentPermission,
   requireWorkspaceDocumentManagers,
 } from "./document-access.js";
-export { workspaceAccess, workspaceRole, requireWorkspaceOrganizer } from "./workspace-access.js";
+export {
+  workspaceAccess,
+  workspaceRole,
+  requireWorkspaceOrganizer,
+  assertWorkspaceMemberCapacity,
+  WORKSPACE_MEMBER_LIMIT,
+} from "./workspace-access.js";
 export { SessionInvalidator } from "./session-invalidation.js";
 export type { DocumentAccessMode } from "./document-access.js";

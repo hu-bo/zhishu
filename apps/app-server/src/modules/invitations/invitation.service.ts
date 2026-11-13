@@ -1,9 +1,9 @@
 import { lockKnowledgeTree } from "../../shared/knowledge-transaction.js";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { createHash, randomBytes } from "node:crypto";
+import { and, desc, eq } from "drizzle-orm";
 import type { Database } from "../../../database/index.js";
 import { workspaceInvitations, resourceAcl } from "../../../database/schema/index.js";
-import { workspaceAccess } from "../authorization/permissions.js";
+import { workspaceAccess, assertWorkspaceMemberCapacity } from "../authorization/permissions.js";
 import type { Principal } from "../identity/identity.types.js";
 import { DomainError } from "../../shared/domain-error.js";
 import { insertNotifications } from "../notifications/index.js";
@@ -143,17 +143,7 @@ export class InvitationService {
         return { workspaceId: row.workspaceId };
       }
       if (!existing && workspace.ownerIdentityId !== principal.identityId) {
-        const [count] = await tx
-          .select({ value: sql<number>`count(*)::int` })
-          .from(resourceAcl)
-          .where(
-            and(
-              eq(resourceAcl.tenantId, principal.tenantId),
-              eq(resourceAcl.workspaceId, row.workspaceId),
-            ),
-          );
-        if ((count?.value ?? 0) >= 499)
-          throw new DomainError("RESOURCE_LIMIT", "空间成员数量已达上限");
+        await assertWorkspaceMemberCapacity(tx, principal.tenantId, row.workspaceId);
         await tx.insert(resourceAcl).values({
           tenantId: principal.tenantId,
           workspaceId: row.workspaceId,
@@ -176,7 +166,7 @@ export class InvitationService {
             recipientId: row.createdBy,
             actorId: principal.identityId,
             type: "permission",
-            eventKey: `invitation-accepted:${randomUUID()}`,
+            eventKey: `invitation-accepted:${row.id}`,
             workspaceId: row.workspaceId,
             message: "一位成员接受了你的空间邀请",
           },

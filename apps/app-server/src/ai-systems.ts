@@ -3,7 +3,7 @@ import { ChatOpenAI } from "@langchain/openai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { FastifyInstance } from "fastify";
-import type { LlmAdapter } from "@deepseek-ai/dsh-llm";
+import type { LlmAdapter } from "@zhishu/ai-writing/kernel";
 import type { AppConfig } from "./config.js";
 import type { CollaborationOwner } from "./modules/collaboration/owner.js";
 import { AssetObjectStorage } from "./modules/assets/asset-storage.js";
@@ -130,6 +130,7 @@ export function assembleAiSystems(
   const qa = createQaService({
     store: infra.service,
     bus: infra.bus,
+    db: app.db,
     rag,
     model,
     config,
@@ -139,13 +140,18 @@ export function assembleAiSystems(
   const sites = createQaSiteService({ db: app.db, store: infra.service, config, log });
   qa.siteQuota = async (tenantId, siteId) => sites.messagesPerHourFor(tenantId, siteId);
   // qa-sites resolves live public audiences; the qa module never imports it directly.
-  qa.siteApproved = async (conversation) => {
+  const liveSiteState = async (conversation: { tenantId: string; siteId: string | null }) => {
     if (!conversation.siteId) throw new DomainError("NOT_FOUND", "站点会话缺少站点");
     const site = await sites.findSiteById(conversation.siteId);
     if (!site || site.tenantId !== conversation.tenantId)
       throw new DomainError("AI_ACCESS_REVOKED", "站点不可用");
     if (site.status !== "active") throw new DomainError("AI_ACCESS_REVOKED", "站点当前不可访问");
-    return sites.approvedDocuments(site);
+    return { site, approved: await sites.approvedDocuments(site) };
+  };
+  qa.siteApproved = async (conversation) => (await liveSiteState(conversation)).approved;
+  qa.siteStreamState = async (conversation) => {
+    const { site, approved } = await liveSiteState(conversation);
+    return { accessRevision: site.accessRevision, approved };
   };
   const publicLinkage: DocumentPublicLinkage = {
     detachDocuments: async (tx, tenantId, documentIds) => {

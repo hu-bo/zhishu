@@ -4,7 +4,7 @@ import process from "node:process";
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { LlmAdapter, ToolCallId, type GenerateOptions } from "@deepseek-ai/dsh-llm";
+import { LlmAdapter, ToolCallId, type GenerateOptions } from "@zhishu/ai-writing/kernel";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { RagService } from "../modules/rag/rag.service.js";
 import type { EvidenceBundle } from "@zhishu/ai-contracts";

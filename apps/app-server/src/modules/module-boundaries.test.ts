@@ -8,7 +8,7 @@ import ts from "typescript";
 const modules = fileURLToPath(new URL(".", import.meta.url));
 const owner = (file: string) => relative(modules, file).split(/[\\/]/)[0];
 
-function runtimeImports(file: string): string[] {
+function collectImports(file: string, includeTypeOnly: boolean): string[] {
   const source = ts.createSourceFile(
     file,
     readFileSync(file, "utf8"),
@@ -19,26 +19,32 @@ function runtimeImports(file: string): string[] {
     if (!ts.isImportDeclaration(node) && !ts.isExportDeclaration(node)) return [];
     const module = node.moduleSpecifier;
     if (!module || !ts.isStringLiteral(module) || !module.text.startsWith(".")) return [];
-    if (ts.isImportDeclaration(node)) {
-      const clause = node.importClause;
-      if (clause?.isTypeOnly) return [];
-      if (
-        clause &&
-        !clause.name &&
-        clause.namedBindings &&
-        ts.isNamedImports(clause.namedBindings) &&
-        clause.namedBindings.elements.every((binding) => binding.isTypeOnly)
+    if (!includeTypeOnly) {
+      if (ts.isImportDeclaration(node)) {
+        const clause = node.importClause;
+        if (clause?.isTypeOnly) return [];
+        if (
+          clause &&
+          !clause.name &&
+          clause.namedBindings &&
+          ts.isNamedImports(clause.namedBindings) &&
+          clause.namedBindings.elements.every((binding) => binding.isTypeOnly)
+        )
+          return [];
+      } else if (
+        node.isTypeOnly ||
+        (node.exportClause &&
+          ts.isNamedExports(node.exportClause) &&
+          node.exportClause.elements.every((binding) => binding.isTypeOnly))
       )
         return [];
-    } else if (
-      node.isTypeOnly ||
-      (node.exportClause &&
-        ts.isNamedExports(node.exportClause) &&
-        node.exportClause.elements.every((binding) => binding.isTypeOnly))
-    )
-      return [];
+    }
     return [resolve(dirname(file), module.text.replace(/\.js$/, ".ts"))];
   });
+}
+
+function runtimeImports(file: string): string[] {
+  return collectImports(file, false);
 }
 
 test("workspace, catalog and authorization policy modules remain independent of document orchestration", () => {
@@ -118,13 +124,39 @@ test("retired AI engines, legacy product protocols and the template module are g
   ) as { dependencies?: Record<string, string> };
   for (const retired of ["@zhishu/ai-runtime", "@zhishu/ai-plugins", "@zhishu/dsh-agent"])
     assert.ok(!(rootManifest.dependencies ?? {})[retired], `${retired} must not be a dependency`);
-  // Database schema may only import pure contracts and its own files.
+  // Database schema may only import pure contracts and its own files — type imports included.
   for (const file of readdirSync(resolve(serverRoot, "database/schema"))) {
     if (!file.endsWith(".table.ts")) continue;
-    for (const dependency of runtimeImports(resolve(serverRoot, "database/schema", file)))
+    for (const dependency of collectImports(resolve(serverRoot, "database/schema", file), true))
       assert.ok(
         !relative(serverRoot, dependency).startsWith("src") && !dependency.includes("node_modules"),
         `database/schema/${file} must not import server modules or engine packages`,
       );
   }
+});
+
+test("the DSH kernel stays behind @zhishu packages: app-server never touches @deepseek-ai", () => {
+  const serverRoot = resolve(modules, "../..");
+  const manifest = JSON.parse(readFileSync(resolve(serverRoot, "package.json"), "utf8")) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+  for (const dep of Object.keys({ ...manifest.dependencies, ...manifest.devDependencies }))
+    assert.ok(
+      !dep.startsWith("@deepseek-ai/"),
+      `${dep} must not be a direct app-server dependency`,
+    );
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== "dist") walk(path);
+      } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts"))
+        assert.ok(
+          !/["']@deepseek-ai\//.test(readFileSync(path, "utf8")),
+          `${relative(serverRoot, path)} must take kernel types and helpers from @zhishu/ai-writing/kernel`,
+        );
+    }
+  };
+  for (const dir of ["src", "database"]) walk(join(serverRoot, dir));
 });

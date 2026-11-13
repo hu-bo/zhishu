@@ -2,11 +2,19 @@ import { z } from "zod";
 import { pluginRecordOf, type PluginRecord, type TurnEndReason } from "@deepseek-ai/dsh-session";
 import type { ProjectionDefinition } from "@deepseek-ai/dsh-session-projection";
 
+export interface NativeTurnUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface NativeWritingState {
   currentTurn: number;
   inputs: Record<string, number>;
   pending: { "next-turn": string[]; "next-step": string[] };
-  turns: Record<string, { text: string; hasTools: boolean; reason?: TurnEndReason }>;
+  turns: Record<
+    string,
+    { text: string; hasTools: boolean; reason?: TurnEndReason; usage?: NativeTurnUsage }
+  >;
   records: PluginRecord[];
 }
 declare module "@deepseek-ai/dsh-session-projection" {
@@ -28,6 +36,12 @@ export const writingProjection: ProjectionDefinition<"zhishuWriting"> = {
         text: z.string(),
         hasTools: z.boolean(),
         reason: z.custom<TurnEndReason>().optional(),
+        usage: z
+          .object({
+            inputTokens: z.number().int().nonnegative(),
+            outputTokens: z.number().int().nonnegative(),
+          })
+          .optional(),
       }),
     ),
     records: z.array(z.custom<PluginRecord>()),
@@ -68,20 +82,32 @@ export const writingProjection: ProjectionDefinition<"zhishuWriting"> = {
     ) {
       const turn = event.data.turn,
         previous = state.turns[turn] ?? { text: "", hasTools: false };
-      const current =
-        event.type === "assistant/message"
-          ? {
-              ...previous,
-              text: [
-                previous.text,
-                ...event.data.message.content.filter((b) => b.type === "text").map((b) => b.text),
-              ]
-                .filter(Boolean)
-                .join("\n\n"),
-            }
-          : event.type === "tool/call"
-            ? { ...previous, hasTools: true }
-            : { ...previous, reason: event.data.reason };
+      let current = previous;
+      if (event.type === "assistant/message") {
+        const usage = event.data.usage;
+        current = {
+          ...previous,
+          text: [
+            previous.text,
+            ...event.data.message.content.filter((b) => b.type === "text").map((b) => b.text),
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+          // Adapter-reported token accounting travels with the message; accumulate per turn.
+          ...(usage
+            ? {
+                usage: {
+                  inputTokens: (previous.usage?.inputTokens ?? 0) + usage.inputTokens,
+                  outputTokens: (previous.usage?.outputTokens ?? 0) + usage.outputTokens,
+                },
+              }
+            : {}),
+        };
+      } else if (event.type === "tool/call") {
+        current = { ...previous, hasTools: true };
+      } else {
+        current = { ...previous, reason: event.data.reason };
+      }
       return { ...state, turns: { ...state.turns, [turn]: current } };
     }
     return state;

@@ -4,6 +4,7 @@ import type { ZodType } from "zod";
 import type { Database } from "../../database/index.js";
 import { apiIdempotencyRecords } from "../../database/schema/index.js";
 import { DomainError } from "./domain-error.js";
+import { stableJsonStringify } from "./stable-json.js";
 
 type ReceiptScope = Pick<
   typeof apiIdempotencyRecords.$inferInsert,
@@ -22,7 +23,7 @@ export function idempotencyScope(
         subjectId: principal.identityId,
         operationId,
         keyHash: createHash("sha256").update(key).digest("hex"),
-        requestHash: createHash("sha256").update(JSON.stringify(input)).digest("hex"),
+        requestHash: createHash("sha256").update(stableJsonStringify(input)).digest("hex"),
       }
     : null;
 }

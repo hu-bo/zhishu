@@ -1,29 +1,28 @@
-import type { Context } from "@deepseek-ai/cordis";
 import type { Pool, PoolClient } from "pg";
 import {
-  SessionLogOffset,
-  type SessionEvent,
-  type SessionHeader,
-  type SessionId,
-} from "@deepseek-ai/dsh-session";
-import SessionPersistence, {
-  SessionAlreadyExistsError,
-  SessionAlreadyOwnedError,
-  SessionPersistenceNotFoundError,
-  SessionHandleClosedError,
-  SessionReadOnlyError,
-  SessionOwnershipLostError,
-  materializeCreateHeader,
-  materializeAppendBatch,
+  assertContiguous,
   assertStoredId,
   assertVersion,
-  assertContiguous,
-  validateStoredEvents,
+  materializeAppendBatch,
+  materializeCreateHeader,
+  SessionAlreadyExistsError,
+  SessionAlreadyOwnedError,
+  SessionHandleClosedError,
+  SessionLogOffset,
+  SessionOwnershipLostError,
+  SessionPersistence,
+  SessionPersistenceNotFoundError,
   SessionPersistenceRevision,
+  SessionReadOnlyError,
+  validateStoredEvents,
+  type Context,
   type SessionAccess,
+  type SessionEvent,
   type SessionHandle,
+  type SessionHeader,
+  type SessionId,
   type SessionPersistenceCreateOptions,
-} from "@deepseek-ai/dsh-session-persistence";
+} from "@zhishu/ai-writing/kernel";
 
 interface Stored {
   header: SessionHeader;
@@ -51,6 +50,7 @@ export function parseNativeSessionId(
 /** A dedicated PG connection holds each writer lock. Its loss fences every append. */
 export function postgresNativeSessionPersistence(
   pool: Pool,
+  onAppendError?: (sessionId: string, error: unknown) => void,
 ): new (ctx: Context) => SessionPersistence {
   return class PostgresNativeSessionPersistence extends SessionPersistence {
     private handles = new Set<SessionHandle>();
@@ -59,7 +59,11 @@ export function postgresNativeSessionPersistence(
       super(ctx);
       ctx.on("session/event", (session, event) => {
         const handle = this.writers.get(session.id);
-        if (handle) void handle.append([event]).catch(() => undefined);
+        // A failed append poisons the handle; flush/close expose it. Log the first fault.
+        if (handle)
+          void handle.append([event]).catch((error: unknown) => {
+            onAppendError?.(session.id, error);
+          });
       });
       ctx.on("session/flush", async (session) => {
         const handle = this.writers.get(session.id);

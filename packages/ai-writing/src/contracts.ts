@@ -1,5 +1,6 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
+import type { WebFailureCode } from "@zhishu/ai-contracts";
 
 /**
  * Browser-safe writing contracts: capability manifests, image job DTOs and the pure web
@@ -112,15 +113,7 @@ export interface WebSearchPort {
 }
 
 /** Failure semantics surfaced by the web tools; a provider fault is never "no results". */
-export type WebToolFailureCode =
-  | "NOT_CONFIGURED"
-  | "AUTH_FAILED"
-  | "RATE_LIMITED"
-  | "TIMEOUT"
-  | "NETWORK"
-  | "EMPTY_RESULTS"
-  | "EXTRACT_FAILED"
-  | "BUDGET_EXCEEDED";
+export type WebToolFailureCode = WebFailureCode;
 export class WebToolError extends Error {
   constructor(readonly code: WebToolFailureCode) {
     super(code);

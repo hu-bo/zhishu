@@ -6,8 +6,6 @@ export {
   QaService,
   type QaAudience,
   type QaSubmitInput,
-  type HandoffCommand,
-  type WritingHandoffPort,
   type QaServiceDeps,
 } from "./qa.service.js";
 

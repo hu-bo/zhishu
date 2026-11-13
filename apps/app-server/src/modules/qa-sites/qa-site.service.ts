@@ -26,6 +26,8 @@ import {
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{1,63}$/;
 const VISITOR_TTL_MS = 6 * 3_600_000;
 
+type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
 export type QaSiteRow = typeof qaSites.$inferSelect;
 
 export interface SitePublicShell {
@@ -61,8 +63,30 @@ export interface QaSiteServiceDeps {
 export class QaSiteService {
   constructor(private readonly deps: QaSiteServiceDeps) {}
 
-  private async requireManager(principal: Principal, workspaceId: string): Promise<void> {
-    const access = await workspaceAccess(this.deps.db, principal, workspaceId);
+  /**
+   * Secure is decided from the server's configured public origin, never the client-supplied
+   * x-forwarded-proto header (which is untrusted without an explicit proxy allow-list).
+   */
+  get cookieSecure(): boolean {
+    return this.deps.config.APP_PUBLIC_URL.startsWith("https://");
+  }
+
+  /**
+   * Defense-in-depth CSRF gate for public cookie-authenticated writes (design §8). SameSite=Lax
+   * already blocks cross-site cookie sending; this additionally rejects a present, untrusted
+   * Origin. Requests without an Origin (same-origin navigations, non-browser clients) pass —
+   * they still need a valid visitor cookie. Allowed origins reuse the configured browser
+   * origins plus the public app origin, so no new required deployment config is introduced.
+   */
+  publicOriginAllowed(origin: string | undefined): boolean {
+    if (!origin) return true;
+    const allowed = new Set(this.deps.config.COLLABORATION_ALLOWED_ORIGINS);
+    allowed.add(new URL(this.deps.config.APP_PUBLIC_URL).origin);
+    return allowed.has(origin);
+  }
+
+  private async requireManager(principal: Principal, workspaceId: string, tx?: Tx): Promise<void> {
+    const access = await workspaceAccess(tx ?? this.deps.db, principal, workspaceId);
     if (!access.canManage)
       throw new DomainError("FORBIDDEN", "只有管理空间的 owner/admin 可以配置问答站点");
   }
@@ -85,7 +109,7 @@ export class QaSiteService {
       throw new DomainError("VALIDATION_ERROR", "站点地址只能使用小写字母、数字和连字符");
     const id = `site_${randomUUID().replaceAll("-", "")}`;
     const accessCodeHash =
-      body.accessMode === "code" ? hashAccessCode(this.requireCode(body.accessCode)) : null;
+      body.accessMode === "code" ? await hashAccessCode(this.requireCode(body.accessCode)) : null;
     const [row] = await this.deps.db
       .insert(qaSites)
       .values({
@@ -182,6 +206,10 @@ export class QaSiteService {
     const credentialChanged =
       (body.accessMode !== undefined && body.accessMode !== site.accessMode) ||
       (body.accessMode === "code" && !!body.accessCode);
+    const accessCodeHash =
+      body.accessMode === "code" && body.accessCode
+        ? await hashAccessCode(this.requireCode(body.accessCode))
+        : undefined;
     const rows = await this.deps.db
       .update(qaSites)
       .set({
@@ -192,9 +220,7 @@ export class QaSiteService {
           ? { suggestedQuestions: body.suggestedQuestions.slice(0, 6) }
           : {}),
         ...(body.accessMode !== undefined ? { accessMode: body.accessMode } : {}),
-        ...(body.accessMode === "code" && body.accessCode
-          ? { accessCodeHash: hashAccessCode(this.requireCode(body.accessCode)) }
-          : {}),
+        ...(accessCodeHash !== undefined ? { accessCodeHash } : {}),
         ...(body.quotaPolicy !== undefined ? { quotaPolicy: body.quotaPolicy } : {}),
         revision: site.revision + 1,
         ...(credentialChanged ? { accessRevision: site.accessRevision + 1 } : {}),
@@ -230,10 +256,10 @@ export class QaSiteService {
       if (seen.has(source.workspaceId))
         throw new DomainError("VALIDATION_ERROR", "同一来源空间只能绑定一次");
       seen.add(source.workspaceId);
-      // Delegation requires the acting identity to manage the source space right now.
-      await this.requireManager(principal, source.workspaceId);
     }
     await this.deps.db.transaction(async (tx) => {
+      // Delegation requires the acting identity to manage the source space right now.
+      for (const source of sources) await this.requireManager(principal, source.workspaceId, tx);
       await tx
         .delete(qaSiteSources)
         .where(and(eq(qaSiteSources.tenantId, site.tenantId), eq(qaSiteSources.siteId, site.id)));
@@ -246,12 +272,22 @@ export class QaSiteService {
           publicLabel: source.publicLabel.trim(),
           grantedBy: principal.identityId,
         });
-      await tx
+      const bumped = await tx
         .update(qaSites)
         .set({ revision: site.revision + 1, updatedAt: new Date() })
-        .where(and(eq(qaSites.tenantId, site.tenantId), eq(qaSites.id, site.id)));
-      await this.invalidateSiteConversations(site.tenantId, site.id);
+        .where(
+          and(
+            eq(qaSites.tenantId, site.tenantId),
+            eq(qaSites.id, site.id),
+            eq(qaSites.revision, expectedRevision),
+          ),
+        )
+        .returning({ id: qaSites.id });
+      if (!bumped.length) throw new DomainError("CONFLICT", "站点配置已被更新，请刷新后重试");
     });
+    // Conversation invalidation opens its own transaction: run it only after commit so a
+    // rolled-back configuration change never cancels live sessions.
+    await this.invalidateSiteConversations(site.tenantId, site.id);
     return this.get(principal, siteId);
   }
 
@@ -260,6 +296,7 @@ export class QaSiteService {
     principal: Principal,
     siteId: string,
     sourceId: string,
+    expectedRevision: number,
     items: { documentId: string; action: "approve" | "suspend" | "withdraw"; reason?: string }[],
   ) {
     const site = await this.loadOwnedSite(principal, siteId);
@@ -275,28 +312,50 @@ export class QaSiteService {
       )
       .limit(1);
     if (!source) throw new DomainError("NOT_FOUND", "来源不存在");
-    await this.requireManager(principal, source.workspaceId);
-    for (const item of items) {
-      if (item.action === "approve") {
-        await this.assertDocumentAuthority(principal, item.documentId, source.workspaceId);
-        const conflict = await this.deps.db
-          .select({ id: qaSiteDocuments.id })
-          .from(qaSiteDocuments)
-          .where(
-            and(
-              eq(qaSiteDocuments.tenantId, site.tenantId),
-              eq(qaSiteDocuments.sourceId, source.id),
-              eq(qaSiteDocuments.documentId, item.documentId),
-            ),
-          )
-          .limit(1);
-        if (conflict.length) {
-          await this.deps.db
+    await this.deps.db.transaction(async (tx) => {
+      // Authority is re-derived inside the write transaction; a concurrent revoke fails
+      // the whole batch instead of approving half of it.
+      await this.requireManager(principal, source.workspaceId, tx);
+      for (const item of items) {
+        if (item.action === "approve") {
+          await this.assertDocumentAuthority(principal, item.documentId, source.workspaceId, tx);
+          const [doc] = await tx
+            .select({ workspaceId: documents.workspaceId })
+            .from(documents)
+            .where(and(eq(documents.tenantId, site.tenantId), eq(documents.id, item.documentId)))
+            .limit(1);
+          if (!doc || doc.workspaceId !== source.workspaceId)
+            throw new DomainError("VALIDATION_ERROR", "文档不属于该来源空间");
+          await tx
+            .insert(qaSiteDocuments)
+            .values({
+              id: `qsdoc_${randomUUID().replaceAll("-", "")}`,
+              tenantId: site.tenantId,
+              sourceId: source.id,
+              workspaceId: source.workspaceId,
+              documentId: item.documentId,
+              approvedBy: principal.identityId,
+              state: "active",
+            })
+            .onConflictDoUpdate({
+              target: [
+                qaSiteDocuments.tenantId,
+                qaSiteDocuments.sourceId,
+                qaSiteDocuments.documentId,
+              ],
+              set: {
+                state: "active",
+                suspensionReason: null,
+                approvedBy: principal.identityId,
+                updatedAt: new Date(),
+              },
+            });
+        } else if (item.action === "suspend") {
+          await tx
             .update(qaSiteDocuments)
             .set({
-              state: "active",
-              suspensionReason: null,
-              approvedBy: principal.identityId,
+              state: "suspended",
+              suspensionReason: item.reason?.slice(0, 300) ?? "管理员暂停",
               updatedAt: new Date(),
             })
             .where(
@@ -307,54 +366,30 @@ export class QaSiteService {
               ),
             );
         } else {
-          const [doc] = await this.deps.db
-            .select({ workspaceId: documents.workspaceId })
-            .from(documents)
-            .where(and(eq(documents.tenantId, site.tenantId), eq(documents.id, item.documentId)))
-            .limit(1);
-          if (!doc || doc.workspaceId !== source.workspaceId)
-            throw new DomainError("VALIDATION_ERROR", "文档不属于该来源空间");
-          await this.deps.db.insert(qaSiteDocuments).values({
-            id: `qsdoc_${randomUUID().replaceAll("-", "")}`,
-            tenantId: site.tenantId,
-            sourceId: source.id,
-            workspaceId: source.workspaceId,
-            documentId: item.documentId,
-            approvedBy: principal.identityId,
-            state: "active",
-          });
+          await tx
+            .delete(qaSiteDocuments)
+            .where(
+              and(
+                eq(qaSiteDocuments.tenantId, site.tenantId),
+                eq(qaSiteDocuments.sourceId, source.id),
+                eq(qaSiteDocuments.documentId, item.documentId),
+              ),
+            );
         }
-      } else if (item.action === "suspend") {
-        await this.deps.db
-          .update(qaSiteDocuments)
-          .set({
-            state: "suspended",
-            suspensionReason: item.reason?.slice(0, 300) ?? "管理员暂停",
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(qaSiteDocuments.tenantId, site.tenantId),
-              eq(qaSiteDocuments.sourceId, source.id),
-              eq(qaSiteDocuments.documentId, item.documentId),
-            ),
-          );
-      } else {
-        await this.deps.db
-          .delete(qaSiteDocuments)
-          .where(
-            and(
-              eq(qaSiteDocuments.tenantId, site.tenantId),
-              eq(qaSiteDocuments.sourceId, source.id),
-              eq(qaSiteDocuments.documentId, item.documentId),
-            ),
-          );
       }
-    }
-    await this.deps.db
-      .update(qaSites)
-      .set({ revision: site.revision + 1, updatedAt: new Date() })
-      .where(and(eq(qaSites.tenantId, site.tenantId), eq(qaSites.id, site.id)));
+      const bumped = await tx
+        .update(qaSites)
+        .set({ revision: site.revision + 1, updatedAt: new Date() })
+        .where(
+          and(
+            eq(qaSites.tenantId, site.tenantId),
+            eq(qaSites.id, site.id),
+            eq(qaSites.revision, expectedRevision),
+          ),
+        )
+        .returning({ id: qaSites.id });
+      if (!bumped.length) throw new DomainError("CONFLICT", "站点配置已被更新，请刷新后重试");
+    });
     await this.invalidateSiteConversations(site.tenantId, site.id);
     return this.detail(principal, siteId);
   }
@@ -364,9 +399,10 @@ export class QaSiteService {
     principal: Principal,
     documentId: string,
     workspaceId: string,
+    tx?: Tx,
   ): Promise<void> {
     for (const action of ["read", "ai", "share", "export"] as const) {
-      const rows = await this.deps.db
+      const rows = await (tx ?? this.deps.db)
         .select({ id: documents.id })
         .from(documents)
         .where(
@@ -460,7 +496,10 @@ export class QaSiteService {
     site: QaSiteRow,
     accessCode: string | undefined,
   ): Promise<{ claims: VisitorClaims; cookie: string; maxAgeSeconds: number }> {
-    if (site.accessMode === "code" && !verifyAccessCode(accessCode ?? "", site.accessCodeHash))
+    if (
+      site.accessMode === "code" &&
+      !(await verifyAccessCode(accessCode ?? "", site.accessCodeHash))
+    )
       throw new DomainError("UNAUTHENTICATED", "访问码不正确");
     const claims: VisitorClaims = {
       siteId: site.id,

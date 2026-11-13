@@ -3,7 +3,21 @@ import {
   hasZodFastifySchemaValidationErrors,
   isResponseSerializationError,
 } from "fastify-type-provider-zod";
-import { DomainError } from "../shared/domain-error.js";
+import { DomainError, type DomainErrorCode } from "../shared/domain-error.js";
+
+/** One HTTP status per domain error code; the table is the single mapping source. */
+const DOMAIN_ERROR_STATUS = {
+  NOT_FOUND: 404,
+  CONFLICT: 409,
+  VALIDATION_ERROR: 400,
+  UNAUTHENTICATED: 401,
+  SERVICE_UNAVAILABLE: 503,
+  RESOURCE_LIMIT: 429,
+  FORBIDDEN: 403,
+  AI_WRITE_PERSONAL_ONLY: 403,
+  AI_ACCESS_REVOKED: 403,
+  IDEMPOTENCY_KEY_REUSED: 409,
+} satisfies Record<DomainErrorCode, number>;
 
 export function registerErrorHandlers(app: FastifyInstance): void {
   app.setNotFoundHandler((request, reply) =>
@@ -15,24 +29,7 @@ export function registerErrorHandlers(app: FastifyInstance): void {
   );
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof DomainError) {
-      const status =
-        error.code === "AI_WRITE_PERSONAL_ONLY" ||
-        error.code === "AI_ACCESS_REVOKED" ||
-        error.code === "FORBIDDEN"
-          ? 403
-          : error.code === "NOT_FOUND"
-            ? 404
-            : error.code === "CONFLICT"
-              ? 409
-              : error.code === "IDEMPOTENCY_KEY_REUSED"
-                ? 409
-                : error.code === "UNAUTHENTICATED"
-                  ? 401
-                  : error.code === "RESOURCE_LIMIT"
-                    ? 429
-                    : error.code === "SERVICE_UNAVAILABLE"
-                      ? 503
-                      : 400;
+      const status = DOMAIN_ERROR_STATUS[error.code];
       if (status === 401) reply.header("www-authenticate", "Bearer");
       if ((status === 401 || status === 403 || status === 404) && request.principal)
         request.log.info(

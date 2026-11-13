@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm";
-import type { DocumentTag } from "../../src/modules/documents/document.schema.js";
-import type { ContentMigrationStepSnapshot, DocumentContent } from "@zhishu/document-contracts";
+import type {
+  ContentMigrationStepSnapshot,
+  DocumentContent,
+  DocumentTag,
+} from "@zhishu/document-contracts";
 import {
   bigint,
   boolean,

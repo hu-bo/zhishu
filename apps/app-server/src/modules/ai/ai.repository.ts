@@ -5,6 +5,8 @@ import {
   aiEvents,
   aiMessages,
   aiRuns,
+  writingImageJobs,
+  writingSessions,
 } from "../../../database/schema/index.js";
 import type { Database } from "../../../database/index.js";
 import type { StructureReceipt } from "@zhishu/document-contracts";
@@ -398,7 +400,7 @@ export class AiRepository {
     tx: Tx,
     filter: {
       tenantId: string;
-      statuses: RunStatus[];
+      statuses: readonly RunStatus[];
       identityId?: string;
       siteId?: string;
       since: Date;
@@ -512,6 +514,23 @@ export class AiRepository {
           eq(aiMessages.tenantId, tenantId),
           eq(aiMessages.runId, runId),
           eq(aiMessages.role, "assistant"),
+        ),
+      )
+      .limit(1);
+    return row as MessageRow | undefined;
+  }
+
+  /** Direct hit on ai_messages_run_user_uq; never scan conversation pages for a Run input. */
+  async userMessage(tx: Tx, tenantId: string, conversationId: string, runId: string) {
+    const [row] = await tx
+      .select()
+      .from(aiMessages)
+      .where(
+        and(
+          eq(aiMessages.tenantId, tenantId),
+          eq(aiMessages.conversationId, conversationId),
+          eq(aiMessages.runId, runId),
+          eq(aiMessages.role, "user"),
         ),
       )
       .limit(1);
@@ -857,7 +876,65 @@ export class AiRepository {
       )) as ConversationRow[];
   }
 
-  async deleteConversationRows(tx: Tx, tenantId: string, conversationId: string) {
+  /**
+   * Reference-ordered GC. Unsettled work (active Runs, unknown image results, unconfirmed
+   * proposal applications) blocks deletion instead of cascading; the caller retries later.
+   * Returns false when the conversation was retained.
+   */
+  async deleteConversationRows(tx: Tx, tenantId: string, conversationId: string): Promise<boolean> {
+    const scope = and(eq(aiRuns.tenantId, tenantId), eq(aiRuns.conversationId, conversationId));
+    const activeRuns = await tx
+      .select({ id: aiRuns.id })
+      .from(aiRuns)
+      .where(
+        and(
+          scope,
+          inArray(aiRuns.status, ["queued", "running", "waiting-approval", "interrupted"]),
+        ),
+      )
+      .limit(1);
+    if (activeRuns.length) return false;
+    const unknownJobs = await tx
+      .select({ id: writingImageJobs.id })
+      .from(writingImageJobs)
+      .where(
+        and(
+          eq(writingImageJobs.tenantId, tenantId),
+          eq(writingImageJobs.conversationId, conversationId),
+          eq(writingImageJobs.status, "unknown"),
+        ),
+      )
+      .limit(1);
+    if (unknownJobs.length) return false;
+    const unconfirmedProposals = await tx
+      .select({ id: aiArtifacts.id })
+      .from(aiArtifacts)
+      .where(
+        and(
+          eq(aiArtifacts.tenantId, tenantId),
+          eq(aiArtifacts.conversationId, conversationId),
+          inArray(aiArtifacts.applicationState, ["pending", "partial", "unknown"]),
+        ),
+      )
+      .limit(1);
+    if (unconfirmedProposals.length) return false;
+    // Writing-specific rows reference Runs/conversations: release them before their parents.
+    await tx
+      .delete(writingImageJobs)
+      .where(
+        and(
+          eq(writingImageJobs.tenantId, tenantId),
+          eq(writingImageJobs.conversationId, conversationId),
+        ),
+      );
+    await tx
+      .delete(writingSessions)
+      .where(
+        and(
+          eq(writingSessions.tenantId, tenantId),
+          eq(writingSessions.conversationId, conversationId),
+        ),
+      );
     await tx
       .delete(aiArtifacts)
       .where(
@@ -869,11 +946,10 @@ export class AiRepository {
     await tx
       .delete(aiEvents)
       .where(and(eq(aiEvents.tenantId, tenantId), eq(aiEvents.conversationId, conversationId)));
-    await tx
-      .delete(aiRuns)
-      .where(and(eq(aiRuns.tenantId, tenantId), eq(aiRuns.conversationId, conversationId)));
+    await tx.delete(aiRuns).where(scope);
     await tx
       .delete(aiConversations)
       .where(and(eq(aiConversations.tenantId, tenantId), eq(aiConversations.id, conversationId)));
+    return true;
   }
 }

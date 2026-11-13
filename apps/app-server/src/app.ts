@@ -33,7 +33,7 @@ import { qaSitesModule } from "./modules/qa-sites/index.js";
 import { DomainError } from "./shared/domain-error.js";
 import { notificationsModule } from "./modules/notifications/index.js";
 import { invitationsModule } from "./modules/invitations/index.js";
-import type { LlmAdapter } from "@deepseek-ai/dsh-llm";
+import type { LlmAdapter } from "@zhishu/ai-writing/kernel";
 import { AuthorizationEventWorker } from "./modules/authorization/authorization-events.js";
 
 export async function buildApp(

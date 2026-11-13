@@ -131,16 +131,11 @@ export class RagService {
     } catch (error) {
       const status =
         error && typeof error === "object" && "status" in error ? error.status : undefined;
-      const code =
-        status === 401 || status === 403
-          ? "EMBEDDING_AUTH_FAILED"
-          : status === 404
-            ? "RAG_ENDPOINT_NOT_FOUND"
-            : signal.aborted
-              ? "INDEX_TIMEOUT"
-              : error instanceof Error && /^[A-Z_]+$/.test(error.message)
-                ? error.message
-                : "INDEX_PROVIDER_FAILED";
+      let code = "INDEX_PROVIDER_FAILED";
+      if (status === 401 || status === 403) code = "EMBEDDING_AUTH_FAILED";
+      else if (status === 404) code = "RAG_ENDPOINT_NOT_FOUND";
+      else if (signal.aborted) code = "INDEX_TIMEOUT";
+      else if (error instanceof Error && /^[A-Z_]+$/.test(error.message)) code = error.message;
       await this.repository.release(job, code);
       this.logFailure(code);
       await this.cleanup(job).catch(() => undefined);
@@ -348,10 +343,7 @@ export class RagService {
             s.kind === "principal" && s.selection.kind === "documents"
               ? s.selection.documentIds.filter((id) => ids.has(id))
               : [...ids],
-          readAclKeys:
-            s.kind === "site"
-              ? resolved.map((h) => `document:${h.documentId}`)
-              : resolved.map((h) => `document:${h.documentId}`),
+          readAclKeys: resolved.map((h) => `document:${h.documentId}`),
         };
       },
       authorizeCandidates: async (s, candidates) => {

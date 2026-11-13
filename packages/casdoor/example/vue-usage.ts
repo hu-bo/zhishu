@@ -3,7 +3,7 @@
  */
 
 // ============ main.ts ============
-import { initCasdoor } from "@hquant/casdoor/client/vue";
+import { initCasdoor } from "@nova/casdoor/client/vue";
 
 initCasdoor({
   appName: "trader",
@@ -13,7 +13,7 @@ initCasdoor({
 // ============ LoginButton.vue ============
 /*
 <script setup lang="ts">
-import { useCasdoor } from '@hquant/casdoor/client/vue';
+import { useCasdoor } from '@nova/casdoor/client/vue';
 
 const { isAuthenticated, isLoading, user, login, logout } = useCasdoor();
 </script>
@@ -31,7 +31,7 @@ const { isAuthenticated, isLoading, user, login, logout } = useCasdoor();
 // ============ Callback.vue ============
 /*
 <script setup lang="ts">
-import { useCasdoorCallback } from '@hquant/casdoor/client/vue';
+import { useCasdoorCallback } from '@nova/casdoor/client/vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
@@ -58,7 +58,7 @@ const { isLoading, success, error } = useCasdoorCallback({
 
 // ============ router/index.ts ============
 /*
-import { getCasdoorClient } from '@hquant/casdoor/client/vue';
+import { getCasdoorClient } from '@nova/casdoor/client/vue';
 
 router.beforeEach((to, from, next) => {
   const client = getCasdoorClient();
@@ -74,7 +74,7 @@ router.beforeEach((to, from, next) => {
 
 // ============ api/index.ts ============
 /*
-import { getCasdoorClient } from '@hquant/casdoor/client/vue';
+import { getCasdoorClient } from '@nova/casdoor/client/vue';
 
 const api = axios.create({ baseURL: '/api' });
 

@@ -1,7 +1,7 @@
 /* global AbortController, process */
 import console from "node:console";
 import { createWritingRuntime, deterministicNativeSessionId } from "@zhishu/ai-writing";
-import { LlmAdapter } from "@deepseek-ai/dsh-llm";
+import { LlmAdapter } from "@zhishu/ai-writing/kernel";
 
 /** Deterministic offline model so the example never needs credentials. */
 class ExampleModel extends LlmAdapter {

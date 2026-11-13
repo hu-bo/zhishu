@@ -3,6 +3,16 @@ import type { CasdoorConfig, CasdoorUser, AuthResult, JwtClaims, TokenResponse }
 
 export * from "../types.js";
 
+/** Validate the SDK token shape at the boundary instead of trusting a blind double cast. */
+function toTokenResponse(value: unknown): TokenResponse {
+  if (typeof value !== "object" || value === null)
+    throw new Error("Casdoor SDK returned a malformed token response");
+  const accessToken = (value as { access_token?: unknown }).access_token;
+  if (typeof accessToken !== "string" || accessToken.length === 0)
+    throw new Error("Casdoor SDK token response is missing access_token");
+  return value as TokenResponse;
+}
+
 /**
  * Casdoor 服务端 SDK
  */
@@ -52,7 +62,7 @@ export class CasdoorServer {
    */
   async getToken(code: string): Promise<TokenResponse> {
     const token = await this.sdk.getAuthToken(code);
-    return token as unknown as TokenResponse;
+    return toTokenResponse(token);
   }
 
   /**
@@ -61,7 +71,7 @@ export class CasdoorServer {
    */
   async refreshToken(refreshToken: string): Promise<TokenResponse> {
     const token = await this.sdk.refreshToken(refreshToken);
-    return token as unknown as TokenResponse;
+    return toTokenResponse(token);
   }
 
   /**
@@ -69,7 +79,10 @@ export class CasdoorServer {
    * @param token JWT Token
    */
   parseJwtToken(token: string): JwtClaims {
-    return this.sdk.parseJwtToken(token) as unknown as JwtClaims;
+    const claims = this.sdk.parseJwtToken(token);
+    if (typeof claims !== "object" || claims === null)
+      throw new Error("Casdoor SDK returned malformed JWT claims");
+    return claims as unknown as JwtClaims;
   }
 
   /**

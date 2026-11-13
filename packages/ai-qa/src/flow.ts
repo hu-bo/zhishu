@@ -117,18 +117,11 @@ function resolveCitation(
       locator: structuredClone(item.locator),
       quote: output.quote,
     };
-  const locator =
-    item.locator.kind === "block"
-      ? {
-          ...item.locator,
-          start: item.locator.start + offset,
-          end: item.locator.start + offset + output.quote.length,
-        }
-      : {
-          ...item.locator,
-          start: item.locator.start + offset,
-          end: item.locator.start + offset + output.quote.length,
-        };
+  const locator = {
+    ...item.locator,
+    start: item.locator.start + offset,
+    end: item.locator.start + offset + output.quote.length,
+  };
   return {
     citationId: `citation_${index + 1}`,
     evidenceArtifactId,
@@ -170,9 +163,16 @@ export async function runQaAnswerFlow(ports: QaFlowPorts, input: QaRunInput): Pr
   let evidenceArtifactId: string | undefined;
   let evidenceRefs: EvidenceRef[] = [];
   let retrievalCalls = 0;
-  if (input.resume?.evidence) {
-    bundle = input.resume.evidence.bundle;
-    evidenceArtifactId = input.resume.evidence.evidenceArtifactId;
+  const resumed = input.resume?.evidence;
+  if (resumed) {
+    bundle = resumed.bundle;
+    evidenceArtifactId = resumed.evidenceArtifactId;
+    // The resumed artifact was already handed to the model: keep its identities in the
+    // outcome ledger so the final commit does not clear the Run evidence refs.
+    evidenceRefs = bundle.items.map((item) => ({
+      evidenceArtifactId: resumed.evidenceArtifactId,
+      evidenceId: item.evidenceId,
+    }));
     steps.push({ stepId: "retrieve", name: "retrieve" });
   } else {
     bundle = await ports.retrieve({

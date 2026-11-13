@@ -35,6 +35,8 @@ const environmentSchema = z
     AI_REASONING_EFFORT: z.enum(["low", "medium", "high", "max"]).optional(),
     AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(600000).default(120000),
     AI_MAX_CONCURRENT: z.coerce.number().int().min(1).max(16).default(4),
+    // Idle native writing sessions are recycled after this long without turn activity.
+    AI_SESSION_IDLE_MS: z.coerce.number().int().min(1000).max(3600000).default(300000),
     // Server-only web research secret. Never enters VITE config, capabilities, logs or model input.
     TAVILY_API_KEY: z.string().min(8).optional(),
     // Signed visitor credentials for public QA sites.

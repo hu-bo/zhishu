@@ -279,10 +279,9 @@ function DocumentApprovals({
   const approved = new Map((detail.data?.documents ?? []).map((d) => [d.documentId, d]));
   if (!source) return null;
   const act = (items: Parameters<typeof setQaSiteSourceDocuments>[2]['items']) =>
-    setQaSiteSourceDocuments(siteId, sourceId, { items })
+    setQaSiteSourceDocuments(siteId, sourceId, { expectedRevision: revision, items })
       .then(onChanged)
       .catch((cause: unknown) => onError(String((cause as Error)?.message ?? cause)));
-  void revision;
   return (
     <div className="mt-3 rounded border p-3 text-sm">
       <p className="mb-2">

@@ -9,7 +9,11 @@ export { errorResponseSchema } from "../../shared/error.schema.js";
 import { accessRoles, permissionActions } from "../authorization/policy.js";
 import { documentAccessModes } from "../authorization/permissions.js";
 import { z } from "zod";
-import { CURRENT_DOCUMENT_SCHEMA_VERSION } from "@zhishu/document-contracts";
+import {
+  CURRENT_DOCUMENT_SCHEMA_VERSION,
+  DOCUMENT_TAG_COLORS,
+  type DocumentTag,
+} from "@zhishu/document-contracts";
 
 const extensionSchema = z
   .object({
@@ -30,13 +34,13 @@ const documentTagsSchema = z
     z
       .object({
         label: z.string().trim().min(1).max(24),
-        color: z.enum(["slate", "indigo", "violet", "green", "amber", "rose"]),
+        color: z.enum(DOCUMENT_TAG_COLORS),
       })
       .strict(),
   )
   .max(12)
   .refine((tags) => new Set(tags.map((tag) => tag.label)).size === tags.length, "标签名称不能重复");
-export type DocumentTag = z.infer<typeof documentTagsSchema>[number];
+export type { DocumentTag };
 
 export const createDocumentBodySchema = z
   .object({

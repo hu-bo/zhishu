@@ -3,6 +3,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { errorResponseSchema } from "../../shared/error.schema.js";
 import { DomainError } from "../../shared/domain-error.js";
+import { createSlidingWindowLimiter } from "../../shared/rate-limit.js";
 import { requirePrincipal } from "../identity/principal.js";
 import {
   aiEventViewSchema,
@@ -23,6 +24,18 @@ const typedScope = scopeSelectionSchema;
 /** Admin surface (/api/qa-sites) and the public entry (/api/public/qa-sites). */
 export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, qa: QaService) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
+  // The public code entry runs scrypt; bound attempts per source IP + site to keep a
+  // single client from saturating the event loop / thread pool with cheap retries.
+  const visitorSessionLimiter = createSlidingWindowLimiter({ limit: 10, windowMs: 60_000 });
+  // Design §8: public cookie-authenticated writes reject a present, untrusted Origin on top
+  // of SameSite=Lax. Admin routes use bearer tokens and are not cookie-CSRF exposed.
+  app.addHook("onRequest", async (request) => {
+    if (request.routeOptions.config.auth !== false) return;
+    if (request.method === "GET" || request.method === "HEAD" || request.method === "OPTIONS")
+      return;
+    if (!sites.publicOriginAllowed(request.headers.origin))
+      throw new DomainError("FORBIDDEN", "跨站请求被拒绝");
+  });
   const common = {
     tags: ["qa-sites"],
     security: [{ bearerAuth: [] }],
@@ -237,6 +250,7 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
           sourceId: z.string().min(1).max(160),
         }),
         body: z.strictObject({
+          expectedRevision: z.number().int().min(1),
           items: z
             .array(
               z.strictObject({
@@ -255,6 +269,7 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
         requirePrincipal(request.principal),
         request.params.id,
         request.params.sourceId,
+        request.body.expectedRevision,
         request.body.items,
       );
       return null;
@@ -393,11 +408,13 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
       },
     },
     async (request, reply) => {
+      if (!visitorSessionLimiter.allow(`${request.ip}:${request.params.siteId}`))
+        throw new DomainError("RESOURCE_LIMIT", "尝试过于频繁，请稍后再试");
       const site = await sites.activeSiteById(request.params.siteId);
       const session = await sites.startVisitorSession(site, request.body.accessCode);
       reply.header(
         "set-cookie",
-        `${COOKIE_NAME}=${session.cookie}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${session.maxAgeSeconds}${request.headers["x-forwarded-proto"] === "https" ? "; Secure" : ""}`,
+        `${COOKIE_NAME}=${session.cookie}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${session.maxAgeSeconds}${sites.cookieSecure ? "; Secure" : ""}`,
       );
       return reply.code(201).send({
         visitorId: session.claims.visitorId,
@@ -573,7 +590,8 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
       request.raw.once("close", () => controller.abort());
       try {
         await qa.streamEvents(audience, params.id, request.query.cursor, sse, controller.signal);
-      } catch {
+      } catch (error) {
+        request.log.error({ err: error }, "Public QA event stream failed");
         sse.close();
       }
     },
@@ -675,6 +693,7 @@ async function siteAudience(
       siteId: site.id,
       visitorId: `preview_${internal.identityId}`,
       approved,
+      accessRevision: site.accessRevision,
       internal,
     };
   return {
@@ -683,6 +702,7 @@ async function siteAudience(
     siteId: site.id,
     visitorId: visitorId ?? "anonymous",
     approved,
+    accessRevision: site.accessRevision,
   };
 }
 

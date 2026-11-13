@@ -6057,6 +6057,8 @@ export type SetQaSiteSourceDocumentsBodyItemsItem = {
 };
 
 export type SetQaSiteSourceDocumentsBody = {
+  /** @minimum 1 */
+  expectedRevision: number;
   /** @maxItems 200 */
   items: SetQaSiteSourceDocumentsBodyItemsItem[];
 };

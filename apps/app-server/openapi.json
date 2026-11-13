@@ -24255,6 +24255,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "expectedRevision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
                   "items": {
                     "type": "array",
                     "items": {
@@ -24288,6 +24292,7 @@
                   }
                 },
                 "required": [
+                  "expectedRevision",
                   "items"
                 ],
                 "additionalProperties": false

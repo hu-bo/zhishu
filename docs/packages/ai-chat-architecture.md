@@ -13,7 +13,7 @@
 ## 1. 决策与目标
 
 1. 按可开源、可独立安装的标准建设 `chat-ui` 基础组件，供 RAG Chat 与协作 AI 写作 Chat 复用。app-web 分别封装 `RagChat` 和 `WritingChat`，各自拥有会话、请求、草稿和业务动作。
-2. 协作 AI 写作服务端直接基于 `@deepseek-ai/cordis`、`@deepseek-ai/dsh-agent`、`@deepseek-ai/dsh-agent-loop`、`@deepseek-ai/dsh-session`、`@deepseek-ai/dsh-user-approval` 封装，嵌入现有 Server；RAG Chat 继续由 LangChain 驱动。
+2. 协作 AI 写作内核依赖（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-agent`、`@deepseek-ai/dsh-agent-loop`、`@deepseek-ai/dsh-session`、`@deepseek-ai/dsh-user-approval` 等）全部封装在 `@zhishu/ai-writing` 包内；app-server 不直接依赖任何 `@deepseek-ai/*`，宿主装配所需的内核类型与持久化基类经 `@zhishu/ai-writing/kernel` 导出使用；RAG Chat 继续由 LangChain 驱动。
 3. chat-ui 接收宿主视图与回调；WritingChat 将 DSH 产品事件映射到基础组件，RagChat 将 LangChain RAG 问答结果映射到同一基础组件。浏览器不加载任一服务端执行内核。
 4. 先贯通协作 AI 写作的基础对话，再开发 writing、research、image 插件。research 是写作中的资料调研与报告能力，与独立 RAG Chat 分别编排。
 5. `nova-dsh/packages/harness`、`chat-ui` 只作为设计参考，不复制为当前项目的依赖或源码，不使用跨仓库本机路径。

@@ -1,21 +1,45 @@
-import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type { Database } from "../../../database/index.js";
 import { documents, identityProfiles } from "../../../database/schema/index.js";
 import { documentActionSql, hasDocumentPermission } from "../authorization/permissions.js";
 import { DomainError } from "../../shared/domain-error.js";
+import { readKnowledgeTree } from "../../shared/knowledge-transaction.js";
 import type { Principal } from "./identity.types.js";
 
+/**
+ * Project authenticated principals into the directory. The hot path is a lock-free read:
+ * unchanged profiles return without a transaction, so ordinary API requests never serialize
+ * on the tenant tree lock. Only a changed projection takes the shared tree lock and upserts,
+ * which still orders it against exclusive authorization/directory mutations.
+ */
 export async function rememberIdentities(db: Database, principals: readonly Principal[]) {
   if (!principals.length) return;
+  const tenantIds = [...new Set(principals.map((p) => p.tenantId))];
+  const existing = await db
+    .select({
+      tenantId: identityProfiles.tenantId,
+      identityId: identityProfiles.identityId,
+      displayName: identityProfiles.displayName,
+      email: identityProfiles.email,
+      active: identityProfiles.active,
+    })
+    .from(identityProfiles)
+    .where(inArray(identityProfiles.tenantId, tenantIds));
+  const byKey = new Map(existing.map((row) => [`${row.tenantId}:${row.identityId}`, row]));
+  const changed = principals.filter((p) => {
+    const row = byKey.get(`${p.tenantId}:${p.identityId}`);
+    return (
+      !row || row.displayName !== p.displayName || row.email !== p.email || row.active !== p.active
+    );
+  });
+  if (!changed.length) return;
   await db.transaction(async (tx) => {
-    for (const tenantId of [...new Set(principals.map((p) => p.tenantId))].sort())
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`knowledge-tree:${tenantId}`},718268))`,
-      );
+    for (const tenantId of [...new Set(changed.map((p) => p.tenantId))].sort())
+      await readKnowledgeTree(tx, tenantId);
     await tx
       .insert(identityProfiles)
       .values(
-        principals.map((p) => ({
+        changed.map((p) => ({
           tenantId: p.tenantId,
           identityId: p.identityId,
           displayName: p.displayName,

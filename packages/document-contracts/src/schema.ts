@@ -39,6 +39,13 @@ export const DOCUMENT_STATUS_LABELS: Record<(typeof DOCUMENT_STATUSES)[number], 
   done: "已完成",
   blocked: "阻塞",
 };
+export const DOCUMENT_TAG_COLORS = ["slate", "indigo", "violet", "green", "amber", "rose"] as const;
+export type DocumentTagColor = (typeof DOCUMENT_TAG_COLORS)[number];
+/** Document metadata tag persisted on the document row; labels are unique per document. */
+export interface DocumentTag {
+  label: string;
+  color: DocumentTagColor;
+}
 
 const blockId = Type.String({
   pattern: "^block_[A-Za-z0-9_-]{1,64}$",

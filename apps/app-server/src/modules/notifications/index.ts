@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { errorResponseSchema } from "../../shared/error.schema.js";
+import { requirePrincipal } from "../identity/principal.js";
 import { NotificationRepository } from "./notification.repository.js";
 export { insertNotifications, documentRecipients } from "./notification.repository.js";
 
@@ -69,7 +70,7 @@ export async function notificationsModule(app: FastifyInstance) {
         },
       },
     },
-    (request) => repository.list(request.principal!, request.query),
+    (request) => repository.list(requirePrincipal(request.principal), request.query),
   );
   typed.post(
     "/notifications/:notificationId/read",
@@ -82,7 +83,7 @@ export async function notificationsModule(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      await repository.read(request.principal!, request.params.notificationId);
+      await repository.read(requirePrincipal(request.principal), request.params.notificationId);
       return reply.code(204).send(null);
     },
   );
@@ -96,7 +97,7 @@ export async function notificationsModule(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      await repository.read(request.principal!);
+      await repository.read(requirePrincipal(request.principal));
       return reply.code(204).send(null);
     },
   );

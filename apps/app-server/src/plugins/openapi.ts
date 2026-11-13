@@ -71,8 +71,6 @@ function patchSharedContentReferences(document: Record<string, unknown>): void {
   };
 
   patchResponse("/api/documents/{documentId}/content", "get", "200");
-  patchResponse("/api/documents/{documentId}/content", "put", "200");
-  patchRequestBody("/api/documents/{documentId}/content", "put");
   patchResponse("/api/documents/{documentId}/export", "get", "200");
   patchRequestBody("/api/documents/import", "post");
   patchResponse("/api/documents/{documentId}/versions/{versionId}/content", "get", "200");

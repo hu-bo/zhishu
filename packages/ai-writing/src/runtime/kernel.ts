@@ -32,7 +32,12 @@ export async function createWritingRuntime(
   )
     throw new WritingRuntimeError("INVALID_LIMITS");
   const ctx = new Context();
-  const sessions = new Map<string, Promise<DshWritingSession>>();
+  interface CachedSession {
+    pending: Promise<DshWritingSession>;
+    detached: () => void;
+  }
+  const sessions = new Map<string, CachedSession>();
+  const evicting = new Map<string, Promise<void>>();
   let closing = false;
   let disposing: Promise<void> | undefined;
   try {
@@ -51,6 +56,62 @@ export async function createWritingRuntime(
     await ctx.fiber.dispose();
     throw error;
   }
+  /**
+   * Sessions own dedicated writer connections and locks, so idle handles must be recycled:
+   * a sweeper disposes sessions idle beyond sessionIdleMs, and a full cache evicts the
+   * least recently used idle session before refusing new attaches. Busy or host-retained
+   * sessions are never evicted.
+   */
+  const idleMs = options.limits?.sessionIdleMs ?? 600_000;
+  const evict = (id: string, cached: CachedSession): Promise<void> => {
+    const existing = evicting.get(id);
+    if (existing) return existing;
+    const task = cached.pending
+      .then((session) =>
+        session
+          .dispose()
+          .catch(() => options.onError?.("SESSION_DISPOSE_FAILED", session.conversationId)),
+      )
+      .catch(() => undefined)
+      .finally(() => {
+        evicting.delete(id);
+        cached.detached();
+      });
+    evicting.set(id, task);
+    return task;
+  };
+  const collectEvictable = async (): Promise<
+    { id: string; cached: CachedSession; session: DshWritingSession; since: number }[]
+  > => {
+    const candidates: {
+      id: string;
+      cached: CachedSession;
+      session: DshWritingSession;
+      since: number;
+    }[] = [];
+    for (const [id, cached] of sessions) {
+      if (evicting.has(id) || options.retainSession?.(id)) continue;
+      const session = await cached.pending.catch(() => undefined);
+      const since = session?.idleSince();
+      if (!session || since === undefined) continue;
+      candidates.push({ id, cached, session, since });
+    }
+    return candidates;
+  };
+  let sweeping = false;
+  const sweep = async (): Promise<void> => {
+    if (sweeping || closing) return;
+    sweeping = true;
+    try {
+      const now = Date.now();
+      for (const candidate of await collectEvictable())
+        if (now - candidate.since >= idleMs) await evict(candidate.id, candidate.cached);
+    } finally {
+      sweeping = false;
+    }
+  };
+  const sweeper = setInterval(() => void sweep(), Math.min(idleMs, 30_000));
+  sweeper.unref();
   const attach = async (input: {
     conversationId: string;
     contextRevision: number;
@@ -58,18 +119,32 @@ export async function createWritingRuntime(
     restore: boolean;
   }): Promise<NativeWritingSession> => {
     if (closing) throw new WritingRuntimeError("RUNTIME_CLOSED");
-    const existing = sessions.get(input.nativeSessionId);
-    if (existing) return existing;
-    if (sessions.size >= (options.limits?.maxSessions ?? 16))
-      throw new WritingRuntimeError("RESOURCE_LIMIT");
-    const pending = DshWritingSession.open(ctx, options, input, () =>
-      sessions.delete(input.nativeSessionId),
-    );
-    sessions.set(input.nativeSessionId, pending);
+    const id = input.nativeSessionId;
+    const existing = sessions.get(id);
+    if (existing && !evicting.has(id)) return existing.pending;
+    const inFlightEviction = evicting.get(id);
+    if (inFlightEviction) await inFlightEviction;
+    if (sessions.size >= (options.limits?.maxSessions ?? 16)) {
+      const idle = (await collectEvictable()).sort((a, b) => a.since - b.since)[0];
+      if (!idle) throw new WritingRuntimeError("RESOURCE_LIMIT");
+      await evict(idle.id, idle.cached);
+    }
+    let detachedFired = false;
+    const detached = () => {
+      if (detachedFired) return;
+      detachedFired = true;
+      sessions.delete(id);
+      options.onSessionDetached?.(id);
+    };
+    const cached: CachedSession = {
+      pending: DshWritingSession.open(ctx, options, input, detached),
+      detached,
+    };
+    sessions.set(id, cached);
     try {
-      return await pending;
+      return await cached.pending;
     } catch (error) {
-      sessions.delete(input.nativeSessionId);
+      detached();
       throw error;
     }
   };
@@ -77,8 +152,10 @@ export async function createWritingRuntime(
     attach,
     dispose() {
       closing = true;
+      clearInterval(sweeper);
       return (disposing ??= (async () => {
-        const owned = await Promise.allSettled(sessions.values());
+        await Promise.allSettled(evicting.values());
+        const owned = await Promise.allSettled([...sessions.values()].map((s) => s.pending));
         const results = await Promise.allSettled(
           owned.filter((r) => r.status === "fulfilled").map((r) => r.value.dispose()),
         );

@@ -9,6 +9,7 @@ import { spaceActionSql } from "../authorization/access.js";
 import { accessRoles } from "../authorization/policy.js";
 import { insertNotifications } from "../notifications/index.js";
 import {
+  assertWorkspaceMemberCapacity,
   documentActionSql,
   requireWorkspaceDocumentManagers,
 } from "../authorization/permissions.js";
@@ -285,19 +286,7 @@ export class WorkspaceService {
         .limit(1);
       if (access.role !== "owner" && (input.role === "admin" || existing?.role === "admin"))
         throw new DomainError("VALIDATION_ERROR", "只有空间所有者可以管理管理员");
-      if (!existing) {
-        const [count] = await tx
-          .select({ value: sql<number>`count(*)::int` })
-          .from(resourceAcl)
-          .where(
-            and(
-              eq(resourceAcl.tenantId, principal.tenantId),
-              eq(resourceAcl.workspaceId, workspaceId),
-            ),
-          );
-        if ((count?.value ?? 0) >= 499)
-          throw new DomainError("RESOURCE_LIMIT", "空间成员数量已达上限");
-      }
+      if (!existing) await assertWorkspaceMemberCapacity(tx, principal.tenantId, workspaceId);
       const [member] = await tx
         .insert(resourceAcl)
         .values({
@@ -321,7 +310,7 @@ export class WorkspaceService {
             actorId: principal.identityId,
             recipientId: identityId,
             type: "permission",
-            eventKey: `membership:${randomUUID()}`,
+            eventKey: `membership:${workspaceId}:${identityId}:${input.role}`,
             workspaceId,
             message: existing ? "你的空间角色已更新" : "你已被添加到团队空间",
           },
@@ -366,7 +355,7 @@ export class WorkspaceService {
             actorId: principal.identityId,
             recipientId: identityId,
             type: "permission",
-            eventKey: `membership-removed:${randomUUID()}`,
+            eventKey: `membership-removed:${workspaceId}:${identityId}:${member.createdAt.getTime()}`,
             workspaceId,
             message: "你已被移出团队空间，空间继承权限已撤销",
           },

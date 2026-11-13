@@ -1,12 +1,29 @@
 import { policyEnforcer, accessRoles } from "./policy.js";
 import { loadPolicyOverrides } from "./access.js";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Database } from "../../../database/index.js";
 import { identityProfiles, resourceAcl, workspaces } from "../../../database/schema/index.js";
 import { DomainError } from "../../shared/domain-error.js";
 import type { Principal } from "../identity/identity.types.js";
 
 type Executor = Pick<Database, "select">;
+
+/** Single source for the workspace member ceiling; admin grants and invitation accepts share it. */
+export const WORKSPACE_MEMBER_LIMIT = 499;
+
+/** Enforce the member ceiling before granting a NEW membership; callers skip it for existing members. */
+export async function assertWorkspaceMemberCapacity(
+  db: Executor,
+  tenantId: string,
+  workspaceId: string,
+): Promise<void> {
+  const [count] = await db
+    .select({ value: sql<number>`count(*)::int` })
+    .from(resourceAcl)
+    .where(and(eq(resourceAcl.tenantId, tenantId), eq(resourceAcl.workspaceId, workspaceId)));
+  if ((count?.value ?? 0) >= WORKSPACE_MEMBER_LIMIT)
+    throw new DomainError("RESOURCE_LIMIT", "空间成员数量已达上限");
+}
 
 export function workspaceRole(
   workspace: Pick<

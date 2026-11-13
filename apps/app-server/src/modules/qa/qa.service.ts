@@ -3,21 +3,35 @@ import type {
   EvidenceBundle,
   EvidenceRef,
   QaRunContext,
+  RunUsage,
   ScopeSelection,
 } from "@zhishu/ai-contracts";
 import { validateEvidenceBundle } from "@zhishu/ai-contracts";
 import { runQaAnswerFlow, QaFlowError, type QaFlowPorts } from "@zhishu/ai-qa";
-import type { ConversationSnapshot, MessagePart, Run } from "@zhishu/chat-contracts";
+import type { ConversationSnapshot, Message, MessagePart, Run } from "@zhishu/chat-contracts";
+import { and, eq } from "drizzle-orm";
+import type { Database } from "../../../database/index.js";
+import { identityProfiles } from "../../../database/schema/index.js";
 import type { Principal } from "../identity/identity.types.js";
 import type { AppConfig } from "../../config.js";
 import { DomainError } from "../../shared/domain-error.js";
-import type { AiService, ConversationOwner } from "../ai/index.js";
+import type {
+  AiService,
+  ConversationOwner,
+  HandoffCommand,
+  WritingHandoffPort,
+} from "../ai/index.js";
 import type { ArtifactRow, ConversationRow, RunRow } from "../ai/index.js";
 import {
   conversationKey,
+  DEFAULT_OWNER_HOURLY_MAX,
+  DispatchLoop,
+  failureRunStatus,
+  mergeEvidenceBundles,
   runDto,
   streamConversation,
   type ConversationEventBus,
+  type DomainFailureMap,
   type SseHandle,
 } from "../ai/index.js";
 import type { RagService, RetrievalScope } from "../rag/rag.service.js";
@@ -34,6 +48,8 @@ export type QaAudience =
       visitorId: string;
       /** Live approved set resolved by qa-sites on every request. */
       approved: readonly { documentId: string; workspaceId: string; publicLabel: string }[];
+      /** Credential revision the visitor entered with; open streams re-check it live. */
+      accessRevision?: number;
       /** Admin preview: an internal identity bound to the site, projected exactly like visitors. */
       internal?: Principal;
     };
@@ -52,30 +68,13 @@ export interface QaSubmitInput {
   scope?: ScopeSelection;
 }
 
-export interface HandoffCommand {
-  tenantId: string;
-  identityId: string;
-  sourceConversationId: string;
-  messageIds: string[];
-  artifactIds: string[];
-  instruction: string;
-  intent?: "auto" | "create" | "continue" | "rewrite" | "summarize" | "translate" | "research";
-  targetDocumentId?: string | null;
-  creationKey: string;
-}
-
-export interface WritingHandoffPort {
-  createFromHandoff(
-    cmd: HandoffCommand,
-  ): Promise<{ conversationId: string; runId: string; replayed: boolean }>;
-}
-
 const HISTORY_LIMIT = 16;
 const HISTORY_BYTE_LIMIT = 16_000;
 
 export interface QaServiceDeps {
   store: AiService;
   bus: ConversationEventBus;
+  db: Database;
   rag: RagService | null;
   model: BaseChatModel | null;
   config: AppConfig;
@@ -88,12 +87,12 @@ export interface QaServiceDeps {
  * checkpoint, no LangGraph and no engine switch.
  */
 export class QaService {
-  private controller?: AbortController;
-  private timer?: ReturnType<typeof setTimeout>;
-  private running?: Promise<void>;
+  private readonly dispatch: DispatchLoop;
   private activeRuns = new Map<string, AbortController>();
 
-  constructor(private readonly deps: QaServiceDeps) {}
+  constructor(private readonly deps: QaServiceDeps) {
+    this.dispatch = new DispatchLoop(() => this.drainOnce(), deps.log, "qa");
+  }
 
   capabilities() {
     const enabled = !!(this.deps.model && this.deps.rag);
@@ -220,15 +219,72 @@ export class QaService {
     snapshot: ConversationSnapshot,
   ): Promise<ConversationSnapshot> {
     if (audience.kind !== "site") return snapshot;
-    // Public projection: strip internal identities and unknown-source citations, keep allowed summaries.
+    // Public projection: strip internal identities and artifact payloads, and drop answers
+    // whose Run evidence is no longer fully approved — revocation applies to old answers too.
+    const approved = new Set(audience.approved.map((source) => source.documentId));
+    const runAllowed = new Map<string, boolean>();
+    const messages: Message[] = [];
+    for (const message of snapshot.messages) {
+      if (message.role === "assistant") {
+        let allowed = runAllowed.get(message.runId);
+        if (allowed === undefined) {
+          allowed = await this.publicRunAllowed(audience.tenantId, message.runId, approved);
+          runAllowed.set(message.runId, allowed);
+        }
+        if (!allowed) continue;
+      }
+      messages.push({
+        ...message,
+        parts: message.parts.filter((part) => part.kind !== "artifact"),
+      });
+    }
     return {
       ...snapshot,
       conversation: { ...snapshot.conversation, siteId: audience.siteId },
-      messages: snapshot.messages.map((message) => ({
-        ...message,
-        parts: message.parts.filter((part) => part.kind !== "artifact"),
-      })),
+      messages,
+      artifacts: [],
     };
+  }
+
+  /**
+   * A public answer stays visible only while every evidence source handed to the model is
+   * still approved. The Run ledger is the authority, not just the displayed citations.
+   */
+  private async publicRunAllowed(
+    tenantId: string,
+    runId: string,
+    approved: ReadonlySet<string>,
+    artifactCache?: Map<string, boolean>,
+  ): Promise<boolean> {
+    const run = await this.deps.store.readRun(tenantId, runId);
+    if (!run) return false;
+    const execution = run.execution as { evidenceRefs?: EvidenceRef[] } | null;
+    for (const ref of execution?.evidenceRefs ?? []) {
+      let sourceAllowed = artifactCache?.get(ref.evidenceArtifactId);
+      if (sourceAllowed === undefined) {
+        sourceAllowed = await this.evidenceArtifactApproved(
+          tenantId,
+          ref.evidenceArtifactId,
+          approved,
+        );
+        artifactCache?.set(ref.evidenceArtifactId, sourceAllowed);
+      }
+      if (!sourceAllowed) return false;
+    }
+    return true;
+  }
+
+  private async evidenceArtifactApproved(
+    tenantId: string,
+    artifactId: string,
+    approved: ReadonlySet<string>,
+  ): Promise<boolean> {
+    const artifact = await this.deps.store.findArtifact(tenantId, artifactId);
+    if (!artifact || artifact.state !== "committed") return false;
+    const bundle = artifact.payload as EvidenceBundle;
+    return bundle.sources.every(
+      (source) => source.sourceKind !== "document" || approved.has(source.documentId),
+    );
   }
 
   configurationId(): string {
@@ -267,7 +323,7 @@ export class QaService {
       },
       {
         tenantRunningMax: this.deps.config.AI_MAX_CONCURRENT,
-        ownerHourlyMax: 120,
+        ownerHourlyMax: DEFAULT_OWNER_HOURLY_MAX,
         siteHourlyMax:
           audience.kind === "site"
             ? await this.siteQuota(conversation.tenantId, audience.siteId)
@@ -429,7 +485,7 @@ export class QaService {
         throw new DomainError("NOT_FOUND", "资料已不可用");
       bundles.push(artifact.payload as EvidenceBundle);
     }
-    const merged = mergeBundles(bundles);
+    const merged = mergeEvidenceBundles(bundles);
     const scoped: RetrievalScope = {
       kind: "principal",
       principal: audience.principal,
@@ -463,43 +519,70 @@ export class QaService {
       conversationId,
     );
     this.requireOwned(audience, conversation);
-    await streamConversation(this.deps.store, this.deps.bus, conversation, cursor, sse, signal);
+    if (audience.kind !== "site") {
+      await streamConversation(this.deps.store, this.deps.bus, conversation, cursor, sse, signal);
+      return;
+    }
+    // Open public streams keep re-checking the live site gate: a pause, credential bump or
+    // withdrawn approval forces a resync instead of continuing to deliver old answers.
+    let approved = new Set(audience.approved.map((source) => source.documentId));
+    const artifactCache = new Map<string, boolean>();
+    const revalidate = async (): Promise<boolean> => {
+      try {
+        const state = await this.siteStreamState(conversation);
+        if (
+          audience.accessRevision !== undefined &&
+          state.accessRevision !== audience.accessRevision
+        )
+          return false;
+        approved = new Set(state.approved.map((source) => source.documentId));
+        artifactCache.clear();
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const filterEvent = async (
+      event: import("@zhishu/chat-contracts").AiEvent,
+    ): Promise<boolean> => {
+      if (event.type !== "message.created" || event.payload.message.role !== "assistant")
+        return true;
+      return this.publicRunAllowed(
+        audience.tenantId,
+        event.payload.message.runId,
+        approved,
+        artifactCache,
+      );
+    };
+    await streamConversation(
+      this.deps.store,
+      this.deps.bus,
+      conversation,
+      cursor,
+      sse,
+      signal,
+      undefined,
+      filterEvent,
+      revalidate,
+    );
   }
 
   // ---------------------------------------------------------------- dispatch
 
   start() {
-    if (this.controller) return;
-    this.controller = new AbortController();
-    const loop = async () => {
-      while (this.controller && !this.controller.signal.aborted) {
-        const processed = await this.drainOnce().catch((error) => {
-          this.deps.log("qa_dispatch_failed", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-          return false;
-        });
-        await new Promise((r) => setTimeout(r, processed ? 50 : 400));
-      }
-    };
-    this.running = loop();
+    this.dispatch.start();
   }
 
   async stop() {
-    this.controller?.abort();
-    if (this.timer) clearTimeout(this.timer);
-    await this.running;
+    await this.dispatch.stop();
   }
 
   private kick() {
-    if (!this.controller) return;
-    this.timer = setTimeout(() => void this.drainOnce().catch(() => undefined), 50);
-    this.timer.unref();
+    this.dispatch.kick();
   }
 
   private async drainOnce(): Promise<boolean> {
-    if (!this.controller || this.activeRuns.size >= this.deps.config.AI_MAX_CONCURRENT)
-      return false;
+    if (this.activeRuns.size >= this.deps.config.AI_MAX_CONCURRENT) return false;
     if (!this.deps.model || !this.deps.rag) return false;
     const claimed = await this.deps.store.claimNext("qa", this.deps.config.AI_TIMEOUT_MS + 30_000);
     if (!claimed) return false;
@@ -527,7 +610,6 @@ export class QaService {
       const rag = this.deps.rag!;
       const adapter: QaGenerateAdapter = createQaGenerateAdapter(model);
       let bundle: EvidenceBundle = { sources: [], items: [], freshness: "current" };
-      let evidenceArtifactId: string | undefined;
       const steps: {
         stepId: string;
         status: "pending" | "running" | "done" | "failed";
@@ -535,12 +617,13 @@ export class QaService {
       }[] = [];
       const persistStep = async (stepId: string, status: "running" | "done") => {
         steps.push({ stepId, status, updatedAt: new Date().toISOString() });
-        const execution = {
-          evidenceRefs: [],
-          steps,
-          evidenceArtifactIds: evidenceArtifactId ? [evidenceArtifactId] : [],
-        } as QaOutcomeExecution;
-        const written = await store.writeExecution({ run, owner: store.instanceId, execution });
+        // Patch steps only: registerArtifact folds evidence into the ledger concurrently,
+        // and a whole-execution rewrite here would clear it until the final commit.
+        const written = await store.writeExecution({
+          run,
+          owner: store.instanceId,
+          executionPatch: { steps },
+        });
         if (!written) throw new QaFlowError("LEASE_LOST");
         const fresh = await store.readRun(run.tenantId, run.id);
         if (fresh?.cancelRequested) controller.abort(new Error("CANCELLED"));
@@ -569,7 +652,6 @@ export class QaService {
             evidenceIds: provided.items.map((item) => item.evidenceId),
             trackEvidence: true,
           });
-          evidenceArtifactId = registered.artifact.id;
           return {
             evidenceArtifactId: registered.artifact.id,
             evidenceRefs: refsOf(provided, registered.artifact.id),
@@ -612,6 +694,7 @@ export class QaService {
         owner: store.instanceId,
         status: "completed",
         assistantParts: answerParts(outcome.answer),
+        usage: qaUsage(outcome.usage),
         execution: {
           evidenceRefs: outcome.evidenceRefs,
           steps: outcome.steps.map((step) => ({
@@ -641,26 +724,16 @@ export class QaService {
     aborted: boolean,
   ) {
     const store = this.deps.store;
-    const code =
-      error instanceof QaFlowError
-        ? error.code === "LEASE_LOST"
-          ? undefined
-          : error.code
-        : aborted
-          ? "CANCELLED"
-          : error instanceof DomainError
-            ? error.code === "AI_ACCESS_REVOKED"
-              ? "ACCESS_REVOKED"
-              : error.code === "SERVICE_UNAVAILABLE"
-                ? "KNOWLEDGE_NOT_READY"
-                : "MODEL_FAILED"
-            : "MODEL_FAILED";
+    const code = qaFailureCode(error, aborted);
     if (code === undefined) return; // lease lost: maintain() finalizes as interrupted
-    const status =
-      code === "CANCELLED" ? "cancelled" : code === "OUTPUT_UNKNOWN" ? "interrupted" : "failed";
+    const status = failureRunStatus(code, "OUTPUT_UNKNOWN");
     try {
       await store.commitRunOutput({ run, owner: store.instanceId, status, errorCode: code });
-    } catch {
+    } catch (error) {
+      this.deps.log("qa_failure_commit_retry", {
+        runId: run.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
       await store
         .commitRunOutput({
           run,
@@ -668,7 +741,13 @@ export class QaService {
           status: "interrupted",
           errorCode: "OUTPUT_UNKNOWN",
         })
-        .catch(() => undefined);
+        .catch((fallbackError: unknown) => {
+          // maintain() finalizes stale leases; the fault must still be visible.
+          this.deps.log("qa_failure_commit_lost", {
+            runId: run.id,
+            error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+          });
+        });
     }
     this.deps.bus.wake(conversationKey(conversation));
   }
@@ -682,13 +761,21 @@ export class QaService {
       evidenceArtifactIds?: string[];
       stagedMessageId?: string;
     } | null;
-    const committed = await store.listArtifacts(run.tenantId, run.conversationId, 200);
-    const evidenceArtifacts = committed
-      .filter((artifact) => artifact.runId === run.id && artifact.kind === "evidence")
-      .toReversed();
-    const latest = evidenceArtifacts.find((artifact) =>
-      execution?.evidenceArtifactIds?.includes(artifact.id),
-    );
+    // The ledger already names this Run's evidence artifacts; resolve them by identity
+    // instead of scanning a bounded artifact page that can miss old Runs.
+    let latest: ArtifactRow | undefined;
+    for (const artifactId of [...(execution?.evidenceArtifactIds ?? [])].reverse()) {
+      const artifact = await store.findArtifact(run.tenantId, artifactId);
+      if (
+        artifact &&
+        artifact.runId === run.id &&
+        artifact.kind === "evidence" &&
+        artifact.state === "committed"
+      ) {
+        latest = artifact;
+        break;
+      }
+    }
     if (!latest) return undefined;
     const bundle = latest.payload as EvidenceBundle;
     const stagedRow = execution?.stagedMessageId
@@ -767,14 +854,31 @@ export class QaService {
   /** Reconstruct the execution audience for a claimed conversation. */
   private async audienceFor(conversation: ConversationRow): Promise<QaAudience> {
     if (conversation.identityId) {
+      // Same active-profile check as writing: a disabled identity must not keep generating.
+      const rows = await this.deps.db
+        .select({
+          displayName: identityProfiles.displayName,
+          email: identityProfiles.email,
+          active: identityProfiles.active,
+        })
+        .from(identityProfiles)
+        .where(
+          and(
+            eq(identityProfiles.tenantId, conversation.tenantId),
+            eq(identityProfiles.identityId, conversation.identityId),
+          ),
+        )
+        .limit(1);
+      const profile = rows[0];
+      if (!profile?.active) throw new DomainError("AI_ACCESS_REVOKED", "身份已停用");
       return {
         kind: "internal",
         principal: {
           tenantId: conversation.tenantId,
           identityId: conversation.identityId,
           username: conversation.identityId,
-          displayName: "",
-          email: "",
+          displayName: profile.displayName,
+          email: profile.email,
           globalRoles: [],
           active: true,
         },
@@ -801,11 +905,30 @@ export class QaService {
       throw new DomainError("AI_ACCESS_REVOKED", "公开问答站点未注册");
     };
 
+  /** Live site gate for open public streams: credential revision plus the approved set. */
+  siteStreamState: (conversation: ConversationRow) => Promise<{
+    accessRevision: number;
+    approved: readonly { documentId: string; workspaceId: string; publicLabel: string }[];
+  }> = async () => {
+    throw new DomainError("AI_ACCESS_REVOKED", "公开问答站点未注册");
+  };
+
   /** Root assembly injects the writing handoff after both modules exist. */
   handoffPort!: WritingHandoffPort;
 }
 
-type QaOutcomeExecution = import("@zhishu/ai-contracts").QaExecution;
+const QA_DOMAIN_FAILURE: DomainFailureMap = {
+  AI_ACCESS_REVOKED: "ACCESS_REVOKED",
+  SERVICE_UNAVAILABLE: "KNOWLEDGE_NOT_READY",
+};
+
+/** Classify a failed attempt; undefined means the lease was lost and maintain() finalizes it. */
+function qaFailureCode(error: unknown, aborted: boolean): string | undefined {
+  if (error instanceof QaFlowError) return error.code === "LEASE_LOST" ? undefined : error.code;
+  if (aborted) return "CANCELLED";
+  if (error instanceof DomainError) return QA_DOMAIN_FAILURE[error.code] ?? "MODEL_FAILED";
+  return "MODEL_FAILED";
+}
 
 function audienceTenant(audience: QaAudience): string {
   return audience.kind === "internal" ? audience.principal.tenantId : audience.tenantId;
@@ -815,24 +938,28 @@ function documentIdsOf(bundle: EvidenceBundle): string[] {
   return [...new Set(bundle.items.map((i) => i.sourceId))];
 }
 
-function mergeBundles(bundles: EvidenceBundle[]): EvidenceBundle {
-  const sources = new Map<string, EvidenceBundle["sources"][number]>();
-  const items = [];
-  for (const bundle of bundles) {
-    for (const source of bundle.sources)
-      sources.set(`${source.sourceId}\u0000${source.snapshotId}`, source);
-    items.push(...bundle.items);
-  }
-  const merged = { sources: [...sources.values()], items, freshness: "current" as const };
-  if (!validateEvidenceBundle(merged).success) throw new DomainError("CONFLICT", "资料组合不合法");
-  return merged;
-}
-
 function refsOf(bundle: EvidenceBundle, artifactId: string): EvidenceRef[] {
   return bundle.items.map((item) => ({
     evidenceArtifactId: artifactId,
     evidenceId: item.evidenceId,
   }));
+}
+
+/** Flow metering → the shared RunUsage ledger: retrieval is search, evidence items are reads. */
+function qaUsage(usage: {
+  modelCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  retrievalCalls: number;
+  evidenceItems: number;
+}): Partial<Record<keyof RunUsage, number>> {
+  return {
+    modelCalls: usage.modelCalls,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    searchCalls: usage.retrievalCalls,
+    sourceReads: usage.evidenceItems,
+  };
 }
 
 function evidenceJson(bundle: EvidenceBundle) {

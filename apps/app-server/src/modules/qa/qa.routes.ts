@@ -210,7 +210,8 @@ export async function qaRoutes(app: FastifyInstance, qa: QaService) {
           sse,
           controller.signal,
         );
-      } catch {
+      } catch (error) {
+        request.log.error({ err: error }, "QA event stream failed");
         sse.close();
       }
     },

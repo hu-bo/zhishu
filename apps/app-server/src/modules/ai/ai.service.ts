@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { MessagePart, ConversationPurpose } from "@zhishu/chat-contracts";
+import type { MessagePart, ConversationPurpose, RunStatus } from "@zhishu/chat-contracts";
 import type {
   ConversationOrigin,
   GenerationLimits,
@@ -23,8 +23,8 @@ import { AiRepository } from "./ai.repository.js";
 import type { ArtifactRow, ConversationRow, MessageRow, RunRow } from "./ai.types.js";
 import { artifactDto, conversationDto, messageDto, runDto } from "./ai.types.js";
 
-const TERMINAL_RUN: readonly string[] = ["completed", "interrupted", "failed", "cancelled"];
-const ACTIVE_RUN: readonly string[] = ["queued", "running", "waiting-approval", "interrupted"];
+const TERMINAL_RUN: readonly RunStatus[] = ["completed", "interrupted", "failed", "cancelled"];
+const ACTIVE_RUN: readonly RunStatus[] = ["queued", "running", "waiting-approval", "interrupted"];
 const QUEUED_CAP = 4;
 const RUN_FRESH_MINUTES = 30;
 const RUN_KEEP_DAYS = 7;
@@ -57,6 +57,9 @@ export interface AdmitMessageCommand {
   context: QaRunContext | WritingRunContext;
 }
 
+/** Default hourly Run admission budget per owner; the single source for the 120 cap. */
+export const DEFAULT_OWNER_HOURLY_MAX = 120;
+
 export interface AdmissionBudget {
   tenantRunningMax: number;
   ownerHourlyMax: number;
@@ -67,6 +70,11 @@ export interface ExecutionWrite {
   run: RunRow;
   owner: string;
   execution?: QaExecution | WritingExecution;
+  /**
+   * Shallow merge onto the current fenced execution. Step progress must not rewrite the
+   * evidence ledger that registerArtifact folds in concurrently.
+   */
+  executionPatch?: Partial<QaExecution> & Partial<WritingExecution>;
   status?: "running" | "waiting-approval";
   reserve?: Partial<Record<keyof RunUsage, number>>;
   limits?: GenerationLimits;
@@ -83,6 +91,8 @@ export interface CommitOutputCommand {
   assistantParts?: MessagePart[];
   artifactIdsToCommit?: string[];
   execution?: QaExecution | WritingExecution;
+  /** Settled actual usage added to the reservations; the product metering source of truth. */
+  usage?: Partial<Record<keyof RunUsage, number>>;
 }
 
 export interface RegisterArtifactCommand {
@@ -258,7 +268,7 @@ export class AiService {
       if (conversation.identityId) {
         const ownerRecent = await this.repository.countRuns(tx, {
           tenantId: conversation.tenantId,
-          statuses: ACTIVE_RUN as unknown as import("@zhishu/chat-contracts").RunStatus[],
+          statuses: ACTIVE_RUN,
           identityId: conversation.identityId,
           since: hourWindow,
         });
@@ -268,7 +278,7 @@ export class AiService {
       if (conversation.siteId && budget.siteHourlyMax !== undefined) {
         const siteRecent = await this.repository.countRuns(tx, {
           tenantId: conversation.tenantId,
-          statuses: ACTIVE_RUN as unknown as import("@zhishu/chat-contracts").RunStatus[],
+          statuses: ACTIVE_RUN,
           siteId: conversation.siteId,
           since: hourWindow,
         });
@@ -321,12 +331,12 @@ export class AiService {
     conversation: ConversationRow,
     run: RunRow,
   ): Promise<MessageRow> {
-    const rows = await this.repository.listMessages(tx, {
-      tenantId: conversation.tenantId,
-      conversationId: conversation.id,
-      limit: 500,
-    });
-    const found = rows.find((m) => m.runId === run.id && m.role === "user");
+    const found = await this.repository.userMessage(
+      tx,
+      conversation.tenantId,
+      conversation.id,
+      run.id,
+    );
     if (!found) throw new DomainError("CONFLICT", "任务缺少输入消息");
     return found;
   }
@@ -373,9 +383,18 @@ export class AiService {
       let usage = current.usage;
       if (input.reserve && input.limits)
         usage = settleUsage(current.usage, input.reserve, input.limits);
+      let execution = input.execution ?? current.execution ?? undefined;
+      if (input.executionPatch) {
+        const base = (current.execution ?? {
+          evidenceRefs: [],
+          evidenceArtifactIds: [],
+          steps: [],
+        }) as QaExecution | WritingExecution;
+        execution = { ...base, ...input.executionPatch };
+      }
       const updated = await this.repository.patchRunFenced(tx, current, input.owner, {
         usage,
-        execution: input.execution ?? current.execution ?? undefined,
+        execution,
         status: input.status,
         leaseExpiresAt: input.renewLeaseMs ? new Date(Date.now() + input.renewLeaseMs) : undefined,
       });
@@ -544,6 +563,7 @@ export class AiService {
         status: cmd.status,
         errorCode: cmd.errorCode,
         execution: cmd.execution ?? current.execution ?? undefined,
+        usage: cmd.usage ? addUsage(current.usage, cmd.usage) : current.usage,
         clearLease: true,
         expiresAt: new Date(Date.now() + RUN_KEEP_DAYS * 86_400_000),
       });
@@ -784,12 +804,7 @@ export class AiService {
     runId: string,
     conversationId: string,
   ): Promise<MessageRow | undefined> {
-    const rows = await this.repository.listMessages(this.db, {
-      tenantId,
-      conversationId,
-      limit: 500,
-    });
-    return rows.find((m) => m.runId === runId && m.role === "user");
+    return this.repository.userMessage(this.db, tenantId, conversationId, runId);
   }
 
   async listCommittedMessages(
@@ -1054,15 +1069,21 @@ export class AiService {
     }
     const expired = await this.repository.expiredConversations();
     for (const conversation of expired) {
-      await this.tx(async (tx) => {
+      const deleted = await this.tx(async (tx) => {
         const locked = await this.repository.lockConversation(
           tx,
           conversation.tenantId,
           conversation.id,
         );
-        if (locked) await this.repository.deleteConversationRows(tx, locked.tenantId, locked.id);
+        if (!locked) return false;
+        return this.repository.deleteConversationRows(tx, locked.tenantId, locked.id);
       });
-      this.log("ai_conversation_gc", { conversationId: conversation.id });
+      if (deleted) this.log("ai_conversation_gc", { conversationId: conversation.id });
+      else
+        this.log("ai_conversation_gc_retained", {
+          conversationId: conversation.id,
+          reason: "unsettled runs, image results or proposal applications",
+        });
     }
   }
 
@@ -1088,12 +1109,9 @@ export class AiService {
   }
 }
 
-function settleUsage(
-  usage: RunUsage,
-  delta: Partial<Record<keyof RunUsage, number>>,
-  limits: GenerationLimits,
-): RunUsage {
-  const next: RunUsage = {
+/** Actuals are additive facts; budget enforcement happens at reservation time, not here. */
+function addUsage(usage: RunUsage, delta: Partial<Record<keyof RunUsage, number>>): RunUsage {
+  return {
     ...usage,
     modelCalls: usage.modelCalls + (delta.modelCalls ?? 0),
     inputTokens: usage.inputTokens + (delta.inputTokens ?? 0),
@@ -1107,6 +1125,14 @@ function settleUsage(
       ? { providerCredits: (usage.providerCredits ?? 0) + delta.providerCredits }
       : {}),
   };
+}
+
+function settleUsage(
+  usage: RunUsage,
+  delta: Partial<Record<keyof RunUsage, number>>,
+  limits: GenerationLimits,
+): RunUsage {
+  const next = addUsage(usage, delta);
   if (
     next.modelCalls > limits.maxModelCalls ||
     next.searchCalls > limits.maxSearchCalls ||
