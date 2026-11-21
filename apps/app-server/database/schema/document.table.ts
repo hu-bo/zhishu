@@ -139,7 +139,6 @@ export const documents = pgTable(
       .notNull()
       .default("restricted"),
     metadataRevision: integer("metadata_revision").notNull().default(1),
-    archivedAt: timestamp("archived_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

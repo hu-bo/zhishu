@@ -1,18 +1,16 @@
 # 知书项目文档地图
 
-状态：设计规划，问答/写作双 package 与共享基础设施目标于 2026-11-10 更新。本文组织产品范围与设计责任，当前源码及历史验收分别记录实际完成范围。
+状态：2026-11-13，统一 DSH 插件化助手已实施。ai-qa/ai-writing 双流程已退役，dsh-agent/ai-runtime/ai-plugins 三包落地，0046 向前迁移删除 purpose 分叉并重命名原生/图片表（业务表仍 37 张）；独立创作改为先 Chat、用户受理 create-draft 原子绑定后展开双栏。实施与验证记录见 [主技术文档 §14.1](apps/ai-assistant-and-public-qa.md)。下文旧日期段落是历史范围和迁移背景，不能覆盖主技术文档。
 
-项目先交付可嵌入、可独立使用的文档编辑与协同产品，再组合知识库、AI 和企业业务能力。文档采用“一个 package 一份主文档、一个 app 一份主文档”；本页负责导航、跨包约束和交付顺序。[原始需求](resreach.md)作为需求输入保留，原先按四个系统视角输出的方式由此文档地图替代。
+知书面向可独立使用的文档编辑、协同与团队知识库。技术设计以源码和实际验证为基线，产品名称与界面文案保持中文知书。界面遵守 [设计规范](design-system.md)。
 
-应用界面的视觉、控件和响应式约定见[知书界面设计规范](design-system.md)。
+AI 的最新唯一目标见 [DSH 插件化助手与独立创作技术设计](apps/ai-assistant-and-public-qa.md)，实施交接见 [实现 Prompt](apps/ai-assistant-implementation-prompt.md)。主文档包含本轮 20 个 workspace、384 个代码文件、37 张业务表的扫描，三包职责、插件权限、前端两阶段布局、草稿原子创建/绑定、零新增表迁移和最终 ER 图。
 
-2026-11-10 的应用目标为 `@zhishu/ai-qa` 与 `@zhishu/ai-writing` 两个独立业务 package：问答采用有界检索/生成流程，写作使用 DSH，分别维护会话和上下文。双方复用 rag 检索与 scope/rag Skill 资源、纯合约、chat-ui，以及应用侧存储、预算、配置和事件基础设施。对外站点复用问答流程，通过来源空间和批准文档关系授权。
+目标包为 [dsh-agent](packages/dsh-agent.md)、[ai-runtime](packages/ai-runtime.md)、[ai-plugins](packages/ai-plugins.md)：分别负责官方原生接入、统一助手编排和问答/research/写作等插件。现有 rag、纯合约、chat-ui、授权、产品存储及协同继续复用；恢复包名不恢复旧 LangGraph、legacy-authoring 或 ChatRecord 兼容分支。
 
-现有 WritingChat/RagChat 的业务分工继续保留，混合执行、旧协议和重复状态按新方案清理。两种用途共用会话/消息/Run/产物/事件表，以不可变 purpose 隔离；DSH 日志和图片任务保留写作专属表。原 dsh-agent 的有效接入迁入 ai-writing/runtime，删除旧包及 ChatRecord 产品接口。允许新增必要表与一次性破坏性迁移，旧兼容代码的退役是交付前置条件。原 [协作 AI 写作与 DSH 方案](packages/ai-chat-architecture.md)仅作历史记录，采纳后仍走协同 durable ack。
+独立创作先显示完整 Chat，保留问答/创作选择、资料范围和联网能力；用户决定创建草稿并完成真实持久化绑定后，进入左编辑器、右侧同一 Chat。会话不因意图切换或创建草稿而更换，正文仍由协同及 durable ack 管理。
 
-完整目标见 [AI 问答、写作与对外问答站技术设计](apps/ai-assistant-and-public-qa.md)。该文档包含历史全仓扫描、两个业务 package 的依赖边界、共享能力、会话交接、11 张核心表、分用途 API/共享事件协议、一次性切换和最终 ER 图。本轮只修订设计，未创建目标包或执行数据库迁移；下文旧日期段落用于核对历史基线。
-
-写作目标包含通过服务端 TAVILY_API_KEY 启用的 Tavily 联网搜索，网页和平台文档使用统一的证据/引用合约；平台文档问答标注可定位来源，写作采纳后保留正文来源链接。该能力复用现有证据产物，不新增来源表，实际密钥不进入文档或前端。
+下文旧日期段落是历史范围和迁移背景，不能覆盖主技术文档。先前记录的测试通过不代表新目标已验收；普通文档历史、已发布 migration 和权限/回执能力也不能以清理兼容为由删除。
 
 ## 1. 产品交付形态
 
@@ -34,8 +32,8 @@ docs/
     ai-chat-architecture.md         # 协作 AI 写作/DSH 方案、两类 Chat 边界与共享 UI
     chat-contracts.md               # 通用会话/消息/Run/审批/产物协议
     chat-ui.md                      # 可独立消费的 React Chat 组件
-    dsh-agent.md                    # 官方 Cordis/DSH 封装与服务端端口
-    ai-plugins.md                   # 文章写作、调研、图片创建插件
+    dsh-agent.md                   # 官方 SDK 原生接入、执行和恢复
+    ai-plugins.md                  # 问答、调研、写作与可选工具插件
     document-contracts.md           # 01 内容、命令、事件和版本合约
     editor-core.md                  # 02 编辑引擎与扩展模型
     editor-react.md                 # 03 React 集成与宿主接口
@@ -43,7 +41,7 @@ docs/
     editor-ui.md                    # 05 默认编辑界面与交互规范
     editor-ai-bridge.md             # 06 AI 草稿与编辑器变更适配
     ai-contracts.md                 # 09 AI 请求、事件、提案与引用合约
-    ai-runtime.md                   # 10 现有 LangChain 能力与写作迁移基线
+    ai-runtime.md                  # 统一助手与插件编排目标
     rag.md                          # 11 来源处理、索引与授权检索管线
   apps/
     app-web.md                      # 07 产品页面、用户流程和前端组合
@@ -52,36 +50,36 @@ docs/
 
 | 文档                                                        | 设计范围                                                  | 阅读前置                 | 需要产出的实现依据                                    |
 | ----------------------------------------------------------- | --------------------------------------------------------- | ------------------------ | ----------------------------------------------------- |
-| [AI 写作总方案](packages/ai-chat-architecture.md)           | 协作写作 DSH、共享 Chat UI、RAG LangChain 边界            | 本地图                   | 两类业务组件、写作包清单与 P0—P6 出口                 |
-| [12 chat-contracts](packages/chat-contracts.md)             | 通用会话、消息、Run、审批、产物与流协议                   | Chat 总方案              | Schema、确认事件/实时 frame、幂等与兼容               |
-| [13 chat-ui](packages/chat-ui.md)                           | RAG/写作共用基础组件、插槽、主题与交互                    | 12                       | 受控 Props、两套业务视图与独立消费验收                |
-| [14 dsh-agent](packages/dsh-agent.md)                       | 官方 DSH 装配、Run 协调、持久化和审批桥接                 | 12                       | SDK 兼容、存储端口、应用接入与恢复                    |
-| [15 ai-plugins](packages/ai-plugins.md)                     | writing/research/image 独立子入口                         | 09、12、14               | 插件接口、真实 provider、产物与业务验收               |
+| [AI 助手总方案](apps/ai-assistant-and-public-qa.md)         | 一个 DSH Agent、插件组合、草稿工作台与对外问答            | 本地图                   | 当前实施基线、迁移、权限、布局与验收                  |
+| [12 chat-contracts](packages/chat-contracts.md)             | 统一会话、消息、Run、审批和事件                           | 主技术文档               | 当前单一合约、幂等及事务投递                          |
+| [13 chat-ui](packages/chat-ui.md)                           | 受控消息、输入、来源与产物插槽                            | 主技术文档               | 统一展示与独立消费，不拥有业务网络/会话               |
+| [14 dsh-agent](packages/dsh-agent.md)                       | 官方 SDK 原生接入与恢复                                   | 主技术文档               | 无业务数据库、无第二份产品状态                        |
+| [15 ai-plugins](packages/ai-plugins.md)                     | scope/rag/research/writing/image 插件                     | 主技术文档               | 一份工具与证据规则，按当前授权组合                    |
 | [01 document-contracts](packages/document-contracts.md)     | 内容结构、Block 身份、快照、编辑提案、兼容策略            | 本地图                   | 字段与约束、Schema、事件语义、迁移与兼容样例          |
 | [02 editor-core](packages/editor-core.md)                   | 基础编辑、扩展、命令、导入导出、无 DOM 的 Schema 入口     | 01                       | Node/Mark 清单、命令行为、事务边界和内容保真规则      |
 | [03 editor-react](packages/editor-react.md)                 | 生命周期、订阅、宿主服务、多实例和 React NodeView         | 01、02                   | 组件/Hooks 合约、实例归属、宿主接入示例               |
 | [04 editor-collaboration](packages/editor-collaboration.md) | Yjs 绑定、连接状态、Awareness、重连与保存回执             | 01、02；与 08 对齐       | Provider 合约、状态模型、握手和恢复时序               |
 | [05 editor-ui](packages/editor-ui.md)                       | 工具栏、菜单、Block 操作、状态反馈、无障碍与主题          | 02、03；了解 04/06 状态  | 组件目录、完整交互状态、键盘与窄屏行为                |
 | [06 editor-ai-bridge](packages/editor-ai-bridge.md)         | 生成/改写适配、流事件、草稿预览、接受与撤销               | 01、02；了解 04 定位机制 | 任务状态、提案校验、并发修改与取消语义                |
-| [07 app-web](apps/app-web.md)                               | 文档/知识库、WritingChat 与 RagChat 两个业务封装          | 01—06；Chat 联读 12、13  | 分别接入 DSH 写作与 LangChain RAG，共用基础组件       |
+| [07 app-web](apps/app-web.md)                               | 全站助手、独立创作、文档与公开页面                        | 主技术文档               | 完整 Chat 到草稿双栏、响应式及来源引用                |
 | [08 app-server](apps/app-server.md)                         | 文档/协同、身份权限、存储版本、知识库、AI/RAG、任务与运维 | 01；与 04/06/07 联读     | 模块 API、数据归属、事务与事件、REST/WS/SSE、部署配置 |
-| [09 ai-contracts](packages/ai-contracts.md)                 | AI 请求、事件、目标约束、编辑提案、证据与引用             | 01                       | TypeBox Schema、流顺序、引用定位与兼容规则            |
-| [10 ai-runtime](packages/ai-runtime.md)                     | 现有 LangChain 能力、旧写作兼容及 DSH 迁移范围            | 01、09、14               | 保留 RAG 路线、写作旧任务兼容与分路径退出             |
+| [09 ai-contracts](packages/ai-contracts.md)                 | 纯证据、引用、提案和命令合约                              | 主技术文档               | 一份 Schema 和校验，无旧协议联合解析                  |
+| [10 ai-runtime](packages/ai-runtime.md)                     | 当前统一助手编排、插件组合和输出门槛                      | 主技术文档               | 一套 DSH 执行，无旧图和兼容入口                       |
 | [11 rag](packages/rag.md)                                   | 来源规范化、分块、Embedding、索引构建、混合检索与证据     | 01、09；与 08 联读       | 模型/授权存储端口、版本、任务发布与检索验收           |
 
-新实现先读 [问答/写作技术设计](apps/ai-assistant-and-public-qa.md)，再读纯合约、chat-ui 与 rag 文档。dsh-agent/ai-plugins 等旧文档只用于迁移源码，不指导保留旧 API。应用分别维护业务上下文，使用同一 contextRevision，共用产品存储和事件；DSH Session 只属于写作，问答不新增原生 Session/checkpoint。
+新实现先读 [主技术文档](apps/ai-assistant-and-public-qa.md)，再按职责阅读三包设计、纯合约、chat-ui、rag 与协同。当前双流程和参考归档只作迁移输入，不能各自保留一条运行链路。
 
 ## 3. 当前仓库与目标结构
 
-写作方案及共享展示规划四个包（chat-contracts、chat-ui、dsh-agent、ai-plugins），均未形成完整对外能力。2026-10-23 已建立 dsh-agent 配置骨架、安装锁定依赖并验证基础装配/释放；其余三个新包尚未建立。WritingChat、RagChat 规划为 app-web 内两个业务组件，当前重构聚焦写作。RAG LangChain 路线持续保留；写作实施阶段见[总方案](packages/ai-chat-architecture.md#11-实施阶段与出口)。
+本轮静态扫描主工程为 2 个 app、12 个 package、6 个 example。AI 当前使用 ai-qa/ai-writing，旧三包在上一轮退役；新目标需按最新职责重新拆回 dsh-agent/ai-runtime/ai-plugins，并迁移消费者，不从参考目录直接覆盖。
 
-当前两个应用及 document-contracts、editor-core、editor-react、editor-ui、editor-collaboration、ai-contracts、ai-runtime、rag 工作区包已建立。`/ai`、Chat/写作/研究、任务恢复和个人空间原子接受已通过隔离 PostgreSQL 回归，并以本机配置的 MiniMax-M3.1-Flash 验证真实生成、引用及两种写入模式。Qdrant 尚未接入，editor-ai-bridge 独立包仍处于设计阶段；各应用主文档记录实际边界，不将规划接口视为已实现。
+当前共享表、站点授权、引用、协同初始化和写作工具已经存在。新设计不新增业务表，仅移除用途分叉并将写作专属日志/图片表泛化，继续按已发布 migration 向前升级。
 
-服务端继续遵守现有约定：feature 在 `src/modules` 内组装 repository/service，业务层不依赖 Fastify；数据库位于 `apps/app-server/database`；Zod route contract 驱动校验与 OpenAPI，前端客户端由 OpenAPI 生成，离线导出不得连接数据库。
+源码入口、准确扫描范围、迁移对照与验收要求以 [主技术文档](apps/ai-assistant-and-public-qa.md) 为准。
 
 ## 4. 包依赖与集成边界
 
-箭头表示代码依赖；虚线表示运行时交互。下图保留编辑器与旧 AI 实现关系；新 Chat/DSH 的目标依赖图见[总方案](packages/ai-chat-architecture.md#4-依赖方向)。这里的接口名和后续文档的 API 名均为拟定产品接口，不是已经存在的实现。
+箭头表示代码依赖，虚线表示运行时交互。下图记录编辑器与旧 AI 的历史关系；当前目标依赖和实际基线见 [主技术文档](apps/ai-assistant-and-public-qa.md)，不能按旧图恢复第二套 Agent 或兼容协议。
 
 ```mermaid
 flowchart LR
@@ -123,7 +121,7 @@ flowchart LR
 
 ## 5. 跨文档的唯一归属
 
-写作 Chat 的 DSH Session、Run、预览、审批与产物以[总方案状态表](packages/ai-chat-architecture.md#5-模型与状态归属)为准；RAG LangChain 会话/请求独立管理。WritingChat、RagChat 各自归并投影，缓存/查询键包含业务种类，共用 chat-ui 不共用可变状态。下表旧写作记录只作该路径迁移依据。
+助手的 Session、Run、预览、审批与产物以 [主技术文档](apps/ai-assistant-and-public-qa.md) 为准，同一会话组合问答和写作。产品表、原生日志和正文协同各有唯一职责；下表旧写作记录只作迁移背景，不指导维护双会话或双生成路径。
 
 | 信息/状态                            | 唯一维护位置                                                | 其他位置如何使用                                        |
 | ------------------------------------ | ----------------------------------------------------------- | ------------------------------------------------------- |
@@ -237,7 +235,7 @@ LangGraph 随 Deep Agents 作为底层运行依赖保留；首期启用官方 Po
 
 Qdrant point 保存文本、向量、来源定位和稳定 readAclKeys：团队继承文档用 space 键，个人文档用 user 键并预置 document 键供单篇分享，受限文档只用 document 键。服务端按当前空间成员与独立文档授权计算可用键，强制租户/范围/键过滤，再实时复核。普通加人/踢人只更新 PostgreSQL 关系，不修改 points、不同步名单或向量；只有模式/归属使资源键变化时才登记策略更新。旧文档按 restricted 保留原显式授权，团队继承显式启用；该变化必须统一应用于 HTTP/WS/搜索/AI 权限，不能只改检索。详见 [rag](packages/rag.md)。
 
-恢复所需的有界原始输入留在 ai_runs，模型/分块参数为应用配置。官方四表仍放在 PostgreSQL 的 ai_checkpoint schema，不因采用 Qdrant 改为自研 Saver；不新增 threads、tasks、proposals、task_events、Store、检索 ACL 表、knowledge_sources、source_snapshots、index_jobs 或 index_generations。字段与索引见 [app-server](apps/app-server.md#91-checkpoint-的最小表设计待审)，恢复和清理见 [ai-runtime](packages/ai-runtime.md#5-checkpoint取消与任务归属)。
+恢复所需的有界原始输入留在 ai_runs，模型/分块参数为应用配置。官方四表仍放在 PostgreSQL 的 ai_checkpoint schema，不因采用 Qdrant 改为自研 Saver；不新增 threads、tasks、proposals、task_events、Store、检索 ACL 表、knowledge_sources、source_snapshots、index_jobs 或 index_generations。字段与索引见 [app-server](apps/app-server.md#91-checkpoint-的最小表设计待审)，恢复和清理见 [ai-runtime](packages/ai-runtime.md)。
 
 首期恢复使用 resume 请求与最终结果回读，不保存/重放 token 流；原执行确认退出后才能恢复，预算、权限和目标版本重新核对。完整生成后，手动模式由用户接受，自动模式由本轮已授权且未中断的服务端协调器触发，同走受控协同命令及 durable ack；中断恢复后的结果需手动检查，GET/刷新不自动补写。checkpoint 不直接保存或恢复文档正文。
 

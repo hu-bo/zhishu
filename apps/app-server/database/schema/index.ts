@@ -22,7 +22,7 @@ export {
   knowledgePresetInstallations,
 } from "./document.table.js";
 
-export * from "./writing.table.js";
+export * from "./ai-native.table.js";
 export { qaSites, qaSiteSources, qaSiteDocuments } from "./qa-site.table.js";
 export {
   identityProfiles,

@@ -1,0 +1,15 @@
+{
+  "name": "@zhishu/assistant-consumer-example",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "@zhishu/ai-runtime": "workspace:*",
+    "@zhishu/dsh-agent": "workspace:*",
+    "@zhishu/ai-plugins": "workspace:*",
+    "@zhishu/ai-contracts": "workspace:*"
+  }
+}

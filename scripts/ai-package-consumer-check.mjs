@@ -20,9 +20,10 @@ const workspacePackages = [
   "ai-contracts",
   "chat-contracts",
   "chat-ui",
-  "ai-qa",
-  "ai-writing",
   "rag",
+  "dsh-agent",
+  "ai-plugins",
+  "ai-runtime",
 ];
 
 function run(command, args, options = {}) {
@@ -89,41 +90,42 @@ try {
   for (const name of workspacePackages)
     await run("pnpm", ["--dir", `packages/${name}`, "pack", "--pack-destination", workspace]);
   const archive = (name) => join(workspace, `zhishu-${name}-0.1.0.tgz`);
+  const localOverrides = Object.fromEntries(
+    workspacePackages.map((name) => [`@zhishu/${name}`, `file:${archive(name)}`]),
+  );
 
-  // 1. Official-kernel standalone consumption: run the writing example from packed @zhishu/ai-writing only.
+  // 1. Official-kernel standalone consumption: run the assistant example from packed archives only.
   await run("pnpm", [
     "--dir",
-    "examples/writing-consumer",
+    "examples/assistant-consumer",
     "pack",
     "--pack-destination",
     workspace,
   ]);
-  const exampleArchive = join(workspace, "zhishu-writing-consumer-example-0.0.0.tgz");
+  const exampleArchive = join(workspace, "zhishu-assistant-consumer-example-0.0.0.tgz");
   if (!existsSync(exampleArchive)) throw new Error(`missing example archive ${exampleArchive}`);
-  const writingExample = join(workspace, "writing-consumer");
+  const assistantExample = join(workspace, "assistant-consumer");
   await run("tar", ["-xzf", exampleArchive, "-C", workspace]);
-  await rm(writingExample, { recursive: true, force: true });
-  renameSync(join(workspace, "package"), writingExample);
-  const examplePkgPath = join(writingExample, "package.json");
+  await rm(assistantExample, { recursive: true, force: true });
+  renameSync(join(workspace, "package"), assistantExample);
+  const examplePkgPath = join(assistantExample, "package.json");
   const examplePkg = JSON.parse(readFileSync(examplePkgPath, "utf8"));
   // Packed tarballs rewrite workspace protocols to versions; pin every transitive
   // @zhishu dependency back to the local archives so resolution never hits a registry.
-  const localOverrides = Object.fromEntries(
-    workspacePackages.map((name) => [`@zhishu/${name}`, `file:${archive(name)}`]),
-  );
   examplePkg.pnpm = { ...examplePkg.pnpm, overrides: localOverrides };
   examplePkg.overrides = localOverrides;
   examplePkg.dependencies = {
     ...examplePkg.dependencies,
-    "@zhishu/ai-writing": `file:${archive("ai-writing")}`,
+    "@zhishu/ai-runtime": `file:${archive("ai-runtime")}`,
+    "@zhishu/dsh-agent": `file:${archive("dsh-agent")}`,
+    "@zhishu/ai-plugins": `file:${archive("ai-plugins")}`,
     "@zhishu/ai-contracts": `file:${archive("ai-contracts")}`,
-    "@zhishu/document-contracts": `file:${archive("document-contracts")}`,
   };
   writeFileSync(examplePkgPath, `${JSON.stringify(examplePkg, null, 2)}\n`);
-  await run("pnpm", ["install", "--ignore-scripts"], { cwd: writingExample });
-  const exampleOutput = await run("node", ["index.mjs"], { cwd: writingExample });
+  await run("pnpm", ["install", "--ignore-scripts"], { cwd: assistantExample });
+  const exampleOutput = await run("node", ["index.mjs"], { cwd: assistantExample });
   if (!exampleOutput.includes("官方 Agent Loop"))
-    throw new Error("writing example did not reach the official kernel");
+    throw new Error("assistant example did not reach the official kernel");
 
   // 2. Public declarations and isolated React consumption through published exports only.
   const isolated = join(workspace, "isolated-ai-consumers");
@@ -142,14 +144,8 @@ try {
           react: "19.2.8",
           "react-dom": "19.2.8",
         },
-        pnpm: {
-          overrides: Object.fromEntries(
-            workspacePackages.map((name) => [`@zhishu/${name}`, `file:${archive(name)}`]),
-          ),
-        },
-        overrides: Object.fromEntries(
-          workspacePackages.map((name) => [`@zhishu/${name}`, `file:${archive(name)}`]),
-        ),
+        pnpm: { overrides: localOverrides },
+        overrides: localOverrides,
       },
       null,
       2,
@@ -165,34 +161,37 @@ import {
   citationsMatchEvidence,
   validateWritingRequest,
   validateWritingProposalPayload,
+  validateWritingDraftPayload,
   canonicalJson,
 } from "@zhishu/ai-contracts";
 import { hashContent } from "@zhishu/ai-contracts/hash";
-import { applyAiEvent, applyPreviewFrame, isSubmitMessage, isStreamFrame } from "@zhishu/chat-contracts";
+import { applyAiEvent, applyPreviewFrame, isSubmitMessage, isCreateDraft, isStreamFrame } from "@zhishu/chat-contracts";
 import { Chat, Composer } from "@zhishu/chat-ui";
-import { runQaAnswerFlow, QaFlowError } from "@zhishu/ai-qa";
-import {
-  createWritingRuntime,
-  deterministicNativeSessionId,
-  compileProposal,
-  installWriting,
-  installPlatformResearch,
-  installWebResearch,
-  installImage,
-} from "@zhishu/ai-writing";
-import { manifests as writingManifests, isImageJob } from "@zhishu/ai-writing/contracts";
+import { createDshRuntime, deterministicNativeSessionId, DshRuntimeError } from "@zhishu/dsh-agent";
+import { LlmAdapter } from "@zhishu/dsh-agent/kernel";
+import { createAssistantRuntime, INSUFFICIENT_EVIDENCE_TEXT } from "@zhishu/ai-runtime";
+import { manifests, isImageJob } from "@zhishu/ai-plugins/contracts";
+import { compileProposal, compileDraft, WritingOutputSchema } from "@zhishu/ai-plugins/compiler";
+import { installRag } from "@zhishu/ai-plugins/rag";
+import { installResearch } from "@zhishu/ai-plugins/research";
+import { installWriting } from "@zhishu/ai-plugins/writing";
+import { installImage } from "@zhishu/ai-plugins/image";
+import { installScope } from "@zhishu/ai-plugins/scope";
+import { loadSkillInstruction as loadPluginSkill, skillDefinitions as pluginSkills } from "@zhishu/ai-plugins/skills";
 import { loadSkillInstruction, skillDefinitions, retrievalToolSchemas } from "@zhishu/rag";
 
 const checks = [];
-if (typeof runQaAnswerFlow !== "function") throw new Error("qa flow missing");
-if (typeof createWritingRuntime !== "function") throw new Error("writing runtime missing");
-if (typeof compileProposal !== "function") throw new Error("pure compiler missing");
-if (typeof installWriting !== "function" || typeof installWebResearch !== "function" || typeof installImage !== "function")
-  throw new Error("writing tools missing");
-if (typeof installPlatformResearch !== "function") throw new Error("platform tools missing");
+if (typeof createDshRuntime !== "function") throw new Error("dsh runtime missing");
+if (typeof createAssistantRuntime !== "function") throw new Error("assistant runtime missing");
+if (typeof LlmAdapter !== "function") throw new Error("kernel adapter missing");
+if (!DshRuntimeError || !INSUFFICIENT_EVIDENCE_TEXT) throw new Error("runtime gates missing");
+if (typeof compileProposal !== "function" || typeof compileDraft !== "function")
+  throw new Error("pure compiler missing");
+if (!WritingOutputSchema) throw new Error("output schema missing");
+for (const install of [installRag, installResearch, installWriting, installImage, installScope])
+  if (typeof install !== "function") throw new Error("plugin installer missing");
 if (deterministicNativeSessionId("ai_x", 1) === deterministicNativeSessionId("ai_x", 2))
   throw new Error("native session ids must isolate context revisions");
-if (!QaFlowError) throw new Error("qa flow error missing");
 if (!DEFAULT_GENERATION_LIMITS.webSearchCallsPerRun) throw new Error("web research budgets missing");
 const bundle = {
   freshness: "current",
@@ -238,20 +237,24 @@ if (
 )
   throw new Error("citation contract broken");
 if (!hashContent({ a: 1 }).startsWith("sha256:")) throw new Error("hash contract broken");
-if (typeof validateWritingRequest !== "function" || typeof validateWritingProposalPayload !== "function")
+if (typeof validateWritingRequest !== "function" || typeof validateWritingProposalPayload !== "function" || typeof validateWritingDraftPayload !== "function")
   throw new Error("writing validators missing");
 if (typeof applyAiEvent !== "function" || typeof applyPreviewFrame !== "function")
   throw new Error("shared reducers missing");
 if (
   !isSubmitMessage({
-    purpose: "qa",
     clientMessageId: "c",
     idempotencyKey: "i",
     text: "问",
     expectedContextRevision: 1,
+    intentHint: "qa",
   })
 )
   throw new Error("submit contract broken");
+if (isSubmitMessage({ purpose: "qa", clientMessageId: "c", idempotencyKey: "i", text: "问", expectedContextRevision: 1 }))
+  throw new Error("purpose fork must be retired from the submit contract");
+if (!isCreateDraft({ idempotencyKey: "d", instruction: "写", workspaceId: "ws_1", expectedContextRevision: 1 }))
+  throw new Error("create-draft contract broken");
 if (isStreamFrame({ type: "nope" })) throw new Error("frame guard broken");
 const html = renderToString(
   createElement(Chat, {
@@ -260,28 +263,37 @@ const html = renderToString(
   }),
 );
 if (!html.includes("独立安装")) throw new Error("chat-ui SSR failed");
-if (writingManifests.length !== 4 || !isImageJob({ id: "j", status: "pending" }))
-  throw new Error("writing contracts broken");
+if (manifests.length !== 5 || !isImageJob({ id: "j", status: "pending" }))
+  throw new Error("plugin contracts broken");
+const pluginSkill = await loadPluginSkill("writing");
+if (!pluginSkill.includes("创建草稿")) throw new Error("plugin skill resource unreadable");
+if (pluginSkills.length !== 5) throw new Error("plugin skill definitions broken");
 const ragSkill = await loadSkillInstruction("rag");
 if (!ragSkill.includes("知书")) throw new Error("rag skill resource unreadable");
 if (skillDefinitions.length !== 2) throw new Error("skill definitions broken");
 if (!retrievalToolSchemas.searchPlatform.name) throw new Error("tool schemas broken");
 if (canonicalJson({ b: 1, a: [2] }) !== '{"a":[2],"b":1}') throw new Error("canonical json broken");
-checks.push("contracts", "qa-flow", "writing-runtime", "chat-ui", "skill-resources");
+checks.push("contracts", "dsh-runtime", "assistant-runtime", "plugins", "chat-ui", "skill-resources");
 console.log(JSON.stringify(checks));
 `;
   writeFileSync(join(isolated, "consumer.mjs"), consumerSource);
   await run("node", ["consumer.mjs"], { cwd: isolated });
 
-  // 3. Legacy retirement gate (docs §15.1): production code must not reference retired engines.
+  // 3. Retirement gate: the dual engines and legacy protocols must be gone from production code.
   const scanPatterns = [
-    ["retired package imports", 'from "@zhishu/(ai-runtime|ai-plugins|dsh-agent)"'],
+    ["retired package imports", 'from "@zhishu/(ai-qa|ai-writing)"'],
     [
       "legacy protocols",
-      "AiTaskEvent|legacy-authoring|ChatRecord|ChatStore|previousRequestIds|inputMessageId",
+      "AiTaskEvent|legacy-authoring|ChatRecord|ChatStore|PostgresSaver|deepagents|@langchain/langgraph|previousRequestIds|inputMessageId",
     ],
-    ["retired routes", '"/api/ai/chat|"/api/ai/authoring|prefix: "/writing"|/api/writing/'],
-    ["retired db shapes", 'engine\\?:|pgTable\\(\\s*"projects"|writing_events'],
+    [
+      "retired routes",
+      '"/api/ai/chat|"/api/ai/authoring|/api/ai/qa/|/api/ai/writing/|prefix: "/writing"',
+    ],
+    [
+      "retired db shapes",
+      'pgTable\\(\\s*"projects"|writing_events|pgTable\\(\\s*"writing_sessions"|pgTable\\(\\s*"writing_image_jobs"',
+    ],
   ];
   for (const [label, pattern] of scanPatterns) {
     const offenders = grepFiles(pattern).filter(
@@ -290,29 +302,34 @@ console.log(JSON.stringify(checks));
         !file.includes("ai-package-consumer-check") &&
         !file.startsWith("apps/app-server/src/scripts/openapi-export") &&
         !file.startsWith("scripts/smoke") &&
-        !file.includes("/test/"),
+        !file.includes("/test/") &&
+        !file.endsWith(".test.ts"),
     );
     if (offenders.length)
       throw new Error(`retirement gate [${label}] still referenced by:\n${offenders.join("\n")}`);
   }
 
-  // 4. Business package dependency boundaries.
-  const qaPackage = JSON.parse(readFileSync(join(repoRoot, "packages/ai-qa/package.json"), "utf8"));
-  const writingPackage = JSON.parse(
-    readFileSync(join(repoRoot, "packages/ai-writing/package.json"), "utf8"),
-  );
-  const depsOf = (pkg) => Object.keys({ ...pkg.dependencies, ...pkg.peerDependencies });
-  const qaDeps = depsOf(qaPackage);
-  const writingDeps = depsOf(writingPackage);
-  if (qaDeps.some((dep) => dep.includes("ai-writing") || dep.includes("dsh")))
-    throw new Error("@zhishu/ai-qa must not depend on writing or DSH");
-  if (writingDeps.some((dep) => dep.includes("ai-qa") || dep.includes("langchain")))
-    throw new Error("@zhishu/ai-writing must not depend on qa or LangChain");
-  for (const deps of [qaDeps, writingDeps])
+  // 4. Business package dependency boundaries: the three packages stay free of HTTP/DB/LangChain.
+  const depsOf = (name) => {
+    const pkg = JSON.parse(readFileSync(join(repoRoot, `packages/${name}/package.json`), "utf8"));
+    return Object.keys({ ...pkg.dependencies, ...pkg.peerDependencies });
+  };
+  for (const name of ["dsh-agent", "ai-plugins", "ai-runtime"]) {
+    const deps = depsOf(name);
+    if (deps.some((dep) => dep.includes("langchain") || dep.includes("deepagents")))
+      throw new Error(`@zhishu/${name} must not depend on LangChain/Deep Agents`);
     if (
       deps.some((dep) => dep.startsWith("fastify") || dep === "pg" || dep.startsWith("drizzle-orm"))
     )
-      throw new Error("business packages must not depend on HTTP/database layers");
+      throw new Error(`@zhishu/${name} must not depend on HTTP/database layers`);
+    if (deps.some((dep) => dep.includes("ai-qa") || dep.includes("ai-writing")))
+      throw new Error(`@zhishu/${name} must not depend on retired engines`);
+  }
+  // ai-runtime composes the kernel and plugins; plugins never reverse-depend on the runtime.
+  if (depsOf("ai-plugins").some((dep) => dep.includes("ai-runtime")))
+    throw new Error("@zhishu/ai-plugins must not depend on ai-runtime");
+  if (!depsOf("ai-runtime").some((dep) => dep.includes("dsh-agent")))
+    throw new Error("@zhishu/ai-runtime must compose @zhishu/dsh-agent");
 
   // 5. Skill resources ship inside the packed artifacts (reading above already proved resolution works).
   console.log(
@@ -320,13 +337,13 @@ console.log(JSON.stringify(checks));
       ok: true,
       checks: [
         "isolated installation",
-        "official multi-turn writing consumer",
+        "official unified assistant consumer",
         "public declarations and SSR",
         "skill resource files",
-        "retired engine scan (15.1)",
+        "retired engine scan",
         "business package boundaries",
       ],
-      packages: [...workspacePackages, "writing-consumer-example"],
+      packages: [...workspacePackages, "assistant-consumer-example"],
     }),
   );
 } finally {

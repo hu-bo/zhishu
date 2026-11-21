@@ -5,7 +5,7 @@ import { ConversationEventBus } from "./event-stream.js";
 /**
  * The ai module is the shared product infrastructure only: conversation/message/Run/artifact/
  * event transactions, leases, idempotency, budgets and configuration assembly. It does not
- * choose user intent and never drives an execution engine; qa and writing modules compose it.
+ * choose user intent and never drives an execution engine; the assistant service composes it.
  */
 export interface AiInfra {
   service: AiService;
@@ -52,3 +52,25 @@ export * from "./event-stream.js";
 export { mergeEvidenceBundles } from "./evidence.js";
 export { DispatchLoop } from "./dispatch.js";
 export { failureRunStatus, type DomainFailureMap } from "./failure.js";
+export {
+  AssistantService,
+  answerParts,
+  type AssistantAudience,
+  type AssistantPublicEvidence,
+  type AssistantServiceDeps,
+  type AssistantSubmitInput,
+  type CreateDraftInput,
+  type DraftDocumentPort,
+} from "./assistant.service.js";
+export { assistantRoutes } from "./assistant.routes.js";
+export { AiImages } from "./images.js";
+export { nativeSessionIdFor, parseNativeSessionId } from "./native.js";
+
+import type { FastifyInstance } from "fastify";
+import type { AssistantService } from "./assistant.service.js";
+import { assistantRoutes } from "./assistant.routes.js";
+
+/** Internal assistant entry: one namespace, one service, no purpose fork. */
+export async function assistantModule(app: FastifyInstance, assistant: AssistantService) {
+  await app.register(async (scope) => assistantRoutes(scope, assistant), { prefix: "/ai" });
+}

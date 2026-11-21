@@ -13,6 +13,7 @@ output/playwright/
 syncscribe/
 output/qa/
 zhishu-demo-gemini/
+zhishu-master/
 .agents/
 .claude/
 AGENTS.md

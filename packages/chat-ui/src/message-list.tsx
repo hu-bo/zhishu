@@ -1,5 +1,86 @@
 import { memo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import type { MessagePart, MessageView } from "./types.js";
+import type { MessagePart, MessageView, ToolStepStatus } from "./types.js";
+
+/** Live run stages surfaced as compact chips while a preview streams. */
+const STAGE_LABELS = {
+  scope: "确认资料范围",
+  searching: "检索资料",
+  reading: "阅读来源",
+  generating: "生成中",
+  validating: "校验输出",
+} as const satisfies Record<string, string>;
+export type StageKey = keyof typeof STAGE_LABELS;
+
+function stageLabel(stage: string): string {
+  return stage in STAGE_LABELS ? STAGE_LABELS[stage as StageKey] : "生成中";
+}
+
+const ROLE_LABEL = { user: "你", tool: "工具", assistant: "知书助手" } as const satisfies Record<
+  MessageView["role"],
+  string
+>;
+
+/** Tool step rows share one status table: icon and label come from the same fact. */
+const TOOL_STEPS = {
+  running: { label: "执行中", icon: null },
+  completed: { label: "已完成", icon: "✓" },
+  failed: { label: "失败", icon: "✕" },
+} as const satisfies Record<ToolStepStatus, { label: string; icon: string | null }>;
+
+function ThinkingPart({ part }: { part: Extract<MessagePart, { kind: "thinking" }> }) {
+  // Open while streaming; an explicit user toggle wins over the automatic state.
+  const [manual, setManual] = useState<boolean | null>(null);
+  const open = manual ?? !!part.streaming;
+  return (
+    <details className="zhishu-chat-thinking" open={open}>
+      <summary onClick={() => setManual(!open)}>
+        <span aria-hidden="true">💭</span>
+        {part.streaming ? "深度思考中…" : "已完成思考"}
+      </summary>
+      <p>{part.text}</p>
+    </details>
+  );
+}
+
+function renderPart(part: MessagePart): ReactNode {
+  switch (part.kind) {
+    case "text":
+      return <p>{part.text}</p>;
+    case "code":
+      return (
+        <pre aria-label={part.language ?? "代码"}>
+          <code>{part.text}</code>
+        </pre>
+      );
+    case "image":
+      return /^(https?:|blob:)/i.test(part.src) ? (
+        <img src={part.src} alt={part.alt} loading="lazy" />
+      ) : (
+        <span>{part.alt}</span>
+      );
+    case "thinking":
+      return <ThinkingPart part={part} />;
+    case "tool": {
+      const step = TOOL_STEPS[part.status];
+      return (
+        <div className={`zhishu-chat-toolstep zhishu-chat-toolstep--${part.status}`}>
+          {step.icon === null ? (
+            <span className="zhishu-chat-spinner" aria-hidden="true" />
+          ) : (
+            <span aria-hidden="true">{step.icon}</span>
+          )}
+          <span className="zhishu-chat-toolstep__label">{part.title}</span>
+          <small>{step.label}</small>
+        </div>
+      );
+    }
+    case "error":
+      return <p role="alert">{part.text}</p>;
+    case "plugin":
+      return part.content ?? <p>{part.fallbackText}</p>;
+  }
+}
+
 export const MessageParts = memo(function MessageParts({
   parts,
 }: {
@@ -9,28 +90,7 @@ export const MessageParts = memo(function MessageParts({
     <>
       {parts.map((part) => (
         <div key={part.id} className={`zhishu-chat-part zhishu-chat-part-${part.kind}`}>
-          {part.kind === "text" ? (
-            <p>{part.text}</p>
-          ) : part.kind === "code" ? (
-            <pre aria-label={part.language ?? "代码"}>
-              <code>{part.text}</code>
-            </pre>
-          ) : part.kind === "image" ? (
-            /^(https?:|blob:)/i.test(part.src) ? (
-              <img src={part.src} alt={part.alt} loading="lazy" />
-            ) : (
-              <span>{part.alt}</span>
-            )
-          ) : part.kind === "tool" ? (
-            <details>
-              <summary>{part.title}</summary>
-              {part.status}
-            </details>
-          ) : part.kind === "error" ? (
-            <p role="alert">{part.text}</p>
-          ) : (
-            (part.content ?? <p>{part.fallbackText}</p>)
-          )}
+          {renderPart(part)}
         </div>
       ))}
     </>
@@ -107,27 +167,58 @@ export function MessageList({
           )}
           {messages.length === 0
             ? emptyState
-            : messages.map((message) => (
-                <article
-                  key={message.id}
-                  className={`zhishu-chat-message zhishu-chat-${message.role}`}
-                  aria-label={message.role === "user" ? "你" : "助手"}
-                >
-                  <span className="zhishu-chat-role">
-                    {message.role === "assistant" && <span aria-hidden="true">✦</span>}
-                    {message.role === "user" ? "你" : message.role === "tool" ? "工具" : "知书助手"}
-                  </span>
-                  {message.parts.map((part) =>
-                    renderText && part.kind === "text" ? (
-                      <div key={part.id}>{renderText(part.text, message)}</div>
-                    ) : (
-                      <MessageParts key={part.id} parts={[part]} />
-                    ),
-                  )}
-                  {message.status && <small>{message.status}</small>}
-                  <div className="zhishu-chat-actions">{messageActions?.(message)}</div>
-                </article>
-              ))}
+            : messages.map((message, index) => {
+                // Consecutive messages from the same role keep one avatar/label row.
+                const showRole = index === 0 || messages[index - 1].role !== message.role;
+                const streaming = message.role === "assistant" && !!message.stage;
+                // Any live process fact (answer text, thinking or tool steps) replaces the skeleton.
+                const hasContent = message.parts.some((part) => {
+                  switch (part.kind) {
+                    case "text":
+                    case "thinking":
+                      return part.text.trim().length > 0;
+                    case "tool":
+                      return true;
+                    default:
+                      return false;
+                  }
+                });
+                return (
+                  <article
+                    key={message.id}
+                    className={`zhishu-chat-message zhishu-chat-${message.role}`}
+                    aria-label={message.role === "user" ? "你" : "助手"}
+                  >
+                    {showRole && (
+                      <span className="zhishu-chat-role">
+                        {message.role === "assistant" && <span aria-hidden="true">✦</span>}
+                        {ROLE_LABEL[message.role]}
+                      </span>
+                    )}
+                    {streaming && (
+                      <span className="zhishu-chat-stage">
+                        <span className="zhishu-chat-spinner" aria-hidden="true" />
+                        {stageLabel(message.stage!)}
+                      </span>
+                    )}
+                    {streaming && !hasContent && (
+                      <div className="zhishu-chat-skeleton" aria-hidden="true">
+                        <i />
+                        <i />
+                      </div>
+                    )}
+                    {message.parts.map((part) =>
+                      renderText && part.kind === "text" ? (
+                        <div key={part.id}>{renderText(part.text, message)}</div>
+                      ) : (
+                        <MessageParts key={part.id} parts={[part]} />
+                      ),
+                    )}
+                    {message.status && <small>{message.status}</small>}
+                    <div className="zhishu-chat-actions">{messageActions?.(message)}</div>
+                  </article>
+                );
+              })}
           {afterMessages}
         </div>
       </div>

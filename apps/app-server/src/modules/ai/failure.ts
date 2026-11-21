@@ -5,7 +5,7 @@ export type DomainFailureMap = Partial<Record<DomainErrorCode, string>>;
 
 /**
  * Terminal run status for a failure code. The cancelled trigger is universal; the interrupted
- * trigger differs per purpose (qa: OUTPUT_UNKNOWN, writing: SESSION_UNAVAILABLE), so it is a
+ * trigger depends on the execution path (native session loss vs unknown output), so it is a
  * parameter rather than a hardcoded branch.
  */
 export function failureRunStatus(

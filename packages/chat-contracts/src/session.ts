@@ -5,7 +5,7 @@ import {
   ProposalReviewSchema,
   RunUsageSchema,
   ScopeSelectionSchema,
-  WritingApprovalSchema,
+  ToolApprovalSchema,
 } from "@zhishu/ai-contracts";
 import { StructureReceiptSchema } from "@zhishu/document-contracts";
 
@@ -13,10 +13,6 @@ const objectOptions = { additionalProperties: false } as const;
 const id = Type.String({ minLength: 1, maxLength: 160 });
 const decimal = Type.String({ pattern: "^(0|[1-9][0-9]*)$" });
 const timestamp = Type.String({ minLength: 1, maxLength: 40 });
-
-/** Business purpose. Fixed by the trusted route at creation and never mutable afterwards. */
-export const ConversationPurposeSchema = Type.Union([Type.Literal("qa"), Type.Literal("writing")]);
-export type ConversationPurpose = Static<typeof ConversationPurposeSchema>;
 
 export const ConversationStatusSchema = Type.Union(
   (["active", "target-unavailable", "closed"] as const).map((value) => Type.Literal(value)),
@@ -26,7 +22,6 @@ export type ConversationStatus = Static<typeof ConversationStatusSchema>;
 export const ConversationSchema = Type.Object(
   {
     id,
-    purpose: ConversationPurposeSchema,
     title: Type.String({ maxLength: 200 }),
     scope: ScopeSelectionSchema,
     contextRevision: Type.Integer({ minimum: 1 }),
@@ -88,7 +83,6 @@ export const RunSchema = Type.Object(
   {
     id,
     conversationId: id,
-    purpose: ConversationPurposeSchema,
     status: RunStatusSchema,
     attempt: Type.Integer({ minimum: 1 }),
     contextRevision: Type.Integer({ minimum: 1 }),
@@ -96,8 +90,8 @@ export const RunSchema = Type.Object(
     errorCode: Type.Optional(Type.String({ pattern: "^[A-Z][A-Z0-9_]{0,63}$" })),
     usage: Type.Optional(RunUsageSchema),
     cancelRequested: Type.Optional(Type.Boolean()),
-    /** Active tool approval for writing runs in waiting-approval state. */
-    approval: Type.Optional(WritingApprovalSchema),
+    /** Active tool approval for runs in waiting-approval state. */
+    approval: Type.Optional(ToolApprovalSchema),
     createdAt: timestamp,
     updatedAt: timestamp,
   },
@@ -125,7 +119,6 @@ export const ArtifactSchema = Type.Object(
     id,
     conversationId: id,
     runId: id,
-    purpose: ConversationPurposeSchema,
     kind: Type.Union(
       (["evidence", "draft", "proposal", "image"] as const).map((value) => Type.Literal(value)),
     ),
@@ -163,7 +156,6 @@ const eventEnvelope = <T extends string, P extends import("@sinclair/typebox").T
     {
       eventId: id,
       conversationId: id,
-      purpose: ConversationPurposeSchema,
       sequence: Type.String({ pattern: "^[1-9][0-9]*$" }),
       type: Type.Literal(type),
       entityId: id,
@@ -181,7 +173,7 @@ export const AiEventSchemas = {
   ),
   "run.updated": eventEnvelope(
     "run.updated",
-    Type.Object({ run: RunSchema, approval: Type.Optional(WritingApprovalSchema) }, objectOptions),
+    Type.Object({ run: RunSchema, approval: Type.Optional(ToolApprovalSchema) }, objectOptions),
   ),
   "artifact.created": eventEnvelope(
     "artifact.created",
@@ -220,11 +212,36 @@ export const AiEventSchemas = {
       objectOptions,
     ),
   ),
+  /** Conversation-level binding/status changes, e.g. a draft document became the target. */
+  "conversation.updated": eventEnvelope(
+    "conversation.updated",
+    Type.Object(
+      {
+        contextRevision: Type.Integer({ minimum: 1 }),
+        status: ConversationStatusSchema,
+        targetDocumentId: Type.Union([id, Type.Null()]),
+      },
+      objectOptions,
+    ),
+  ),
 } as const;
 
 export const AiEventSchema = Type.Union(Object.values(AiEventSchemas), { $id: "AiEvent" });
 export type AiEvent = Static<typeof AiEventSchema>;
 export type AiEventType = keyof typeof AiEventSchemas;
+
+/** One live tool-call fact inside a preview stream; the process itself is never durable. */
+export const PreviewToolSchema = Type.Object(
+  {
+    id: id,
+    name: Type.String({ minLength: 1, maxLength: 120 }),
+    status: Type.Union(
+      (["running", "completed", "failed"] as const).map((value) => Type.Literal(value)),
+    ),
+  },
+  objectOptions,
+);
+export type PreviewTool = Static<typeof PreviewToolSchema>;
 
 /**
  * Live preview frames only promise a preview. Formal answers require the durable
@@ -234,7 +251,6 @@ export const PreviewFrameSchema = Type.Object(
   {
     type: Type.Literal("preview"),
     conversationId: id,
-    purpose: ConversationPurposeSchema,
     runId: id,
     /** Identifies one continuous live stream; a new epoch resets the accumulated preview. */
     streamEpoch: id,
@@ -243,7 +259,13 @@ export const PreviewFrameSchema = Type.Object(
     revision: Type.Integer({ minimum: 1 }),
     /** Dense position among public deltas, independent of private SDK chunks. */
     index: Type.Integer({ minimum: 0 }),
-    channel: Type.Union([Type.Literal("text"), Type.Literal("stage")]),
+    /**
+     * "text"/"thinking" carry dense delta streams; "tool" upserts one call by id;
+     * "stage" is a coarse progress label.
+     */
+    channel: Type.Union(
+      (["text", "stage", "thinking", "tool"] as const).map((value) => Type.Literal(value)),
+    ),
     stage: Type.Optional(
       Type.Union(
         (["scope", "searching", "reading", "generating", "validating"] as const).map((value) =>
@@ -251,6 +273,7 @@ export const PreviewFrameSchema = Type.Object(
         ),
       ),
     ),
+    tool: Type.Optional(PreviewToolSchema),
     text: Type.Optional(Type.String({ maxLength: 128_000 })),
   },
   { ...objectOptions, $id: "AiPreviewFrame" },
@@ -261,7 +284,6 @@ export const ResyncFrameSchema = Type.Object(
   {
     type: Type.Literal("resync-required"),
     conversationId: id,
-    purpose: ConversationPurposeSchema,
   },
   objectOptions,
 );

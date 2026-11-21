@@ -197,7 +197,8 @@ export type DocumentIdempotency = {
     | "documents.lifecycle"
     | "documents.acl.set"
     | "documents.acl.remove"
-    | "documents.version.restore";
+    | "documents.version.restore"
+    | "documents.draft";
   key: string;
   requestHash: string;
 };
@@ -522,9 +523,52 @@ export class DocumentRepository {
       catalogId: null,
     },
   ): Promise<ActiveDocument> {
+    return this.db.transaction((tx) =>
+      this.createInTx(
+        tx,
+        tenantId,
+        ownerId,
+        title,
+        template,
+        requestId,
+        maxDocumentsPerTenant,
+        initialUpdate,
+        idempotency,
+        migrationReport,
+        migrationPersistence,
+        location,
+      ),
+    );
+  }
+
+  /**
+   * Transaction-scoped creation so callers that must bind other product state atomically
+   * (e.g. an assistant draft binding) can compose it inside their own transaction while
+   * keeping the same quota, authorization, lock order and idempotency rules.
+   */
+  async createInTx(
+    tx: DocumentWriteTransaction,
+    tenantId: string,
+    ownerId: string,
+    title: string,
+    template?: { schemaVersion: number; extensions: ActiveDocument["extensions"] },
+    requestId?: string,
+    maxDocumentsPerTenant = 10_000,
+    initialUpdate?: { updateHash: string; updateBytes: Uint8Array; content: DocumentContent },
+    idempotency?: DocumentIdempotency,
+    migrationReport?: ContentMigrationReport,
+    migrationPersistence?: {
+      migrationId: string;
+      stepSnapshots: readonly ContentMigrationStepSnapshot[];
+    },
+    location: { workspaceId: string; catalogId: string | null } = {
+      workspaceId: "ws_default",
+      catalogId: null,
+    },
+  ): Promise<ActiveDocument> {
     const documentId = `doc_${randomUUID()}`;
     const generationId = `gen_${randomUUID()}`;
-    return this.db.transaction(async (tx) => {
+    {
       if (idempotency) {
         const replay = await loadDocumentIdempotencyReplay(tx, {
           tenantId,
@@ -707,7 +751,7 @@ export class DocumentRepository {
         });
       }
       return createdDocument;
-    });
+    }
   }
 
   async copyTemplate(input: {
@@ -1323,7 +1367,6 @@ export class DocumentRepository {
           .update(documents)
           .set({
             status,
-            archivedAt: status === "archived" ? new Date() : null,
             deletedAt: status === "trashed" ? new Date() : null,
             updatedAt: new Date(),
             metadataRevision: sql`${documents.metadataRevision} + 1`,

@@ -3,10 +3,10 @@ import {
   aiArtifacts,
   aiConversations,
   aiEvents,
+  aiImageJobs,
   aiMessages,
   aiRuns,
-  writingImageJobs,
-  writingSessions,
+  aiSessions,
 } from "../../../database/schema/index.js";
 import type { Database } from "../../../database/index.js";
 import type { StructureReceipt } from "@zhishu/document-contracts";
@@ -16,7 +16,7 @@ import type {
   RunUsage,
   ScopeSelection,
 } from "@zhishu/ai-contracts";
-import type { ConversationPurpose, RunStatus } from "@zhishu/chat-contracts";
+import type { RunStatus } from "@zhishu/chat-contracts";
 import type { ArtifactRow, ConversationRow, MessageRow, RunRow } from "./ai.types.js";
 
 type Tx = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -60,7 +60,6 @@ export class AiRepository {
     values: {
       id: string;
       tenantId: string;
-      purpose: ConversationPurpose;
       identityId?: string | null;
       visitorId?: string | null;
       siteId?: string | null;
@@ -68,7 +67,6 @@ export class AiRepository {
       targetDocumentId?: string | null;
       configurationId?: string | null;
       creationKey?: string | null;
-      origin?: ConversationRow["origin"];
       expiresAt?: Date | null;
     },
   ): Promise<ConversationRow> {
@@ -82,7 +80,6 @@ export class AiRepository {
         targetDocumentId: values.targetDocumentId ?? null,
         configurationId: values.configurationId ?? null,
         creationKey: values.creationKey ?? null,
-        origin: values.origin ?? null,
         expiresAt: values.expiresAt ?? null,
       })
       .returning();
@@ -93,7 +90,10 @@ export class AiRepository {
     tx: Tx,
     row: ConversationRow,
     patch: Partial<
-      Pick<ConversationRow, "scopeSelection" | "contextRevision" | "status" | "expiresAt">
+      Pick<
+        ConversationRow,
+        "scopeSelection" | "contextRevision" | "status" | "expiresAt" | "targetDocumentId"
+      >
     >,
   ) {
     await tx
@@ -106,7 +106,6 @@ export class AiRepository {
     tx: Tx,
     filter: {
       tenantId: string;
-      purpose: ConversationPurpose;
       identityId?: string;
       visitorId?: string;
       siteId?: string;
@@ -120,7 +119,6 @@ export class AiRepository {
       .where(
         and(
           eq(aiConversations.tenantId, filter.tenantId),
-          eq(aiConversations.purpose, filter.purpose),
           filter.identityId ? eq(aiConversations.identityId, filter.identityId) : undefined,
           filter.visitorId ? eq(aiConversations.visitorId, filter.visitorId) : undefined,
           filter.siteId ? eq(aiConversations.siteId, filter.siteId) : undefined,
@@ -137,7 +135,6 @@ export class AiRepository {
     tx: Tx,
     filter: {
       tenantId: string;
-      purpose: ConversationPurpose;
       creationKey: string;
       identityId?: string;
       visitorId?: string;
@@ -150,7 +147,6 @@ export class AiRepository {
       .where(
         and(
           eq(aiConversations.tenantId, filter.tenantId),
-          eq(aiConversations.purpose, filter.purpose),
           eq(aiConversations.creationKey, filter.creationKey),
           filter.identityId ? eq(aiConversations.identityId, filter.identityId) : undefined,
           filter.visitorId ? eq(aiConversations.visitorId, filter.visitorId) : undefined,
@@ -192,7 +188,6 @@ export class AiRepository {
       id: string;
       tenantId: string;
       conversationId: string;
-      purpose: ConversationPurpose;
       idempotencyKey: string;
       inputHash: string;
       context: RunRow["context"];
@@ -668,7 +663,6 @@ export class AiRepository {
       tenantId: string;
       conversationId: string;
       runId: string;
-      purpose: ConversationPurpose;
       producerCallId: string;
       resultIndex: number;
       kind: ArtifactRow["kind"];
@@ -829,11 +823,11 @@ export class AiRepository {
     }[];
   }
 
-  async queuedRuns(purpose: ConversationPurpose, limit = 64): Promise<RunRow[]> {
+  async queuedRuns(limit = 64): Promise<RunRow[]> {
     return (await this.db
       .select()
       .from(aiRuns)
-      .where(and(eq(aiRuns.status, "queued"), eq(aiRuns.purpose, purpose)))
+      .where(eq(aiRuns.status, "queued"))
       .orderBy(aiRuns.createdAt)
       .limit(limit)) as RunRow[];
   }
@@ -895,13 +889,13 @@ export class AiRepository {
       .limit(1);
     if (activeRuns.length) return false;
     const unknownJobs = await tx
-      .select({ id: writingImageJobs.id })
-      .from(writingImageJobs)
+      .select({ id: aiImageJobs.id })
+      .from(aiImageJobs)
       .where(
         and(
-          eq(writingImageJobs.tenantId, tenantId),
-          eq(writingImageJobs.conversationId, conversationId),
-          eq(writingImageJobs.status, "unknown"),
+          eq(aiImageJobs.tenantId, tenantId),
+          eq(aiImageJobs.conversationId, conversationId),
+          eq(aiImageJobs.status, "unknown"),
         ),
       )
       .limit(1);
@@ -918,23 +912,15 @@ export class AiRepository {
       )
       .limit(1);
     if (unconfirmedProposals.length) return false;
-    // Writing-specific rows reference Runs/conversations: release them before their parents.
+    // Native sessions and image jobs reference Runs/conversations: release them before parents.
     await tx
-      .delete(writingImageJobs)
+      .delete(aiImageJobs)
       .where(
-        and(
-          eq(writingImageJobs.tenantId, tenantId),
-          eq(writingImageJobs.conversationId, conversationId),
-        ),
+        and(eq(aiImageJobs.tenantId, tenantId), eq(aiImageJobs.conversationId, conversationId)),
       );
     await tx
-      .delete(writingSessions)
-      .where(
-        and(
-          eq(writingSessions.tenantId, tenantId),
-          eq(writingSessions.conversationId, conversationId),
-        ),
-      );
+      .delete(aiSessions)
+      .where(and(eq(aiSessions.tenantId, tenantId), eq(aiSessions.conversationId, conversationId)));
     await tx
       .delete(aiArtifacts)
       .where(

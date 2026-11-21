@@ -1,10 +1,6 @@
-import { WorkspacePermissionsPanel } from './workspace-permissions';
-import { WorkspaceGovernancePanel } from './workspace-governance';
-import { MemberPicker, type MemberChoice } from './member-picker';
-import { WorkspaceInvitations } from './workspace-invitations';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { LoaderCircle, Pencil, Trash2, Users } from 'lucide-react';
+import { LoaderCircle, Plus, Trash2, Users } from 'lucide-react';
 import {
   listWorkspaceMembers,
   removeWorkspaceMember,
@@ -28,12 +24,60 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { cn } from '@/lib/cn';
+import { WorkspacePermissionsPanel } from './workspace-permissions';
+import { WorkspaceGovernancePanel } from './workspace-governance';
+import { MemberMultiSelect } from './member-multi-select';
+import type { MemberChoice } from './member-picker';
+import { WorkspaceInvitations } from './workspace-invitations';
 import { EmojiField } from './catalog-dialogs';
 import { useKnowledgeWorkspace } from './workspace-context';
 import { invalidateSpaceData } from './space-data';
+import {
+  ASSIGNABLE_WORKSPACE_ROLES,
+  WORKSPACE_KIND_LABELS,
+  WORKSPACE_ROLE_LABELS,
+  toWorkspaceMemberRole,
+  type WorkspaceMemberRole,
+} from './workspace-roles';
 
-import { WORKSPACE_KIND_LABELS, WORKSPACE_ROLE_LABELS } from './workspace-roles';
-type MemberRole = 'admin' | 'editor' | 'viewer';
+/** 空间角色下拉；「管理员」仅空间所有者可分配。change 后由调用方立即落库。 */
+function RoleSelect({
+  ariaLabel,
+  value,
+  onChange,
+  canAssignAdmin,
+  disabled = false,
+  className,
+}: {
+  ariaLabel: string;
+  value: WorkspaceMemberRole;
+  onChange: (role: WorkspaceMemberRole) => void;
+  canAssignAdmin: boolean;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <select
+      aria-label={ariaLabel}
+      className={cn('h-9 shrink-0 rounded-md border bg-card px-2 text-sm', className)}
+      value={value}
+      disabled={disabled}
+      onChange={(event) => {
+        const next = toWorkspaceMemberRole(event.target.value);
+        if (next) onChange(next);
+      }}
+    >
+      {ASSIGNABLE_WORKSPACE_ROLES.filter((role) => role !== 'admin' || canAssignAdmin).map(
+        (role) => (
+          <option key={role} value={role}>
+            {WORKSPACE_ROLE_LABELS[role]}
+          </option>
+        ),
+      )}
+    </select>
+  );
+}
 
 export function WorkspaceSettingsDialog({
   workspace,
@@ -50,12 +94,10 @@ export function WorkspaceSettingsDialog({
   const [name, setName] = useState(workspace.name);
   const [icon, setIcon] = useState(workspace.icon);
   const [description, setDescription] = useState(workspace.description);
-  const [selectedMember, setSelectedMember] = useState<MemberChoice | null>(null);
-  const identityId = selectedMember?.identityId ?? '';
-  const displayName = selectedMember?.displayName ?? '';
-  const [memberFilter, setMemberFilter] = useState('');
-  const [role, setRole] = useState<MemberRole>('viewer');
-  const [editingMember, setEditingMember] = useState(false);
+  const [pendingMembers, setPendingMembers] = useState<MemberChoice[]>([]);
+  const [addRole, setAddRole] = useState<WorkspaceMemberRole>('viewer');
+  const [adding, setAdding] = useState(false);
+  const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
   const [pendingRemove, setPendingRemove] = useState<ListWorkspaceMembers200Item | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,32 +112,18 @@ export function WorkspaceSettingsDialog({
       queryKey: ['workspace-members', identityKey, workspace.id],
     });
   };
-  const resetMember = () => {
-    setSelectedMember(null);
-    setRole('viewer');
-    setEditingMember(false);
-  };
-  const submit = async () => {
+  const saveSettings = async () => {
     if (busy || !workspace.canManage) return;
     setBusy(true);
     setError(null);
     setFeedback(null);
     try {
-      if (tab === 'settings') {
-        await updateKnowledgeWorkspace(workspace.id, {
-          name: name.trim(),
-          icon,
-          description: description.trim(),
-        });
-        setFeedback('空间设置已保存。');
-      } else {
-        await setWorkspaceMember(workspace.id, identityId.trim(), {
-          displayName: displayName.trim(),
-          role,
-        });
-        resetMember();
-        setFeedback('成员信息已保存。');
-      }
+      await updateKnowledgeWorkspace(workspace.id, {
+        name: name.trim(),
+        icon,
+        description: description.trim(),
+      });
+      setFeedback('空间设置已保存。');
       await refresh();
     } catch (cause) {
       setError(errorMessage(cause));
@@ -103,11 +131,245 @@ export function WorkspaceSettingsDialog({
       setBusy(false);
     }
   };
+  const addMembers = async () => {
+    if (adding || pendingMembers.length === 0) return;
+    setAdding(true);
+    setError(null);
+    try {
+      // setWorkspaceMember 是幂等 upsert；部分失败时保留已选标签，可直接重试。
+      for (const member of pendingMembers) {
+        await setWorkspaceMember(workspace.id, member.identityId, {
+          displayName: member.displayName,
+          role: addRole,
+        });
+      }
+      setPendingMembers([]);
+      await refresh();
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setAdding(false);
+    }
+  };
+  const changeRole = async (member: ListWorkspaceMembers200Item, role: WorkspaceMemberRole) => {
+    if (savingRoleId || role === member.role) return;
+    setSavingRoleId(member.identityId);
+    setError(null);
+    try {
+      await setWorkspaceMember(workspace.id, member.identityId, {
+        displayName: member.displayName,
+        role,
+      });
+      await refresh();
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setSavingRoleId(null);
+    }
+  };
   const canEditMember = (member: ListWorkspaceMembers200Item) =>
     workspace.kind !== 'personal' &&
     workspace.canManage &&
     member.role !== 'owner' &&
     (workspace.role === 'owner' || member.role !== 'admin');
+  const switchTab = (next: 'settings' | 'members' | 'permissions') => {
+    setTab(next);
+    setError(null);
+    setFeedback(null);
+  };
+  let body: ReactNode = null;
+  if (tab === 'permissions') {
+    body = (
+      <>
+        <WorkspacePermissionsPanel workspaceId={workspace.id} />
+        <WorkspaceGovernancePanel workspace={workspace} />
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            关闭
+          </Button>
+        </DialogFooter>
+      </>
+    );
+  } else if (tab === 'settings') {
+    body = (
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void saveSettings();
+        }}
+        className="space-y-4"
+      >
+        <fieldset disabled={!workspace.canManage || busy} className="space-y-4">
+          <p className="text-xs leading-5 text-muted-foreground">
+            {workspace.kind !== 'personal' && workspace.kind !== 'team'
+              ? '这是尚未分类的旧空间，AI 正文写入暂不可用。'
+              : `空间类型：${WORKSPACE_KIND_LABELS[workspace.kind]}。类型与个人空间所有者不能通过设置更改。`}
+          </p>
+          <div className="space-y-1.5">
+            <label htmlFor="edit-workspace-name" className="text-sm">
+              空间名称
+            </label>
+            <Input
+              id="edit-workspace-name"
+              required
+              maxLength={80}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
+          <EmojiField label="空间图标" value={icon} onChange={setIcon} />
+          <div className="space-y-1.5">
+            <label htmlFor="edit-workspace-description" className="text-sm">
+              空间描述
+            </label>
+            <Textarea
+              id="edit-workspace-description"
+              maxLength={200}
+              rows={3}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </div>
+        </fieldset>
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        {feedback && (
+          <p role="status" className="text-sm text-success">
+            {feedback}
+          </p>
+        )}
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
+            关闭
+          </Button>
+          {workspace.canManage && (
+            <Button type="submit" disabled={busy || !name.trim()}>
+              {busy && <LoaderCircle size={14} className="animate-spin" />}
+              保存空间设置
+            </Button>
+          )}
+        </DialogFooter>
+      </form>
+    );
+  } else {
+    body = (
+      <div className="space-y-4">
+        <p className="rounded-lg bg-secondary p-3 text-xs leading-5 text-muted-foreground">
+          {workspace.kind === 'personal'
+            ? '个人空间由所有者管理，不支持添加空间成员。共享和撤销访问请使用文档权限设置。'
+            : '管理员可管理空间资料和普通成员；编辑者可创建文档、整理自己创建的目录；只读成员可浏览目录。继承空间权限的文档按成员角色开放，受限文档仍需单独授权。'}
+        </p>
+        {workspace.canManage && workspace.kind !== 'personal' && (
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <MemberMultiSelect
+                value={pendingMembers}
+                onChange={setPendingMembers}
+                excludeIds={(members.data ?? []).map((member) => member.identityId)}
+                disabled={adding}
+              />
+            </div>
+            <RoleSelect
+              ariaLabel="新成员角色"
+              value={addRole}
+              onChange={setAddRole}
+              canAssignAdmin={workspace.role === 'owner'}
+              disabled={adding}
+            />
+            <Button
+              type="button"
+              disabled={adding || pendingMembers.length === 0}
+              onClick={() => void addMembers()}
+            >
+              {adding ? <LoaderCircle size={14} className="animate-spin" /> : <Plus size={14} />}
+              添加成员
+            </Button>
+          </div>
+        )}
+        {members.isPending ? (
+          <p role="status" className="flex items-center gap-2 text-sm">
+            <LoaderCircle size={16} className="animate-spin" />
+            正在加载成员…
+          </p>
+        ) : members.isError ? (
+          <div role="alert">
+            <p className="text-sm text-destructive">成员加载失败</p>
+            <Button size="sm" variant="outline" onClick={() => void members.refetch()}>
+              重新加载
+            </Button>
+          </div>
+        ) : (
+          <ul className="max-h-72 divide-y divide-border/60 overflow-y-auto" aria-label="空间成员">
+            {members.data.map((member) => (
+              <li key={member.identityId} className="flex items-center gap-3 py-3">
+                <span
+                  aria-hidden="true"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-primary"
+                >
+                  {member.displayName.slice(0, 1)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{member.displayName}</p>
+                  <p
+                    className="truncate text-xs text-muted-foreground"
+                    title={member.email || member.identityId}
+                  >
+                    {member.email || member.identityId}
+                  </p>
+                </div>
+                {canEditMember(member) ? (
+                  <RoleSelect
+                    ariaLabel={`设置 ${member.displayName} 的空间角色`}
+                    value={toWorkspaceMemberRole(member.role) ?? 'viewer'}
+                    onChange={(role) => void changeRole(member, role)}
+                    canAssignAdmin={workspace.role === 'owner'}
+                    disabled={savingRoleId === member.identityId}
+                    className="h-8 text-xs"
+                  />
+                ) : (
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {WORKSPACE_ROLE_LABELS[member.role]}
+                  </span>
+                )}
+                {canEditMember(member) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`移除成员 ${member.displayName}`}
+                    onClick={() => setPendingRemove(member)}
+                  >
+                    <Trash2 size={14} />
+                  </Button>
+                )}
+              </li>
+            ))}
+            {members.data.length === 0 && (
+              <li className="py-5 text-center text-sm text-muted-foreground">
+                还没有显式添加的成员。
+              </li>
+            )}
+          </ul>
+        )}
+        {workspace.canManage && workspace.kind === 'team' && (
+          <WorkspaceInvitations workspaceId={workspace.id} />
+        )}
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            关闭
+          </Button>
+        </DialogFooter>
+      </div>
+    );
+  }
   return (
     <>
       <Dialog
@@ -133,11 +395,7 @@ export function WorkspaceSettingsDialog({
                 tab === 'members' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground'
               }
               aria-pressed={tab === 'members'}
-              onClick={() => {
-                setTab('members');
-                setError(null);
-                setFeedback(null);
-              }}
+              onClick={() => switchTab('members')}
               disabled={busy}
             >
               <Users size={14} />
@@ -150,11 +408,7 @@ export function WorkspaceSettingsDialog({
                 tab === 'settings' ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground'
               }
               aria-pressed={tab === 'settings'}
-              onClick={() => {
-                setTab('settings');
-                setError(null);
-                setFeedback(null);
-              }}
+              onClick={() => switchTab('settings')}
               disabled={busy}
             >
               空间设置
@@ -165,224 +419,13 @@ export function WorkspaceSettingsDialog({
                 size="sm"
                 variant="ghost"
                 aria-pressed={tab === 'permissions'}
-                onClick={() => setTab('permissions')}
+                onClick={() => switchTab('permissions')}
               >
                 角色权限
               </Button>
             )}
           </div>
-          {tab === 'permissions' ? (
-            <>
-              <WorkspacePermissionsPanel workspaceId={workspace.id} />
-              <WorkspaceGovernancePanel workspace={workspace} />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={onClose}>
-                  关闭
-                </Button>
-              </DialogFooter>
-            </>
-          ) : (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submit();
-              }}
-              className="space-y-4"
-            >
-              {tab === 'settings' ? (
-                <fieldset disabled={!workspace.canManage || busy} className="space-y-4">
-                  <p className="text-xs leading-5 text-muted-foreground">
-                    {workspace.kind !== 'personal' && workspace.kind !== 'team'
-                      ? '这是尚未分类的旧空间，AI 正文写入暂不可用。'
-                      : `空间类型：${WORKSPACE_KIND_LABELS[workspace.kind]}。类型与个人空间所有者不能通过设置更改。`}
-                  </p>
-                  <div className="space-y-1.5">
-                    <label htmlFor="edit-workspace-name" className="text-sm">
-                      空间名称
-                    </label>
-                    <Input
-                      id="edit-workspace-name"
-                      required
-                      maxLength={80}
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                    />
-                  </div>
-                  <EmojiField label="空间图标" value={icon} onChange={setIcon} />
-                  <div className="space-y-1.5">
-                    <label htmlFor="edit-workspace-description" className="text-sm">
-                      空间描述
-                    </label>
-                    <Textarea
-                      id="edit-workspace-description"
-                      maxLength={200}
-                      rows={3}
-                      value={description}
-                      onChange={(event) => setDescription(event.target.value)}
-                    />
-                  </div>
-                </fieldset>
-              ) : (
-                <>
-                  <p className="rounded-lg bg-secondary p-3 text-xs leading-5 text-muted-foreground">
-                    {workspace.kind === 'personal'
-                      ? '个人空间由所有者管理，不支持添加空间成员。共享和撤销访问请使用文档权限设置。'
-                      : '管理员可管理空间资料和普通成员；编辑者可创建文档、整理自己创建的目录；只读成员可浏览目录。继承空间权限的文档按成员角色开放，受限文档仍需单独授权。'}
-                  </p>
-                  <Input
-                    aria-label="搜索空间成员"
-                    placeholder="搜索成员姓名或邮箱"
-                    value={memberFilter}
-                    onChange={(e) => setMemberFilter(e.target.value)}
-                  />
-                  {members.isPending ? (
-                    <p role="status" className="flex items-center gap-2 text-sm">
-                      <LoaderCircle size={16} className="animate-spin" />
-                      正在加载成员…
-                    </p>
-                  ) : members.isError ? (
-                    <div role="alert">
-                      <p className="text-sm text-destructive">成员加载失败</p>
-                      <Button size="sm" variant="outline" onClick={() => void members.refetch()}>
-                        重新加载
-                      </Button>
-                    </div>
-                  ) : (
-                    <ul
-                      className="max-h-64 divide-y divide-border/60 overflow-y-auto"
-                      aria-label="空间成员"
-                    >
-                      {members.data
-                        .filter((member) =>
-                          `${member.displayName} ${member.email ?? ''}`
-                            .toLocaleLowerCase()
-                            .includes(memberFilter.toLocaleLowerCase()),
-                        )
-                        .map((member) => (
-                          <li key={member.identityId} className="flex items-center gap-3 py-3">
-                            <span
-                              aria-hidden="true"
-                              className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-primary"
-                            >
-                              {member.displayName.slice(0, 1)}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium">{member.displayName}</p>
-                              <p
-                                className="truncate text-xs text-muted-foreground"
-                                title={member.email || member.identityId}
-                              >
-                                {member.email || member.identityId}
-                              </p>
-                            </div>
-                            <span className="shrink-0 text-xs text-muted-foreground">
-                              {WORKSPACE_ROLE_LABELS[member.role]}
-                            </span>
-                            {canEditMember(member) && (
-                              <>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  aria-label={`编辑成员 ${member.displayName}`}
-                                  disabled={busy}
-                                  onClick={() => {
-                                    setSelectedMember(member);
-                                    setRole(member.role as MemberRole);
-                                    setEditingMember(true);
-                                    setFeedback(null);
-                                  }}
-                                >
-                                  <Pencil size={14} />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  aria-label={`移除成员 ${member.displayName}`}
-                                  disabled={busy}
-                                  onClick={() => setPendingRemove(member)}
-                                >
-                                  <Trash2 size={14} />
-                                </Button>
-                              </>
-                            )}
-                          </li>
-                        ))}
-                      {members.data.length === 0 && (
-                        <li className="py-5 text-center text-sm text-muted-foreground">
-                          还没有显式添加的成员。
-                        </li>
-                      )}
-                    </ul>
-                  )}
-                  {workspace.canManage && workspace.kind === 'team' && (
-                    <WorkspaceInvitations workspaceId={workspace.id} />
-                  )}
-                  {workspace.canManage && workspace.kind !== 'personal' && (
-                    <fieldset disabled={busy} className="space-y-3 border-t pt-4">
-                      <legend className="pt-4 text-sm font-medium">
-                        {editingMember ? '编辑成员' : '添加成员'}
-                      </legend>
-                      <MemberPicker
-                        value={selectedMember}
-                        disabled={busy || editingMember}
-                        onChange={setSelectedMember}
-                      />
-                      <div className="space-y-1.5">
-                        <label htmlFor="member-role" className="text-xs text-muted-foreground">
-                          角色
-                        </label>
-                        <select
-                          id="member-role"
-                          className="h-9 w-full rounded-md border bg-card px-2 text-sm"
-                          value={role}
-                          onChange={(event) => setRole(event.target.value as MemberRole)}
-                        >
-                          {workspace.role === 'owner' && <option value="admin">管理员</option>}
-                          <option value="editor">编辑者</option>
-                          <option value="viewer">只读成员</option>
-                        </select>
-                      </div>
-                      {editingMember && (
-                        <Button type="button" size="sm" variant="ghost" onClick={resetMember}>
-                          取消编辑，添加新成员
-                        </Button>
-                      )}
-                    </fieldset>
-                  )}
-                </>
-              )}
-              {error && (
-                <p role="alert" className="text-sm text-destructive">
-                  {error}
-                </p>
-              )}
-              {feedback && (
-                <p role="status" className="text-sm text-success">
-                  {feedback}
-                </p>
-              )}
-              <DialogFooter>
-                <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
-                  关闭
-                </Button>
-                {workspace.canManage && (tab === 'settings' || workspace.kind !== 'personal') && (
-                  <Button
-                    type="submit"
-                    disabled={
-                      busy ||
-                      (tab === 'members' && (!identityId.trim() || !displayName.trim())) ||
-                      (tab === 'settings' && !name.trim())
-                    }
-                  >
-                    {busy && <LoaderCircle size={14} className="animate-spin" />}
-                    {tab === 'settings' ? '保存空间设置' : editingMember ? '保存成员' : '添加成员'}
-                  </Button>
-                )}
-              </DialogFooter>
-            </form>
-          )}
+          {body}
         </DialogContent>
       </Dialog>
       <ConfirmDialog
@@ -397,7 +440,6 @@ export function WorkspaceSettingsDialog({
         onConfirm={async () => {
           if (!pendingRemove) return;
           await removeWorkspaceMember(workspace.id, pendingRemove.identityId);
-          if (identityId === pendingRemove.identityId) resetMember();
           await refresh();
         }}
       />

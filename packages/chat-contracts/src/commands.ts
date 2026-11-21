@@ -1,37 +1,32 @@
 import { Type, type Static } from "@sinclair/typebox";
-import { AnchorSchema } from "@zhishu/document-contracts";
-import { ScopeSelectionSchema, WritingIntentSchema } from "@zhishu/ai-contracts";
+import {
+  AssistantIntentSchema,
+  AssistantPluginIdSchema,
+  ScopeSelectionSchema,
+} from "@zhishu/ai-contracts";
 
 const objectOptions = { additionalProperties: false } as const;
 const id = Type.String({ minLength: 1, maxLength: 160 });
 
 /**
- * Message acceptance command shared by both purposes; the URL selects the purpose, and the
- * discriminated member carries the purpose-specific extras. Identity, revision checks,
- * site caps and model configuration are resolved server-side.
+ * One acceptance command for every assistant turn. Intent is a per-round hint, never an
+ * engine or session selector; identity, revision checks, site caps, the effective plugin
+ * subset and model configuration are resolved server-side.
  */
-const base = {
-  clientMessageId: id,
-  idempotencyKey: id,
-  text: Type.String({ minLength: 1, maxLength: 32_000 }),
-  expectedContextRevision: Type.Integer({ minimum: 1 }),
-};
-export const QaSubmitMessageSchema = Type.Object(
+export const SubmitMessageSchema = Type.Object(
   {
-    purpose: Type.Literal("qa"),
-    ...base,
+    clientMessageId: id,
+    idempotencyKey: id,
+    text: Type.String({ minLength: 1, maxLength: 32_000 }),
+    expectedContextRevision: Type.Integer({ minimum: 1 }),
+    /** How the user wants help this round; defaults to question answering. */
+    intentHint: Type.Optional(AssistantIntentSchema),
     /** Explicit per-message scope override; otherwise the stored selection applies. */
     scope: Type.Optional(ScopeSelectionSchema),
-    /** Preferences only affect presentation; retrieval budgets stay server-side. */
-    detail: Type.Optional(Type.Union([Type.Literal("brief"), Type.Literal("detailed")])),
-  },
-  objectOptions,
-);
-export const WritingSubmitMessageSchema = Type.Object(
-  {
-    purpose: Type.Literal("writing"),
-    ...base,
-    intent: Type.Optional(WritingIntentSchema),
+    /** Requested plugin subset; the server intersects it with the currently allowed set. */
+    plugins: Type.Optional(
+      Type.Array(AssistantPluginIdSchema, { minItems: 1, maxItems: 5, uniqueItems: true }),
+    ),
     /**
      * Client-declared editing context. The server re-derives the authoritative capture
      * (generationId, durableSeq, contentHash, structureRevision) inside the accept transaction.
@@ -45,8 +40,7 @@ export const WritingSubmitMessageSchema = Type.Object(
             Type.Object(
               {
                 kind: Type.Literal("selection"),
-                anchor: AnchorSchema,
-                selectedText: Type.String({ maxLength: 8_000 }),
+                blockIds: Type.Array(Type.String(), { minItems: 1, maxItems: 256 }),
               },
               objectOptions,
             ),
@@ -70,14 +64,38 @@ export const WritingSubmitMessageSchema = Type.Object(
     webSearch: Type.Optional(Type.Boolean()),
     referenceArtifactIds: Type.Optional(Type.Array(id, { maxItems: 8 })),
   },
+  { ...objectOptions, $id: "SubmitMessage" },
+);
+export type SubmitMessage = Static<typeof SubmitMessageSchema>;
+
+/**
+ * Explicit user command to create a draft document from this conversation. The server accepts
+ * a create-draft Run in the same session; the document is only created after the user accepted.
+ */
+export const CreateDraftSchema = Type.Object(
+  {
+    idempotencyKey: id,
+    instruction: Type.String({ minLength: 1, maxLength: 8_000 }),
+    /** Save location, chosen separately from the retrieval scope. */
+    workspaceId: id,
+    title: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+    expectedContextRevision: Type.Integer({ minimum: 1 }),
+    /** Evidence artifacts the draft may rely on; each is re-validated for access and distribution. */
+    referenceArtifactIds: Type.Optional(Type.Array(id, { maxItems: 32, uniqueItems: true })),
+  },
+  { ...objectOptions, $id: "CreateDraft" },
+);
+export type CreateDraft = Static<typeof CreateDraftSchema>;
+
+/** Explicit binding of an existing authorized document as the conversation target. */
+export const BindTargetSchema = Type.Object(
+  {
+    targetDocumentId: id,
+    expectedContextRevision: Type.Integer({ minimum: 1 }),
+  },
   objectOptions,
 );
-export const SubmitMessageSchema = Type.Union([QaSubmitMessageSchema, WritingSubmitMessageSchema], {
-  $id: "SubmitMessage",
-});
-export type QaSubmitMessage = Static<typeof QaSubmitMessageSchema>;
-export type WritingSubmitMessage = Static<typeof WritingSubmitMessageSchema>;
-export type SubmitMessage = Static<typeof SubmitMessageSchema>;
+export type BindTarget = Static<typeof BindTargetSchema>;
 
 export const UpdateScopeSchema = Type.Object(
   {
@@ -126,19 +144,3 @@ export const ConversationPageSchema = Type.Object(
   objectOptions,
 );
 export type ConversationPage = Static<typeof ConversationPageSchema>;
-
-/** QA → writing handoff: chosen answers/artifacts plus the writing ask. */
-export const CreateWritingSessionSchema = Type.Object(
-  {
-    /** Chosen assistant messages whose evidence may carry over after re-validation. */
-    messageIds: Type.Array(id, { minItems: 1, maxItems: 16, uniqueItems: true }),
-    artifactIds: Type.Optional(Type.Array(id, { maxItems: 16, uniqueItems: true })),
-    instruction: Type.String({ minLength: 1, maxLength: 8_000 }),
-    intent: Type.Optional(WritingIntentSchema),
-    targetDocumentId: Type.Optional(Type.Union([id, Type.Null()])),
-    /** Duplicate clicks resolve to the same session instead of creating new ones. */
-    creationKey: id,
-  },
-  objectOptions,
-);
-export type CreateWritingSession = Static<typeof CreateWritingSessionSchema>;

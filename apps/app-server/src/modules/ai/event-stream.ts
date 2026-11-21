@@ -4,7 +4,7 @@ import type { AiService } from "./ai.service.js";
 import type { ConversationRow } from "./ai.types.js";
 
 /**
- * Shared conversation transport used by qa, writing and public entry points. Same event
+ * Shared conversation transport used by internal and public entry points. Same event
  * envelope and cursor semantics everywhere; a dropped SSE connection only releases the
  * subscription and never cancels a Run.
  */
@@ -123,7 +123,6 @@ export async function streamConversation(
     sse.frame({
       type: "resync-required",
       conversationId: conversation.id,
-      purpose: conversation.purpose,
     });
   };
   while (!signal.aborted && !sse.closed) {
@@ -137,7 +136,6 @@ export async function streamConversation(
       const candidate = {
         eventId: `evt_${row.sequence}`,
         conversationId: row.conversationId,
-        purpose: conversation.purpose,
         sequence: row.sequence.toString(),
         type: row.type,
         entityId: row.entityId,

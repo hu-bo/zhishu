@@ -11,7 +11,7 @@ import { apiBaseUrl, getAccessToken } from '../../api/transport';
 import { sseData } from '../../api/sse';
 
 /**
- * Shared conversation transport for the qa and writing features (and the public ask page).
+ * Shared conversation transport for the unified assistant (and the public ask page).
  * Only framing, cursor, cancellation and request keys live here; business session state is
  * owned by each feature hook. Durable events merge through the pure chat-contracts reducer;
  * live preview frames only feed the bounded text preview and are never authoritative.
@@ -23,8 +23,8 @@ export interface ConversationTransport {
   credentials?: RequestCredentials;
 }
 
-export const internalTransport = (purpose: 'qa' | 'writing'): ConversationTransport => ({
-  base: `${apiBaseUrl}/api/ai/${purpose}`,
+export const internalTransport = (): ConversationTransport => ({
+  base: `${apiBaseUrl}/api/ai`,
 });
 
 export const publicTransport = (siteId: string): ConversationTransport => ({
@@ -42,7 +42,9 @@ async function request<T>(
     ...init,
     credentials: transport.credentials,
     headers: {
-      'content-type': 'application/json',
+      // Only declare JSON when a body is actually sent: body-less POSTs (cancel/retry)
+      // with this header are rejected by Fastify as FST_ERR_CTP_EMPTY_JSON_BODY.
+      ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
       ...(transport.credentials ? {} : { authorization: `Bearer ${token}` }),
       ...init.headers,
     },
@@ -129,14 +131,40 @@ export const retryRun = <T>(
     accessToken(),
   );
 
-export const updateScope = <T>(
+export const updateContext = <T>(
   transport: ConversationTransport,
   conversationId: string,
   body: unknown,
 ) =>
   request<T>(
     transport,
-    `/conversations/${conversationId}/scope`,
+    `/conversations/${conversationId}/context`,
+    { method: 'POST', body: JSON.stringify(body) },
+    accessToken(),
+  );
+
+/** Explicit user command creating a draft document from this conversation. */
+export const createDraft = <T>(
+  transport: ConversationTransport,
+  conversationId: string,
+  body: unknown,
+) =>
+  request<T>(
+    transport,
+    `/conversations/${conversationId}/draft`,
+    { method: 'POST', body: JSON.stringify(body) },
+    accessToken(),
+  );
+
+/** Explicit binding of an existing authorized document as the conversation target. */
+export const bindTarget = <T>(
+  transport: ConversationTransport,
+  conversationId: string,
+  body: unknown,
+) =>
+  request<T>(
+    transport,
+    `/conversations/${conversationId}/target`,
     { method: 'POST', body: JSON.stringify(body) },
     accessToken(),
   );

@@ -14,6 +14,8 @@ export default tseslint.config(
       ".playwright-cli/**",
       // Design-reference demo, not part of the shipped workspace.
       "zhishu-demo-gemini/**",
+      // User-provided reference archive; migration input only, never shipped or linted.
+      "zhishu-master/**",
       // app-web has its own flat config (react-hooks / react-refresh plugins)
       // and is linted through its package script; see the root "lint" script.
       "apps/app-web/**",

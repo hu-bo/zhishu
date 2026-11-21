@@ -1,5 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
-import { OperationBatchSchema } from "@zhishu/document-contracts";
+import { DocumentContentSchema, OperationBatchSchema } from "@zhishu/document-contracts";
 
 const objectOptions = { additionalProperties: false } as const;
 const id = Type.String({ minLength: 1, maxLength: 160 });
@@ -251,43 +251,51 @@ export const QaAnswerSchema = Type.Object(
 );
 export type QaAnswer = Static<typeof QaAnswerSchema>;
 
+/**
+ * The immutable draft artifact produced by a user-accepted create-draft Run. Content carries
+ * deterministic block identities compiled once; retries reuse it instead of regenerating.
+ * The document body itself is created from this payload and then lives only in collaboration.
+ */
+export const WritingDraftPayloadSchema = Type.Object(
+  {
+    title: Type.String({ minLength: 1, maxLength: 200 }),
+    schemaVersion: Type.Integer({ minimum: 1 }),
+    content: DocumentContentSchema,
+    summary: Type.String({ maxLength: 2_000 }),
+    citations: Type.Array(CitationSchema, { maxItems: 32 }),
+  },
+  { ...objectOptions, $id: "WritingDraftPayload" },
+);
+export type WritingDraftPayload = Static<typeof WritingDraftPayloadSchema>;
+
+/** The action actually accepted for one Run; never an engine selector. */
+export const AssistantCommandSchema = Type.Union([
+  Type.Literal("chat"),
+  Type.Literal("create-draft"),
+]);
+export type AssistantCommand = Static<typeof AssistantCommandSchema>;
+
+/** Per-turn user intent: how the assistant should help this round, not a session purpose. */
+export const AssistantIntentSchema = Type.Union([Type.Literal("qa"), Type.Literal("writing")]);
+export type AssistantIntent = Static<typeof AssistantIntentSchema>;
+
+export const ASSISTANT_PLUGIN_IDS = ["scope", "rag", "research", "writing", "image"] as const;
+export const AssistantPluginIdSchema = Type.Union(
+  ASSISTANT_PLUGIN_IDS.map((value) => Type.Literal(value)),
+);
+export type AssistantPluginId = Static<typeof AssistantPluginIdSchema>;
+
 /** `ai_runs.context`: everything accepted at admission; never a body or history copy. */
-export const ConversationOriginSchema = Type.Object(
-  {
-    kind: Type.Literal("qa-handoff"),
-    sourceConversationId: id,
-    sourceMessageIds: Type.Array(id, { maxItems: 16 }),
-    sourceArtifactIds: Type.Array(id, { maxItems: 16 }),
-  },
-  objectOptions,
-);
-export type ConversationOrigin = Static<typeof ConversationOriginSchema>;
-
-export const QaRunContextSchema = Type.Object(
+export const AssistantRunContextSchema = Type.Object(
   {
     contextRevision: Type.Integer({ minimum: 1 }),
     configurationId: Type.Optional(id),
+    command: AssistantCommandSchema,
+    intentHint: AssistantIntentSchema,
+    /** Server-validated plugin subset effective for this Run; re-checked at every tool call. */
+    plugins: Type.Array(AssistantPluginIdSchema, { minItems: 1, maxItems: 5, uniqueItems: true }),
     scope: ScopeSelectionSchema,
-    retrieval: Type.Object(
-      {
-        contextTokenBudget: Type.Integer({ minimum: 1 }),
-        maxEvidenceItems: Type.Integer({ minimum: 1, maximum: 256 }),
-        maxRepairRounds: Type.Integer({ minimum: 0, maximum: 3 }),
-      },
-      objectOptions,
-    ),
-    /** Bounded handoff provenance. Audit only; never an authorization credential. */
-    origin: Type.Optional(ConversationOriginSchema),
-  },
-  objectOptions,
-);
-export type QaRunContext = Static<typeof QaRunContextSchema>;
-
-export const WritingRunContextSchema = Type.Object(
-  {
-    contextRevision: Type.Integer({ minimum: 1 }),
-    configurationId: Type.Optional(id),
-    scope: Type.Optional(ScopeSelectionSchema),
+    webSearch: Type.Boolean(),
     /** Target document capture taken at admission; concurrent baseline lives here on purpose. */
     capture: Type.Optional(
       Type.Object(
@@ -300,13 +308,22 @@ export const WritingRunContextSchema = Type.Object(
       ),
     ),
     request: Type.Optional(WritingRequestSchema),
-    webSearch: Type.Boolean(),
     /** Reference material selected explicitly for this message. */
     referenceArtifactIds: Type.Optional(Type.Array(id, { maxItems: 32 })),
+    /** Accepted create-draft command inputs; absent for chat Runs. */
+    draft: Type.Optional(
+      Type.Object(
+        {
+          workspaceId: id,
+          title: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+        },
+        objectOptions,
+      ),
+    ),
   },
   objectOptions,
 );
-export type WritingRunContext = Static<typeof WritingRunContextSchema>;
+export type AssistantRunContext = Static<typeof AssistantRunContextSchema>;
 
 /** Step ledger written into `ai_runs.execution` by the flow; ids are stable across attempts. */
 export const ExecutionStepSchema = Type.Object(
@@ -335,20 +352,7 @@ export const EvidenceRefSchema = Type.Object(
 );
 export type EvidenceRef = Static<typeof EvidenceRefSchema>;
 
-export const QaExecutionSchema = Type.Object(
-  {
-    evidenceRefs: Type.Array(EvidenceRefSchema, { maxItems: 256 }),
-    steps: Type.Array(ExecutionStepSchema, { maxItems: 32 }),
-    evidenceArtifactIds: Type.Array(id, { maxItems: 64 }),
-    /** Result committed as staged assistant message; recovery re-delivers it without regenerating. */
-    stagedMessageId: Type.Optional(id),
-    repairRounds: Type.Optional(Type.Integer({ minimum: 0, maximum: 3 })),
-  },
-  objectOptions,
-);
-export type QaExecution = Static<typeof QaExecutionSchema>;
-
-export const WritingApprovalSchema = Type.Object(
+export const ToolApprovalSchema = Type.Object(
   {
     id: id,
     attempt: Type.Integer({ minimum: 1 }),
@@ -366,25 +370,32 @@ export const WritingApprovalSchema = Type.Object(
   },
   objectOptions,
 );
-export type WritingApproval = Static<typeof WritingApprovalSchema>;
+export type ToolApproval = Static<typeof ToolApprovalSchema>;
 
-export const WritingExecutionSchema = Type.Object(
+/**
+ * Unified native execution ledger for every Run. Evidence refs record everything actually
+ * handed to the model, including history backing sources, not only displayed citations.
+ */
+export const AssistantExecutionSchema = Type.Object(
   {
     nativeSessionId: Type.Optional(id),
     nativeMessageId: Type.Optional(id),
     /** Durable-before-deliver flag: the native user message identity was persisted first. */
     deliveryConfirmed: Type.Optional(Type.Boolean()),
     turn: Type.Optional(Type.Integer({ minimum: 0 })),
-    approval: Type.Optional(WritingApprovalSchema),
+    approval: Type.Optional(ToolApprovalSchema),
     evidenceRefs: Type.Array(EvidenceRefSchema, { maxItems: 256 }),
     evidenceArtifactIds: Type.Array(id, { maxItems: 64 }),
     proposalArtifactIds: Type.Array(id, { maxItems: 32 }),
+    /** Immutable draft produced by a create-draft Run; binding reuses it on retry. */
+    draftArtifactId: Type.Optional(id),
+    /** Result committed as staged assistant message; recovery re-delivers it without regenerating. */
     stagedMessageId: Type.Optional(id),
     steps: Type.Array(ExecutionStepSchema, { maxItems: 64 }),
   },
   objectOptions,
 );
-export type WritingExecution = Static<typeof WritingExecutionSchema>;
+export type AssistantExecution = Static<typeof AssistantExecutionSchema>;
 
 /** Single product metering source: reservations and settled usage for one Run. */
 export const RunUsageSchema = Type.Object(

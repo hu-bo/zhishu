@@ -8,21 +8,25 @@ import { requirePrincipal } from "../identity/principal.js";
 import {
   aiEventViewSchema,
   conversationViewSchema,
-  qaSubmitBodySchema,
+  publicSubmitBodySchema,
   runViewSchema,
   scopeBodySchema,
   snapshotViewSchema,
   scopeSelectionSchema,
 } from "../ai/ai.views.js";
 import { conversationDto, startSse } from "../ai/index.js";
-import type { QaService, QaAudience } from "../qa/qa.service.js";
+import type { AssistantService, AssistantAudience } from "../ai/assistant.service.js";
 import type { QaSiteService, QaSiteRow } from "./qa-site.service.js";
 
 const COOKIE_NAME = "zhishu_qa_site";
 const typedScope = scopeSelectionSchema;
 
 /** Admin surface (/api/qa-sites) and the public entry (/api/public/qa-sites). */
-export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, qa: QaService) {
+export async function qaSitesRoutes(
+  app: FastifyInstance,
+  sites: QaSiteService,
+  assistant: AssistantService,
+) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
   // The public code entry runs scrypt; bound attempts per source IP + site to keep a
   // single client from saturating the event loop / thread pool with cheap retries.
@@ -311,7 +315,7 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
         operationId: "previewQaSite",
         params: z.strictObject({ id: z.string().regex(/^site_[a-f0-9]{32}$/) }),
         body: z.strictObject({
-          message: qaSubmitBodySchema.optional(),
+          message: publicSubmitBodySchema.optional(),
           scope: typedScope.optional(),
         }),
         response: {
@@ -331,8 +335,10 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
       if (!request.body.message)
         return reply.code(201).send({ approvedDocuments: approved.length });
       const audience = await siteAudience(sites, site, approved, principal);
-      const conversation = await qa.createConversation(audience, { scope: request.body.scope });
-      const submitted = await qa.submitMessage(audience, conversation.id, {
+      const conversation = await assistant.createConversation(audience, {
+        scope: request.body.scope,
+      });
+      const submitted = await assistant.submitMessage(audience, conversation.id, {
         ...request.body.message,
         scope: request.body.scope,
       });
@@ -423,7 +429,7 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
     },
   );
 
-  const requireVisitor = async (request: FastifyRequest): Promise<QaAudience> => {
+  const requireVisitor = async (request: FastifyRequest): Promise<AssistantAudience> => {
     const siteId = (request.params as { siteId: string }).siteId;
     const site = await sites.activeSiteById(siteId);
     const claims = sites.resolveVisitor(site, readCookie(request, COOKIE_NAME));
@@ -451,7 +457,7 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
     },
     async (request) => {
       const audience = await requireVisitor(request);
-      const rows = await qa.listConversations(audience);
+      const rows = await assistant.listConversations(audience);
       return rows.map((row) => conversationDto(row, ""));
     },
   );
@@ -471,10 +477,12 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
     },
     async (request, reply) => {
       const audience = await requireVisitor(request);
-      const conversation = await qa.createConversation(audience, { scope: request.body.scope });
+      const conversation = await assistant.createConversation(audience, {
+        scope: request.body.scope,
+      });
       return reply
         .code(201)
-        .send((await qa.snapshot(audience, conversation.id, { limit: 1 })).conversation);
+        .send((await assistant.snapshot(audience, conversation.id, { limit: 1 })).conversation);
     },
   );
   typed.get(
@@ -495,7 +503,7 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
     async (request) => {
       const audience = await requireVisitor(request);
       const params = request.params as { id: string };
-      return qa.snapshot(audience, params.id);
+      return assistant.snapshot(audience, params.id);
     },
   );
   typed.post(
@@ -510,7 +518,7 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
           siteId: z.string().regex(/^site_[a-f0-9]{32}$/),
           id: z.string().regex(/^ai_[a-f0-9]{32}$/),
         }),
-        body: qaSubmitBodySchema,
+        body: publicSubmitBodySchema,
         response: {
           ...publicCommon.response,
           202: z.strictObject({
@@ -524,7 +532,7 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
     async (request, reply) => {
       const audience = await requireVisitor(request);
       const params = request.params as { id: string };
-      const result = await qa.submitMessage(audience, params.id, request.body);
+      const result = await assistant.submitMessage(audience, params.id, request.body);
       reply.headers({ "cache-control": "no-store" });
       return reply.code(202).send({
         runId: result.runId,
@@ -558,7 +566,7 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
     async (request) => {
       const audience = await requireVisitor(request);
       const params = request.params as { id: string };
-      return qa.setScope(
+      return assistant.setScope(
         audience,
         params.id,
         request.body.expectedContextRevision,
@@ -589,7 +597,13 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
       const controller = new AbortController();
       request.raw.once("close", () => controller.abort());
       try {
-        await qa.streamEvents(audience, params.id, request.query.cursor, sse, controller.signal);
+        await assistant.streamEvents(
+          audience,
+          params.id,
+          request.query.cursor,
+          sse,
+          controller.signal,
+        );
       } catch (error) {
         request.log.error({ err: error }, "Public QA event stream failed");
         sse.close();
@@ -611,7 +625,7 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
     async (request) => {
       const audience = await requireVisitor(request);
       const params = request.params as { id: string; runId: string };
-      return qa.cancelRun(audience, params.id, params.runId);
+      return assistant.cancelRun(audience, params.id, params.runId);
     },
   );
   typed.get(
@@ -649,7 +663,7 @@ export async function qaSitesRoutes(app: FastifyInstance, sites: QaSiteService, 
     },
     async (request) => {
       const audience = await requireVisitor(request);
-      return qa.readPublicEvidence(
+      return assistant.readPublicEvidence(
         audience,
         request.query.conversationId,
         request.params.artifactId,
@@ -684,7 +698,7 @@ async function siteAudience(
   approved: Awaited<ReturnType<QaSiteService["approvedDocuments"]>>,
   internal?: import("../identity/identity.types.js").Principal,
   visitorId?: string,
-): Promise<QaAudience> {
+): Promise<AssistantAudience> {
   void sites;
   if (internal)
     return {

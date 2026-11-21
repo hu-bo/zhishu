@@ -14,25 +14,24 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import type {
-  ConversationOrigin,
+  AssistantExecution,
+  AssistantRunContext,
   EvidenceRef,
   ProposalApplicationState,
   ProposalReview,
-  QaExecution,
-  QaRunContext,
   RunUsage,
   ScopeSelection,
-  WritingExecution,
-  WritingRunContext,
 } from "@zhishu/ai-contracts";
 import type { StructureReceipt } from "@zhishu/document-contracts";
-import type { ConversationPurpose, MessagePart, RunStatus } from "@zhishu/chat-contracts";
+import type { MessagePart, RunStatus } from "@zhishu/chat-contracts";
 import { documents, identityProfiles } from "./document.table.js";
 import { qaSites } from "./qa-site.table.js";
 
 /**
- * Product storage shared by both purposes. Column types import from the pure contracts only;
- * no server module or engine package may be referenced from here.
+ * Shared assistant product storage. One conversation combines question answering, research
+ * and writing; the accepted command/intent lives in the Run context, never in a purpose
+ * column. Column types import from the pure contracts only; no server module or engine
+ * package may be referenced from here.
  */
 
 export const aiConversations = pgTable(
@@ -40,7 +39,6 @@ export const aiConversations = pgTable(
   {
     id: text("id").notNull(),
     tenantId: text("tenant_id").notNull(),
-    purpose: text("purpose").$type<ConversationPurpose>().notNull(),
     identityId: text("identity_id"),
     visitorId: text("visitor_id"),
     siteId: text("site_id"),
@@ -48,9 +46,8 @@ export const aiConversations = pgTable(
     contextRevision: integer("context_revision").notNull().default(1),
     targetDocumentId: text("target_document_id"),
     configurationId: text("configuration_id"),
-    /** Dedup key for session creation (handoff double-click); NULLs excluded by partial indexes. */
+    /** Dedup key for session creation; NULLs excluded by partial indexes. */
     creationKey: text("creation_key"),
-    origin: jsonb("origin").$type<ConversationOrigin>(),
     eventSequence: bigint("event_sequence", { mode: "bigint" })
       .notNull()
       .default(sql`0`),
@@ -64,7 +61,6 @@ export const aiConversations = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.tenantId, t.id] }),
-    uniqueIndex("ai_conversations_tenant_id_purpose_uq").on(t.tenantId, t.id, t.purpose),
     foreignKey({
       name: "ai_conversations_identity_fk",
       columns: [t.tenantId, t.identityId],
@@ -80,7 +76,6 @@ export const aiConversations = pgTable(
       columns: [t.tenantId, t.targetDocumentId],
       foreignColumns: [documents.tenantId, documents.id],
     }),
-    check("ai_conversations_purpose_check", sql`${t.purpose} in ('qa', 'writing')`),
     check(
       "ai_conversations_owner_check",
       sql`(${t.identityId} is not null) <> (${t.visitorId} is not null)`,
@@ -89,10 +84,10 @@ export const aiConversations = pgTable(
       "ai_conversations_visitor_site_check",
       sql`${t.visitorId} is null or ${t.siteId} is not null`,
     ),
-    check("ai_conversations_site_purpose_check", sql`${t.siteId} is null or ${t.purpose} = 'qa'`),
+    // Public site conversations are read-only approved material: never an editor target.
     check(
-      "ai_conversations_target_purpose_check",
-      sql`${t.targetDocumentId} is null or ${t.purpose} = 'writing'`,
+      "ai_conversations_site_target_check",
+      sql`${t.siteId} is null or ${t.targetDocumentId} is null`,
     ),
     check("ai_conversations_context_revision_check", sql`${t.contextRevision} >= 1`),
     check(
@@ -103,10 +98,10 @@ export const aiConversations = pgTable(
     // expressions make a NULL siteId an explicit part of the internal-entry tuple so public
     // and internal contexts can never collide (NULLS NOT DISTINCT emulation for pg-core).
     uniqueIndex("ai_conversations_identity_creation_uq")
-      .on(t.tenantId, t.identityId, t.purpose, sql`coalesce(${t.siteId}, '')`, t.creationKey)
+      .on(t.tenantId, t.identityId, sql`coalesce(${t.siteId}, '')`, t.creationKey)
       .where(sql`${t.creationKey} is not null and ${t.identityId} is not null`),
     uniqueIndex("ai_conversations_visitor_creation_uq")
-      .on(t.tenantId, t.visitorId, t.purpose, t.siteId, t.creationKey)
+      .on(t.tenantId, t.visitorId, t.siteId, t.creationKey)
       .where(sql`${t.creationKey} is not null and ${t.visitorId} is not null`),
     index("ai_conversations_identity_recent_idx").on(t.tenantId, t.identityId, t.createdAt, t.id),
     index("ai_conversations_site_idx").on(t.tenantId, t.siteId, t.createdAt, t.id),
@@ -120,17 +115,15 @@ export const aiRuns = pgTable(
     id: text("id").notNull(),
     tenantId: text("tenant_id").notNull(),
     conversationId: text("conversation_id").notNull(),
-    /** Projection of the conversation purpose for FK alignment and metering; not mutable state. */
-    purpose: text("purpose").$type<ConversationPurpose>().notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
     inputHash: text("input_hash").notNull(),
-    context: jsonb("context").$type<QaRunContext | WritingRunContext>().notNull(),
+    context: jsonb("context").$type<AssistantRunContext>().notNull(),
     status: text("status").$type<RunStatus>().notNull(),
     attempt: integer("attempt").notNull().default(1),
     leaseOwner: text("lease_owner"),
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
     fencingToken: bigint("fencing_token", { mode: "bigint" }),
-    execution: jsonb("execution").$type<QaExecution | WritingExecution>(),
+    execution: jsonb("execution").$type<AssistantExecution>(),
     usage: jsonb("usage").$type<RunUsage>().notNull(),
     errorCode: text("error_code"),
     cancelRequested: boolean("cancel_requested").notNull().default(false),
@@ -141,16 +134,10 @@ export const aiRuns = pgTable(
   (t) => [
     primaryKey({ columns: [t.tenantId, t.id] }),
     uniqueIndex("ai_runs_tenant_conversation_id_uq").on(t.tenantId, t.conversationId, t.id),
-    uniqueIndex("ai_runs_tenant_conversation_id_purpose_uq").on(
-      t.tenantId,
-      t.conversationId,
-      t.id,
-      t.purpose,
-    ),
     foreignKey({
       name: "ai_runs_conversation_fk",
-      columns: [t.tenantId, t.conversationId, t.purpose],
-      foreignColumns: [aiConversations.tenantId, aiConversations.id, aiConversations.purpose],
+      columns: [t.tenantId, t.conversationId],
+      foreignColumns: [aiConversations.tenantId, aiConversations.id],
     }),
     uniqueIndex("ai_runs_idempotency_uq").on(t.tenantId, t.conversationId, t.idempotencyKey),
     // One executing run per conversation; queued rows are handled by the admission budget.
@@ -162,11 +149,6 @@ export const aiRuns = pgTable(
       sql`${t.status} in ('queued','running','waiting-approval','completed','interrupted','failed','cancelled')`,
     ),
     check("ai_runs_attempt_check", sql`${t.attempt} > 0`),
-    check("ai_runs_purpose_check", sql`${t.purpose} in ('qa','writing')`),
-    check(
-      "ai_runs_waiting_approval_purpose_check",
-      sql`${t.status} <> 'waiting-approval' or ${t.purpose} = 'writing'`,
-    ),
     check("ai_runs_input_hash_check", sql`${t.inputHash} ~ '^sha256:[a-f0-9]{64}$'`),
     check(
       "ai_runs_error_code_check",
@@ -175,7 +157,6 @@ export const aiRuns = pgTable(
     index("ai_runs_conversation_recent_idx").on(t.tenantId, t.conversationId, t.createdAt, t.id),
     index("ai_runs_expiry_idx").on(t.status, t.expiresAt),
     index("ai_runs_lease_idx").on(t.status, t.leaseExpiresAt),
-    index("ai_runs_purpose_created_idx").on(t.tenantId, t.purpose, t.createdAt),
   ],
 );
 
@@ -234,7 +215,6 @@ export const aiArtifacts = pgTable(
     tenantId: text("tenant_id").notNull(),
     conversationId: text("conversation_id").notNull(),
     runId: text("run_id").notNull(),
-    purpose: text("purpose").$type<ConversationPurpose>().notNull(),
     /** Server execution identity (stepId/toolCallId); never model-authored. */
     producerCallId: text("producer_call_id").notNull(),
     resultIndex: integer("result_index").notNull(),
@@ -253,8 +233,8 @@ export const aiArtifacts = pgTable(
     primaryKey({ columns: [t.tenantId, t.id] }),
     foreignKey({
       name: "ai_artifacts_run_fk",
-      columns: [t.tenantId, t.conversationId, t.runId, t.purpose],
-      foreignColumns: [aiRuns.tenantId, aiRuns.conversationId, aiRuns.id, aiRuns.purpose],
+      columns: [t.tenantId, t.conversationId, t.runId],
+      foreignColumns: [aiRuns.tenantId, aiRuns.conversationId, aiRuns.id],
     }),
     uniqueIndex("ai_artifacts_producer_result_uq").on(
       t.tenantId,
@@ -263,9 +243,7 @@ export const aiArtifacts = pgTable(
       t.resultIndex,
     ),
     check("ai_artifacts_kind_check", sql`${t.kind} in ('evidence','draft','proposal','image')`),
-    check("ai_artifacts_purpose_check", sql`${t.purpose} in ('qa','writing')`),
     check("ai_artifacts_state_check", sql`${t.state} in ('staged','committed','withdrawn')`),
-    check("ai_artifacts_qa_kind_check", sql`${t.purpose} <> 'qa' or ${t.kind} = 'evidence'`),
     check(
       "ai_artifacts_proposal_fields_check",
       sql`(${t.kind} = 'proposal' and ${t.applicationState} is not null) or (${t.kind} <> 'proposal' and ${t.applicationState} is null and ${t.review} is null and ${t.reviewRevision} is null and ${t.receipt} is null)`,
@@ -291,6 +269,7 @@ export const aiEvents = pgTable(
         | "artifact.created"
         | "artifact.application-updated"
         | "scope.changed"
+        | "conversation.updated"
       >()
       .notNull(),
     entityId: text("entity_id").notNull(),
@@ -306,10 +285,8 @@ export const aiEvents = pgTable(
     }).onDelete("cascade"),
     check(
       "ai_events_type_check",
-      sql`${t.type} in ('message.created','run.updated','artifact.created','artifact.application-updated','scope.changed')`,
+      sql`${t.type} in ('message.created','run.updated','artifact.created','artifact.application-updated','scope.changed','conversation.updated')`,
     ),
     check("ai_events_sequence_check", sql`${t.sequence} > 0`),
   ],
 );
-
-export type AiRunExecution = QaExecution | WritingExecution;

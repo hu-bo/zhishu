@@ -1,7 +1,7 @@
 /**
- * Shared claim/dispatch lifecycle for the QA and writing flows. Both poll the shared store for
- * queued Runs with the same loop, backoff and kick semantics; only the drain body and log prefix
- * differ. Centralizing the controller/timer lifecycle keeps the two purposes from drifting.
+ * Shared claim/dispatch lifecycle for the assistant flow. It polls the shared store for
+ * queued Runs with bounded backoff and kick semantics; centralizing the controller/timer
+ * lifecycle keeps admission and execution from drifting. There is exactly one product loop.
  */
 export class DispatchLoop {
   private controller?: AbortController;

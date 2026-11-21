@@ -16469,2971 +16469,11 @@
         }
       }
     },
-    "/api/ai/qa/capabilities": {
+    "/api/ai/capabilities": {
       "get": {
-        "operationId": "getQaCapabilities",
+        "operationId": "getAiCapabilities",
         "tags": [
-          "qa"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "enabled": {
-                      "type": "boolean"
-                    },
-                    "reason": {
-                      "type": "string"
-                    },
-                    "retrieval": {
-                      "type": "object",
-                      "properties": {
-                        "contextTokenBudget": {
-                          "type": "integer"
-                        },
-                        "maxEvidenceItems": {
-                          "type": "integer"
-                        },
-                        "maxRepairRounds": {
-                          "type": "integer"
-                        },
-                        "scopeLimits": {
-                          "type": "object",
-                          "properties": {
-                            "maxWorkspaces": {
-                              "type": "integer"
-                            },
-                            "maxDocuments": {
-                              "type": "integer"
-                            },
-                            "maxAllDocuments": {
-                              "type": "integer"
-                            }
-                          },
-                          "required": [
-                            "maxWorkspaces",
-                            "maxDocuments",
-                            "maxAllDocuments"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "required": [
-                        "contextTokenBudget",
-                        "maxEvidenceItems",
-                        "maxRepairRounds",
-                        "scopeLimits"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "webSearch": {
-                      "type": "boolean",
-                      "enum": [
-                        false
-                      ]
-                    },
-                    "handoff": {
-                      "type": "boolean",
-                      "enum": [
-                        true
-                      ]
-                    }
-                  },
-                  "required": [
-                    "enabled",
-                    "retrieval",
-                    "webSearch",
-                    "handoff"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/ai/qa/conversations": {
-      "get": {
-        "operationId": "listQaConversations",
-        "tags": [
-          "qa"
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "purpose": {
-                        "type": "string",
-                        "enum": [
-                          "qa",
-                          "writing"
-                        ]
-                      },
-                      "title": {
-                        "type": "string"
-                      },
-                      "scope": {
-                        "anyOf": [
-                          {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "enum": [
-                                  "all"
-                                ]
-                              }
-                            },
-                            "required": [
-                              "kind"
-                            ],
-                            "additionalProperties": false
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "enum": [
-                                  "workspaces"
-                                ]
-                              },
-                              "workspaceIds": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                },
-                                "minItems": 1,
-                                "maxItems": 8
-                              }
-                            },
-                            "required": [
-                              "kind",
-                              "workspaceIds"
-                            ],
-                            "additionalProperties": false
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "enum": [
-                                  "documents"
-                                ]
-                              },
-                              "documentIds": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                },
-                                "minItems": 1,
-                                "maxItems": 64
-                              }
-                            },
-                            "required": [
-                              "kind",
-                              "documentIds"
-                            ],
-                            "additionalProperties": false
-                          }
-                        ]
-                      },
-                      "contextRevision": {
-                        "type": "integer"
-                      },
-                      "status": {
-                        "type": "string",
-                        "enum": [
-                          "active",
-                          "target-unavailable",
-                          "closed"
-                        ]
-                      },
-                      "targetDocumentId": {
-                        "type": "string",
-                        "nullable": true
-                      },
-                      "siteId": {
-                        "type": "string"
-                      },
-                      "eventSequence": {
-                        "type": "string"
-                      },
-                      "createdAt": {
-                        "type": "string"
-                      },
-                      "updatedAt": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "purpose",
-                      "title",
-                      "scope",
-                      "contextRevision",
-                      "status",
-                      "eventSequence",
-                      "createdAt",
-                      "updatedAt"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "createQaConversation",
-        "tags": [
-          "qa"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "not": {}
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "scope": {
-                        "anyOf": [
-                          {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "enum": [
-                                  "all"
-                                ]
-                              }
-                            },
-                            "required": [
-                              "kind"
-                            ],
-                            "additionalProperties": false
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "enum": [
-                                  "workspaces"
-                                ]
-                              },
-                              "workspaceIds": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                },
-                                "minItems": 1,
-                                "maxItems": 8
-                              }
-                            },
-                            "required": [
-                              "kind",
-                              "workspaceIds"
-                            ],
-                            "additionalProperties": false
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "kind": {
-                                "type": "string",
-                                "enum": [
-                                  "documents"
-                                ]
-                              },
-                              "documentIds": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string"
-                                },
-                                "minItems": 1,
-                                "maxItems": 64
-                              }
-                            },
-                            "required": [
-                              "kind",
-                              "documentIds"
-                            ],
-                            "additionalProperties": false
-                          }
-                        ]
-                      },
-                      "creationKey": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 160
-                      }
-                    },
-                    "additionalProperties": false
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "purpose": {
-                      "type": "string",
-                      "enum": [
-                        "qa",
-                        "writing"
-                      ]
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "scope": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "all"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "workspaces"
-                              ]
-                            },
-                            "workspaceIds": {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              },
-                              "minItems": 1,
-                              "maxItems": 8
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "workspaceIds"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "documents"
-                              ]
-                            },
-                            "documentIds": {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              },
-                              "minItems": 1,
-                              "maxItems": 64
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "documentIds"
-                          ],
-                          "additionalProperties": false
-                        }
-                      ]
-                    },
-                    "contextRevision": {
-                      "type": "integer"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "active",
-                        "target-unavailable",
-                        "closed"
-                      ]
-                    },
-                    "targetDocumentId": {
-                      "type": "string",
-                      "nullable": true
-                    },
-                    "siteId": {
-                      "type": "string"
-                    },
-                    "eventSequence": {
-                      "type": "string"
-                    },
-                    "createdAt": {
-                      "type": "string"
-                    },
-                    "updatedAt": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "purpose",
-                    "title",
-                    "scope",
-                    "contextRevision",
-                    "status",
-                    "eventSequence",
-                    "createdAt",
-                    "updatedAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/ai/qa/conversations/{id}": {
-      "get": {
-        "operationId": "getQaConversation",
-        "tags": [
-          "qa"
-        ],
-        "parameters": [
-          {
-            "schema": {},
-            "in": "query",
-            "name": "not"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "maxLength": 160
-            },
-            "in": "query",
-            "name": "before",
-            "required": false
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 200
-            },
-            "in": "query",
-            "name": "limit",
-            "required": false
-          },
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^ai_[a-f0-9]{32}$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "conversation": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "purpose": {
-                          "type": "string",
-                          "enum": [
-                            "qa",
-                            "writing"
-                          ]
-                        },
-                        "title": {
-                          "type": "string"
-                        },
-                        "scope": {
-                          "anyOf": [
-                            {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "enum": [
-                                    "all"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "kind"
-                              ],
-                              "additionalProperties": false
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "enum": [
-                                    "workspaces"
-                                  ]
-                                },
-                                "workspaceIds": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  },
-                                  "minItems": 1,
-                                  "maxItems": 8
-                                }
-                              },
-                              "required": [
-                                "kind",
-                                "workspaceIds"
-                              ],
-                              "additionalProperties": false
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "kind": {
-                                  "type": "string",
-                                  "enum": [
-                                    "documents"
-                                  ]
-                                },
-                                "documentIds": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  },
-                                  "minItems": 1,
-                                  "maxItems": 64
-                                }
-                              },
-                              "required": [
-                                "kind",
-                                "documentIds"
-                              ],
-                              "additionalProperties": false
-                            }
-                          ]
-                        },
-                        "contextRevision": {
-                          "type": "integer"
-                        },
-                        "status": {
-                          "type": "string",
-                          "enum": [
-                            "active",
-                            "target-unavailable",
-                            "closed"
-                          ]
-                        },
-                        "targetDocumentId": {
-                          "type": "string",
-                          "nullable": true
-                        },
-                        "siteId": {
-                          "type": "string"
-                        },
-                        "eventSequence": {
-                          "type": "string"
-                        },
-                        "createdAt": {
-                          "type": "string"
-                        },
-                        "updatedAt": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "purpose",
-                        "title",
-                        "scope",
-                        "contextRevision",
-                        "status",
-                        "eventSequence",
-                        "createdAt",
-                        "updatedAt"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "messages": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "conversationId": {
-                            "type": "string"
-                          },
-                          "runId": {
-                            "type": "string"
-                          },
-                          "role": {
-                            "type": "string",
-                            "enum": [
-                              "user",
-                              "assistant"
-                            ]
-                          },
-                          "parts": {
-                            "type": "array",
-                            "items": {
-                              "anyOf": [
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "kind": {
-                                      "type": "string",
-                                      "enum": [
-                                        "text"
-                                      ]
-                                    },
-                                    "text": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "kind",
-                                    "text"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "kind": {
-                                      "type": "string",
-                                      "enum": [
-                                        "citation"
-                                      ]
-                                    },
-                                    "citation": {
-                                      "type": "object",
-                                      "properties": {
-                                        "citationId": {
-                                          "type": "string"
-                                        },
-                                        "evidenceArtifactId": {
-                                          "type": "string"
-                                        },
-                                        "evidenceId": {
-                                          "type": "string"
-                                        },
-                                        "locator": {
-                                          "anyOf": [
-                                            {
-                                              "type": "object",
-                                              "properties": {
-                                                "kind": {
-                                                  "type": "string",
-                                                  "enum": [
-                                                    "block"
-                                                  ]
-                                                },
-                                                "blockId": {
-                                                  "type": "string"
-                                                },
-                                                "start": {
-                                                  "type": "integer"
-                                                },
-                                                "end": {
-                                                  "type": "integer"
-                                                }
-                                              },
-                                              "required": [
-                                                "kind",
-                                                "blockId",
-                                                "start",
-                                                "end"
-                                              ],
-                                              "additionalProperties": false
-                                            },
-                                            {
-                                              "type": "object",
-                                              "properties": {
-                                                "kind": {
-                                                  "type": "string",
-                                                  "enum": [
-                                                    "page"
-                                                  ]
-                                                },
-                                                "page": {
-                                                  "type": "integer"
-                                                },
-                                                "segmentId": {
-                                                  "type": "string"
-                                                }
-                                              },
-                                              "required": [
-                                                "kind",
-                                                "page",
-                                                "segmentId"
-                                              ],
-                                              "additionalProperties": false
-                                            },
-                                            {
-                                              "type": "object",
-                                              "properties": {
-                                                "kind": {
-                                                  "type": "string",
-                                                  "enum": [
-                                                    "section"
-                                                  ]
-                                                },
-                                                "sectionId": {
-                                                  "type": "string"
-                                                },
-                                                "start": {
-                                                  "type": "integer"
-                                                },
-                                                "end": {
-                                                  "type": "integer"
-                                                }
-                                              },
-                                              "required": [
-                                                "kind",
-                                                "sectionId",
-                                                "start",
-                                                "end"
-                                              ],
-                                              "additionalProperties": false
-                                            }
-                                          ]
-                                        },
-                                        "quote": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "citationId",
-                                        "evidenceArtifactId",
-                                        "evidenceId",
-                                        "locator",
-                                        "quote"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "required": [
-                                    "kind",
-                                    "citation"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "kind": {
-                                      "type": "string",
-                                      "enum": [
-                                        "artifact"
-                                      ]
-                                    },
-                                    "artifactId": {
-                                      "type": "string"
-                                    },
-                                    "artifactKind": {
-                                      "type": "string",
-                                      "enum": [
-                                        "evidence",
-                                        "draft",
-                                        "proposal",
-                                        "image"
-                                      ]
-                                    },
-                                    "summary": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "kind",
-                                    "artifactId",
-                                    "artifactKind"
-                                  ],
-                                  "additionalProperties": false
-                                }
-                              ]
-                            }
-                          },
-                          "clientMessageId": {
-                            "type": "string"
-                          },
-                          "createdAt": {
-                            "type": "string"
-                          },
-                          "committedAt": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "conversationId",
-                          "runId",
-                          "role",
-                          "parts",
-                          "createdAt"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "runs": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "conversationId": {
-                            "type": "string"
-                          },
-                          "purpose": {
-                            "type": "string",
-                            "enum": [
-                              "qa",
-                              "writing"
-                            ]
-                          },
-                          "status": {
-                            "type": "string",
-                            "enum": [
-                              "queued",
-                              "running",
-                              "waiting-approval",
-                              "completed",
-                              "interrupted",
-                              "failed",
-                              "cancelled"
-                            ]
-                          },
-                          "attempt": {
-                            "type": "integer"
-                          },
-                          "contextRevision": {
-                            "type": "integer"
-                          },
-                          "inputHash": {
-                            "type": "string"
-                          },
-                          "errorCode": {
-                            "type": "string"
-                          },
-                          "usage": {
-                            "type": "object",
-                            "properties": {
-                              "modelCalls": {
-                                "type": "integer"
-                              },
-                              "inputTokens": {
-                                "type": "integer"
-                              },
-                              "outputTokens": {
-                                "type": "integer"
-                              },
-                              "searchCalls": {
-                                "type": "integer"
-                              },
-                              "sourceReads": {
-                                "type": "integer"
-                              },
-                              "webSearchCalls": {
-                                "type": "integer"
-                              },
-                              "webReadCalls": {
-                                "type": "integer"
-                              },
-                              "providerCredits": {
-                                "type": "number"
-                              },
-                              "unknownCalls": {
-                                "type": "integer"
-                              }
-                            },
-                            "required": [
-                              "modelCalls",
-                              "inputTokens",
-                              "outputTokens",
-                              "searchCalls",
-                              "sourceReads",
-                              "webSearchCalls",
-                              "webReadCalls",
-                              "unknownCalls"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "cancelRequested": {
-                            "type": "boolean"
-                          },
-                          "approval": {
-                            "type": "object",
-                            "properties": {
-                              "id": {
-                                "type": "string"
-                              },
-                              "attempt": {
-                                "type": "integer"
-                              },
-                              "action": {
-                                "type": "string"
-                              },
-                              "description": {
-                                "type": "string"
-                              },
-                              "status": {
-                                "type": "string",
-                                "enum": [
-                                  "pending",
-                                  "allowed",
-                                  "rejected",
-                                  "cancelled",
-                                  "expired",
-                                  "unavailable"
-                                ]
-                              },
-                              "decisionId": {
-                                "type": "string"
-                              },
-                              "decision": {
-                                "type": "string",
-                                "enum": [
-                                  "allow-once",
-                                  "reject"
-                                ]
-                              },
-                              "requestedAt": {
-                                "type": "string"
-                              },
-                              "expiresAt": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "id",
-                              "attempt",
-                              "action",
-                              "status",
-                              "requestedAt",
-                              "expiresAt"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "createdAt": {
-                            "type": "string"
-                          },
-                          "updatedAt": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "conversationId",
-                          "purpose",
-                          "status",
-                          "attempt",
-                          "contextRevision",
-                          "inputHash",
-                          "createdAt",
-                          "updatedAt"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "artifacts": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "conversationId": {
-                            "type": "string"
-                          },
-                          "runId": {
-                            "type": "string"
-                          },
-                          "purpose": {
-                            "type": "string",
-                            "enum": [
-                              "qa",
-                              "writing"
-                            ]
-                          },
-                          "kind": {
-                            "type": "string",
-                            "enum": [
-                              "evidence",
-                              "draft",
-                              "proposal",
-                              "image"
-                            ]
-                          },
-                          "schemaVersion": {
-                            "type": "integer"
-                          },
-                          "summary": {
-                            "type": "string"
-                          },
-                          "evidenceRefs": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
-                          "reviewRevision": {
-                            "type": "integer"
-                          },
-                          "review": {
-                            "type": "object",
-                            "properties": {
-                              "revision": {
-                                "type": "integer"
-                              },
-                              "decisions": {
-                                "type": "array",
-                                "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "blockId": {
-                                      "type": "string"
-                                    },
-                                    "action": {
-                                      "type": "string",
-                                      "enum": [
-                                        "accept",
-                                        "reject"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "blockId",
-                                    "action"
-                                  ],
-                                  "additionalProperties": false
-                                }
-                              },
-                              "payloadHash": {
-                                "type": "string"
-                              },
-                              "receipts": {
-                                "type": "object",
-                                "additionalProperties": {
-                                  "type": "string"
-                                }
-                              }
-                            },
-                            "required": [
-                              "revision",
-                              "decisions"
-                            ],
-                            "additionalProperties": false
-                          },
-                          "applicationState": {
-                            "type": "string",
-                            "enum": [
-                              "pending",
-                              "partial",
-                              "applied",
-                              "rejected",
-                              "conflict",
-                              "unknown"
-                            ]
-                          },
-                          "receipt": {
-                            "type": "object",
-                            "properties": {
-                              "operationId": {
-                                "type": "string"
-                              },
-                              "generationId": {
-                                "type": "string"
-                              },
-                              "durableSeq": {
-                                "type": "integer"
-                              },
-                              "structureRevision": {
-                                "type": "integer"
-                              }
-                            },
-                            "required": [
-                              "operationId",
-                              "generationId",
-                              "durableSeq",
-                              "structureRevision"
-                            ],
-                            "additionalProperties": false
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "conversationId",
-                          "runId",
-                          "purpose",
-                          "kind",
-                          "schemaVersion"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "cursor": {
-                      "type": "string"
-                    },
-                    "hasMoreMessages": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "conversation",
-                    "messages",
-                    "runs",
-                    "artifacts",
-                    "cursor"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/ai/qa/conversations/{id}/messages": {
-      "post": {
-        "operationId": "submitQaMessage",
-        "tags": [
-          "qa"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "clientMessageId": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 160
-                  },
-                  "idempotencyKey": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 160
-                  },
-                  "text": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 32000
-                  },
-                  "expectedContextRevision": {
-                    "type": "integer",
-                    "minimum": 1
-                  },
-                  "scope": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "kind": {
-                            "type": "string",
-                            "enum": [
-                              "all"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "kind"
-                        ],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "kind": {
-                            "type": "string",
-                            "enum": [
-                              "workspaces"
-                            ]
-                          },
-                          "workspaceIds": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            },
-                            "minItems": 1,
-                            "maxItems": 8
-                          }
-                        },
-                        "required": [
-                          "kind",
-                          "workspaceIds"
-                        ],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "kind": {
-                            "type": "string",
-                            "enum": [
-                              "documents"
-                            ]
-                          },
-                          "documentIds": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            },
-                            "minItems": 1,
-                            "maxItems": 64
-                          }
-                        },
-                        "required": [
-                          "kind",
-                          "documentIds"
-                        ],
-                        "additionalProperties": false
-                      }
-                    ]
-                  },
-                  "detail": {
-                    "type": "string",
-                    "enum": [
-                      "brief",
-                      "detailed"
-                    ]
-                  }
-                },
-                "required": [
-                  "clientMessageId",
-                  "idempotencyKey",
-                  "text",
-                  "expectedContextRevision"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^ai_[a-f0-9]{32}$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "202": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "runId": {
-                      "type": "string"
-                    },
-                    "conversationId": {
-                      "type": "string"
-                    },
-                    "contextRevision": {
-                      "type": "integer"
-                    }
-                  },
-                  "required": [
-                    "runId",
-                    "conversationId",
-                    "contextRevision"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/ai/qa/conversations/{id}/scope": {
-      "post": {
-        "operationId": "updateQaScope",
-        "tags": [
-          "qa"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "scope": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "kind": {
-                            "type": "string",
-                            "enum": [
-                              "all"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "kind"
-                        ],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "kind": {
-                            "type": "string",
-                            "enum": [
-                              "workspaces"
-                            ]
-                          },
-                          "workspaceIds": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            },
-                            "minItems": 1,
-                            "maxItems": 8
-                          }
-                        },
-                        "required": [
-                          "kind",
-                          "workspaceIds"
-                        ],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "kind": {
-                            "type": "string",
-                            "enum": [
-                              "documents"
-                            ]
-                          },
-                          "documentIds": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            },
-                            "minItems": 1,
-                            "maxItems": 64
-                          }
-                        },
-                        "required": [
-                          "kind",
-                          "documentIds"
-                        ],
-                        "additionalProperties": false
-                      }
-                    ]
-                  },
-                  "expectedContextRevision": {
-                    "type": "integer",
-                    "minimum": 1
-                  }
-                },
-                "required": [
-                  "scope",
-                  "expectedContextRevision"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^ai_[a-f0-9]{32}$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "contextRevision": {
-                      "type": "integer"
-                    },
-                    "scope": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "all"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "workspaces"
-                              ]
-                            },
-                            "workspaceIds": {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              },
-                              "minItems": 1,
-                              "maxItems": 8
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "workspaceIds"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "kind": {
-                              "type": "string",
-                              "enum": [
-                                "documents"
-                              ]
-                            },
-                            "documentIds": {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              },
-                              "minItems": 1,
-                              "maxItems": 64
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "documentIds"
-                          ],
-                          "additionalProperties": false
-                        }
-                      ]
-                    },
-                    "cancelledRunIds": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
-                  },
-                  "required": [
-                    "contextRevision",
-                    "scope",
-                    "cancelledRunIds"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/ai/qa/conversations/{id}/events": {
-      "get": {
-        "operationId": "observeQaConversation",
-        "tags": [
-          "qa"
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^(0|[1-9][0-9]*)$"
-            },
-            "in": "query",
-            "name": "cursor",
-            "required": true
-          },
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^ai_[a-f0-9]{32}$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "text/event-stream": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/ai/qa/conversations/{id}/runs/{runId}/cancel": {
-      "post": {
-        "operationId": "cancelQaRun",
-        "tags": [
-          "qa"
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^ai_[a-f0-9]{32}$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          },
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^run_[a-f0-9]{32}$"
-            },
-            "in": "path",
-            "name": "runId",
-            "required": true
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "conversationId": {
-                      "type": "string"
-                    },
-                    "purpose": {
-                      "type": "string",
-                      "enum": [
-                        "qa",
-                        "writing"
-                      ]
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "queued",
-                        "running",
-                        "waiting-approval",
-                        "completed",
-                        "interrupted",
-                        "failed",
-                        "cancelled"
-                      ]
-                    },
-                    "attempt": {
-                      "type": "integer"
-                    },
-                    "contextRevision": {
-                      "type": "integer"
-                    },
-                    "inputHash": {
-                      "type": "string"
-                    },
-                    "errorCode": {
-                      "type": "string"
-                    },
-                    "usage": {
-                      "type": "object",
-                      "properties": {
-                        "modelCalls": {
-                          "type": "integer"
-                        },
-                        "inputTokens": {
-                          "type": "integer"
-                        },
-                        "outputTokens": {
-                          "type": "integer"
-                        },
-                        "searchCalls": {
-                          "type": "integer"
-                        },
-                        "sourceReads": {
-                          "type": "integer"
-                        },
-                        "webSearchCalls": {
-                          "type": "integer"
-                        },
-                        "webReadCalls": {
-                          "type": "integer"
-                        },
-                        "providerCredits": {
-                          "type": "number"
-                        },
-                        "unknownCalls": {
-                          "type": "integer"
-                        }
-                      },
-                      "required": [
-                        "modelCalls",
-                        "inputTokens",
-                        "outputTokens",
-                        "searchCalls",
-                        "sourceReads",
-                        "webSearchCalls",
-                        "webReadCalls",
-                        "unknownCalls"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "cancelRequested": {
-                      "type": "boolean"
-                    },
-                    "approval": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "attempt": {
-                          "type": "integer"
-                        },
-                        "action": {
-                          "type": "string"
-                        },
-                        "description": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "string",
-                          "enum": [
-                            "pending",
-                            "allowed",
-                            "rejected",
-                            "cancelled",
-                            "expired",
-                            "unavailable"
-                          ]
-                        },
-                        "decisionId": {
-                          "type": "string"
-                        },
-                        "decision": {
-                          "type": "string",
-                          "enum": [
-                            "allow-once",
-                            "reject"
-                          ]
-                        },
-                        "requestedAt": {
-                          "type": "string"
-                        },
-                        "expiresAt": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "attempt",
-                        "action",
-                        "status",
-                        "requestedAt",
-                        "expiresAt"
-                      ],
-                      "additionalProperties": false
-                    },
-                    "createdAt": {
-                      "type": "string"
-                    },
-                    "updatedAt": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "conversationId",
-                    "purpose",
-                    "status",
-                    "attempt",
-                    "contextRevision",
-                    "inputHash",
-                    "createdAt",
-                    "updatedAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/ai/qa/conversations/{id}/runs/{runId}/retry": {
-      "post": {
-        "operationId": "retryQaRun",
-        "tags": [
-          "qa"
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^ai_[a-f0-9]{32}$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          },
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^run_[a-f0-9]{32}$"
-            },
-            "in": "path",
-            "name": "runId",
-            "required": true
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "202": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "type": "string",
-                      "enum": [
-                        "already-terminal",
-                        "queued",
-                        "redeliver-staged"
-                      ]
-                    },
-                    "run": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "conversationId": {
-                          "type": "string"
-                        },
-                        "purpose": {
-                          "type": "string",
-                          "enum": [
-                            "qa",
-                            "writing"
-                          ]
-                        },
-                        "status": {
-                          "type": "string",
-                          "enum": [
-                            "queued",
-                            "running",
-                            "waiting-approval",
-                            "completed",
-                            "interrupted",
-                            "failed",
-                            "cancelled"
-                          ]
-                        },
-                        "attempt": {
-                          "type": "integer"
-                        },
-                        "contextRevision": {
-                          "type": "integer"
-                        },
-                        "inputHash": {
-                          "type": "string"
-                        },
-                        "errorCode": {
-                          "type": "string"
-                        },
-                        "usage": {
-                          "type": "object",
-                          "properties": {
-                            "modelCalls": {
-                              "type": "integer"
-                            },
-                            "inputTokens": {
-                              "type": "integer"
-                            },
-                            "outputTokens": {
-                              "type": "integer"
-                            },
-                            "searchCalls": {
-                              "type": "integer"
-                            },
-                            "sourceReads": {
-                              "type": "integer"
-                            },
-                            "webSearchCalls": {
-                              "type": "integer"
-                            },
-                            "webReadCalls": {
-                              "type": "integer"
-                            },
-                            "providerCredits": {
-                              "type": "number"
-                            },
-                            "unknownCalls": {
-                              "type": "integer"
-                            }
-                          },
-                          "required": [
-                            "modelCalls",
-                            "inputTokens",
-                            "outputTokens",
-                            "searchCalls",
-                            "sourceReads",
-                            "webSearchCalls",
-                            "webReadCalls",
-                            "unknownCalls"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "cancelRequested": {
-                          "type": "boolean"
-                        },
-                        "approval": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "attempt": {
-                              "type": "integer"
-                            },
-                            "action": {
-                              "type": "string"
-                            },
-                            "description": {
-                              "type": "string"
-                            },
-                            "status": {
-                              "type": "string",
-                              "enum": [
-                                "pending",
-                                "allowed",
-                                "rejected",
-                                "cancelled",
-                                "expired",
-                                "unavailable"
-                              ]
-                            },
-                            "decisionId": {
-                              "type": "string"
-                            },
-                            "decision": {
-                              "type": "string",
-                              "enum": [
-                                "allow-once",
-                                "reject"
-                              ]
-                            },
-                            "requestedAt": {
-                              "type": "string"
-                            },
-                            "expiresAt": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "attempt",
-                            "action",
-                            "status",
-                            "requestedAt",
-                            "expiresAt"
-                          ],
-                          "additionalProperties": false
-                        },
-                        "createdAt": {
-                          "type": "string"
-                        },
-                        "updatedAt": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "conversationId",
-                        "purpose",
-                        "status",
-                        "attempt",
-                        "contextRevision",
-                        "inputHash",
-                        "createdAt",
-                        "updatedAt"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "run"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/ai/qa/artifacts/{artifactId}": {
-      "get": {
-        "operationId": "getQaArtifact",
-        "tags": [
-          "qa"
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^ai_[a-f0-9]{32}$"
-            },
-            "in": "query",
-            "name": "conversationId",
-            "required": true
-          },
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^art_[a-f0-9]{32}$"
-            },
-            "in": "path",
-            "name": "artifactId",
-            "required": true
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/ai/qa/conversations/{id}/messages/{messageId}/create-writing": {
-      "post": {
-        "operationId": "createWritingFromQaMessage",
-        "tags": [
-          "qa"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "instruction": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 8000
-                  },
-                  "intent": {
-                    "type": "string",
-                    "enum": [
-                      "auto",
-                      "create",
-                      "continue",
-                      "rewrite",
-                      "summarize",
-                      "translate",
-                      "research"
-                    ]
-                  },
-                  "targetDocumentId": {
-                    "type": "string",
-                    "maxLength": 160,
-                    "nullable": true
-                  },
-                  "creationKey": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 160
-                  }
-                },
-                "required": [
-                  "instruction",
-                  "creationKey"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^ai_[a-f0-9]{32}$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          },
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 160
-            },
-            "in": "path",
-            "name": "messageId",
-            "required": true
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "conversationId": {
-                      "type": "string"
-                    },
-                    "runId": {
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "conversationId",
-                    "runId",
-                    "replayed"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/ai/writing/capabilities": {
-      "get": {
-        "operationId": "getWritingCapabilities",
-        "tags": [
-          "writing"
+          "ai"
         ],
         "security": [
           {
@@ -19459,6 +16499,19 @@
                     },
                     "reason": {
                       "type": "string"
+                    },
+                    "plugins": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "scope",
+                          "rag",
+                          "research",
+                          "writing",
+                          "image"
+                        ]
+                      }
                     },
                     "image": {
                       "type": "object",
@@ -19499,6 +16552,43 @@
                       ],
                       "additionalProperties": false
                     },
+                    "retrieval": {
+                      "type": "object",
+                      "properties": {
+                        "contextTokenBudget": {
+                          "type": "integer"
+                        },
+                        "maxEvidenceItems": {
+                          "type": "integer"
+                        },
+                        "scopeLimits": {
+                          "type": "object",
+                          "properties": {
+                            "maxWorkspaces": {
+                              "type": "integer"
+                            },
+                            "maxDocuments": {
+                              "type": "integer"
+                            },
+                            "maxAllDocuments": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "maxWorkspaces",
+                            "maxDocuments",
+                            "maxAllDocuments"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "contextTokenBudget",
+                        "maxEvidenceItems",
+                        "scopeLimits"
+                      ],
+                      "additionalProperties": false
+                    },
                     "configurationId": {
                       "type": "string"
                     }
@@ -19506,8 +16596,10 @@
                   "required": [
                     "enabled",
                     "engine",
+                    "plugins",
                     "image",
                     "webSearchAvailable",
+                    "retrieval",
                     "configurationId"
                   ],
                   "additionalProperties": false
@@ -19588,27 +16680,11 @@
         }
       }
     },
-    "/api/ai/writing/conversations": {
+    "/api/ai/conversations": {
       "get": {
-        "operationId": "listWritingConversations",
+        "operationId": "listAiConversations",
         "tags": [
-          "writing"
-        ],
-        "parameters": [
-          {
-            "schema": {},
-            "in": "query",
-            "name": "not"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "maxLength": 160
-            },
-            "in": "query",
-            "name": "targetDocumentId",
-            "required": false
-          }
+          "ai"
         ],
         "security": [
           {
@@ -19627,13 +16703,6 @@
                     "properties": {
                       "id": {
                         "type": "string"
-                      },
-                      "purpose": {
-                        "type": "string",
-                        "enum": [
-                          "qa",
-                          "writing"
-                        ]
                       },
                       "title": {
                         "type": "string"
@@ -19735,7 +16804,6 @@
                     },
                     "required": [
                       "id",
-                      "purpose",
                       "title",
                       "scope",
                       "contextRevision",
@@ -19823,9 +16891,9 @@
         }
       },
       "post": {
-        "operationId": "createWritingConversation",
+        "operationId": "createAiConversation",
         "tags": [
-          "writing"
+          "ai"
         ],
         "requestBody": {
           "required": true,
@@ -19933,13 +17001,6 @@
                     "id": {
                       "type": "string"
                     },
-                    "purpose": {
-                      "type": "string",
-                      "enum": [
-                        "qa",
-                        "writing"
-                      ]
-                    },
                     "title": {
                       "type": "string"
                     },
@@ -20040,7 +17101,6 @@
                   },
                   "required": [
                     "id",
-                    "purpose",
                     "title",
                     "scope",
                     "contextRevision",
@@ -20127,11 +17187,11 @@
         }
       }
     },
-    "/api/ai/writing/conversations/{id}": {
+    "/api/ai/conversations/{id}": {
       "get": {
-        "operationId": "getWritingConversation",
+        "operationId": "getAiConversation",
         "tags": [
-          "writing"
+          "ai"
         ],
         "parameters": [
           {
@@ -20186,13 +17246,6 @@
                       "properties": {
                         "id": {
                           "type": "string"
-                        },
-                        "purpose": {
-                          "type": "string",
-                          "enum": [
-                            "qa",
-                            "writing"
-                          ]
                         },
                         "title": {
                           "type": "string"
@@ -20294,7 +17347,6 @@
                       },
                       "required": [
                         "id",
-                        "purpose",
                         "title",
                         "scope",
                         "contextRevision",
@@ -20538,13 +17590,6 @@
                           "conversationId": {
                             "type": "string"
                           },
-                          "purpose": {
-                            "type": "string",
-                            "enum": [
-                              "qa",
-                              "writing"
-                            ]
-                          },
                           "status": {
                             "type": "string",
                             "enum": [
@@ -20678,7 +17723,6 @@
                         "required": [
                           "id",
                           "conversationId",
-                          "purpose",
                           "status",
                           "attempt",
                           "contextRevision",
@@ -20702,13 +17746,6 @@
                           },
                           "runId": {
                             "type": "string"
-                          },
-                          "purpose": {
-                            "type": "string",
-                            "enum": [
-                              "qa",
-                              "writing"
-                            ]
                           },
                           "kind": {
                             "type": "string",
@@ -20819,7 +17856,6 @@
                           "id",
                           "conversationId",
                           "runId",
-                          "purpose",
                           "kind",
                           "schemaVersion"
                         ],
@@ -20918,11 +17954,11 @@
         }
       }
     },
-    "/api/ai/writing/conversations/{id}/messages": {
+    "/api/ai/conversations/{id}/messages": {
       "post": {
-        "operationId": "submitWritingMessage",
+        "operationId": "submitAiMessage",
         "tags": [
-          "writing"
+          "ai"
         ],
         "requestBody": {
           "required": true,
@@ -20950,18 +17986,94 @@
                     "type": "integer",
                     "minimum": 1
                   },
-                  "intent": {
+                  "intentHint": {
                     "type": "string",
                     "enum": [
-                      "auto",
-                      "create",
-                      "continue",
-                      "rewrite",
-                      "rewrite-document",
-                      "summarize",
-                      "translate",
-                      "research"
+                      "qa",
+                      "writing"
                     ]
+                  },
+                  "scope": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "all"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "workspaces"
+                            ]
+                          },
+                          "workspaceIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "minItems": 1,
+                            "maxItems": 8
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "workspaceIds"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "documents"
+                            ]
+                          },
+                          "documentIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "minItems": 1,
+                            "maxItems": 64
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentIds"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "plugins": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "scope",
+                        "rag",
+                        "research",
+                        "writing",
+                        "image"
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 5
                   },
                   "editorContext": {
                     "type": "object",
@@ -21205,11 +18317,11 @@
         }
       }
     },
-    "/api/ai/writing/conversations/{id}/scope": {
+    "/api/ai/conversations/{id}/context": {
       "post": {
-        "operationId": "updateWritingScope",
+        "operationId": "updateAiContext",
         "tags": [
-          "writing"
+          "ai"
         ],
         "requestBody": {
           "required": true,
@@ -21483,11 +18595,345 @@
         }
       }
     },
-    "/api/ai/writing/conversations/{id}/events": {
-      "get": {
-        "operationId": "observeWritingConversation",
+    "/api/ai/conversations/{id}/draft": {
+      "post": {
+        "operationId": "createAiDraft",
         "tags": [
-          "writing"
+          "ai"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "instruction": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 8000
+                  },
+                  "workspaceId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "expectedContextRevision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "referenceArtifactIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 32
+                  }
+                },
+                "required": [
+                  "idempotencyKey",
+                  "instruction",
+                  "workspaceId",
+                  "expectedContextRevision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^ai_[a-f0-9]{32}$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "runId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "documentId": {
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "accepted",
+                        "in-progress",
+                        "already-bound"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "runId",
+                    "replayed",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/conversations/{id}/target": {
+      "post": {
+        "operationId": "bindAiTarget",
+        "tags": [
+          "ai"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "targetDocumentId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "expectedContextRevision": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "targetDocumentId",
+                  "expectedContextRevision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^ai_[a-f0-9]{32}$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "contextRevision": {
+                      "type": "integer"
+                    },
+                    "targetDocumentId": {
+                      "type": "string"
+                    },
+                    "cancelledRunIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "contextRevision",
+                    "targetDocumentId",
+                    "cancelledRunIds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/conversations/{id}/events": {
+      "get": {
+        "operationId": "observeAiConversation",
+        "tags": [
+          "ai"
         ],
         "parameters": [
           {
@@ -21598,11 +19044,11 @@
         }
       }
     },
-    "/api/ai/writing/conversations/{id}/runs/{runId}/cancel": {
+    "/api/ai/conversations/{id}/runs/{runId}/cancel": {
       "post": {
-        "operationId": "cancelWritingRun",
+        "operationId": "cancelAiRun",
         "tags": [
-          "writing"
+          "ai"
         ],
         "parameters": [
           {
@@ -21642,13 +19088,6 @@
                     },
                     "conversationId": {
                       "type": "string"
-                    },
-                    "purpose": {
-                      "type": "string",
-                      "enum": [
-                        "qa",
-                        "writing"
-                      ]
                     },
                     "status": {
                       "type": "string",
@@ -21783,7 +19222,6 @@
                   "required": [
                     "id",
                     "conversationId",
-                    "purpose",
                     "status",
                     "attempt",
                     "contextRevision",
@@ -21869,11 +19307,11 @@
         }
       }
     },
-    "/api/ai/writing/conversations/{id}/runs/{runId}/retry": {
+    "/api/ai/conversations/{id}/runs/{runId}/retry": {
       "post": {
-        "operationId": "retryWritingRun",
+        "operationId": "retryAiRun",
         "tags": [
-          "writing"
+          "ai"
         ],
         "parameters": [
           {
@@ -21924,13 +19362,6 @@
                         },
                         "conversationId": {
                           "type": "string"
-                        },
-                        "purpose": {
-                          "type": "string",
-                          "enum": [
-                            "qa",
-                            "writing"
-                          ]
                         },
                         "status": {
                           "type": "string",
@@ -22065,7 +19496,6 @@
                       "required": [
                         "id",
                         "conversationId",
-                        "purpose",
                         "status",
                         "attempt",
                         "contextRevision",
@@ -22158,11 +19588,173 @@
         }
       }
     },
-    "/api/ai/writing/artifacts/{artifactId}": {
-      "get": {
-        "operationId": "getWritingArtifact",
+    "/api/ai/conversations/{id}/approvals/{approvalId}/decisions": {
+      "post": {
+        "operationId": "decideAiApproval",
         "tags": [
-          "writing"
+          "ai"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "decisionId": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 64
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "allow-once",
+                      "reject"
+                    ]
+                  }
+                },
+                "required": [
+                  "decisionId",
+                  "decision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^ai_[a-f0-9]{32}$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "in": "path",
+            "name": "approvalId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "allowed",
+                        "rejected",
+                        "cancelled",
+                        "expired",
+                        "unavailable"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ai/artifacts/{artifactId}": {
+      "get": {
+        "operationId": "getAiArtifact",
+        "tags": [
+          "ai"
         ],
         "parameters": [
           {
@@ -22274,11 +19866,11 @@
         }
       }
     },
-    "/api/ai/writing/artifacts/{artifactId}/review": {
+    "/api/ai/artifacts/{artifactId}/review": {
       "post": {
-        "operationId": "reviewWritingProposal",
+        "operationId": "reviewAiProposal",
         "tags": [
-          "writing"
+          "ai"
         ],
         "requestBody": {
           "required": true,
@@ -22465,173 +20057,11 @@
         }
       }
     },
-    "/api/ai/writing/conversations/{id}/approvals/{approvalId}/decisions": {
-      "post": {
-        "operationId": "decideWritingApproval",
-        "tags": [
-          "writing"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "decisionId": {
-                    "type": "string",
-                    "minLength": 8,
-                    "maxLength": 64
-                  },
-                  "decision": {
-                    "type": "string",
-                    "enum": [
-                      "allow-once",
-                      "reject"
-                    ]
-                  }
-                },
-                "required": [
-                  "decisionId",
-                  "decision"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^ai_[a-f0-9]{32}$"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
-          },
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 160
-            },
-            "in": "path",
-            "name": "approvalId",
-            "required": true
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "pending",
-                        "allowed",
-                        "rejected",
-                        "cancelled",
-                        "expired",
-                        "unavailable"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "status"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/ai/writing/conversations/{id}/images": {
+    "/api/ai/conversations/{id}/images": {
       "get": {
-        "operationId": "listWritingImages",
+        "operationId": "listAiImages",
         "tags": [
-          "writing"
+          "ai"
         ],
         "parameters": [
           {
@@ -22831,11 +20261,11 @@
         }
       }
     },
-    "/api/ai/writing/conversations/{id}/images/{jobKey}/refresh": {
+    "/api/ai/conversations/{id}/images/{jobKey}/refresh": {
       "post": {
-        "operationId": "refreshWritingImage",
+        "operationId": "refreshAiImage",
         "tags": [
-          "writing"
+          "ai"
         ],
         "parameters": [
           {
@@ -22964,11 +20394,11 @@
         }
       }
     },
-    "/api/ai/writing/conversations/{id}/images/{assetId}/access": {
+    "/api/ai/conversations/{id}/images/{assetId}/access": {
       "get": {
-        "operationId": "getWritingImageAccess",
+        "operationId": "getAiImageAccess",
         "tags": [
-          "writing"
+          "ai"
         ],
         "parameters": [
           {
@@ -25126,13 +22556,6 @@
                             "additionalProperties": false
                           }
                         ]
-                      },
-                      "detail": {
-                        "type": "string",
-                        "enum": [
-                          "brief",
-                          "detailed"
-                        ]
                       }
                     },
                     "required": [
@@ -25639,13 +23062,6 @@
                       "id": {
                         "type": "string"
                       },
-                      "purpose": {
-                        "type": "string",
-                        "enum": [
-                          "qa",
-                          "writing"
-                        ]
-                      },
                       "title": {
                         "type": "string"
                       },
@@ -25746,7 +23162,6 @@
                     },
                     "required": [
                       "id",
-                      "purpose",
                       "title",
                       "scope",
                       "contextRevision",
@@ -25940,13 +23355,6 @@
                     "id": {
                       "type": "string"
                     },
-                    "purpose": {
-                      "type": "string",
-                      "enum": [
-                        "qa",
-                        "writing"
-                      ]
-                    },
                     "title": {
                       "type": "string"
                     },
@@ -26047,7 +23455,6 @@
                   },
                   "required": [
                     "id",
-                    "purpose",
                     "title",
                     "scope",
                     "contextRevision",
@@ -26174,13 +23581,6 @@
                         "id": {
                           "type": "string"
                         },
-                        "purpose": {
-                          "type": "string",
-                          "enum": [
-                            "qa",
-                            "writing"
-                          ]
-                        },
                         "title": {
                           "type": "string"
                         },
@@ -26281,7 +23681,6 @@
                       },
                       "required": [
                         "id",
-                        "purpose",
                         "title",
                         "scope",
                         "contextRevision",
@@ -26525,13 +23924,6 @@
                           "conversationId": {
                             "type": "string"
                           },
-                          "purpose": {
-                            "type": "string",
-                            "enum": [
-                              "qa",
-                              "writing"
-                            ]
-                          },
                           "status": {
                             "type": "string",
                             "enum": [
@@ -26665,7 +24057,6 @@
                         "required": [
                           "id",
                           "conversationId",
-                          "purpose",
                           "status",
                           "attempt",
                           "contextRevision",
@@ -26689,13 +24080,6 @@
                           },
                           "runId": {
                             "type": "string"
-                          },
-                          "purpose": {
-                            "type": "string",
-                            "enum": [
-                              "qa",
-                              "writing"
-                            ]
                           },
                           "kind": {
                             "type": "string",
@@ -26806,7 +24190,6 @@
                           "id",
                           "conversationId",
                           "runId",
-                          "purpose",
                           "kind",
                           "schemaVersion"
                         ],
@@ -27002,13 +24385,6 @@
                         ],
                         "additionalProperties": false
                       }
-                    ]
-                  },
-                  "detail": {
-                    "type": "string",
-                    "enum": [
-                      "brief",
-                      "detailed"
                     ]
                   }
                 },
@@ -27594,13 +24970,6 @@
                     "conversationId": {
                       "type": "string"
                     },
-                    "purpose": {
-                      "type": "string",
-                      "enum": [
-                        "qa",
-                        "writing"
-                      ]
-                    },
                     "status": {
                       "type": "string",
                       "enum": [
@@ -27734,7 +25103,6 @@
                   "required": [
                     "id",
                     "conversationId",
-                    "purpose",
                     "status",
                     "attempt",
                     "contextRevision",

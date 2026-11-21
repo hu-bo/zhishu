@@ -96,7 +96,7 @@ WritingChat 将 assistant 临时 frame 归并为预览，持久化完整消息�
 
 共同视图只保留展示所需身份、内容和状态；两个 transport 不必采用同一 wire 协议。chat-contracts 的可复用纯类型可按需使用，但共用 UI 不要求 RAG 改造成 DSH Session/Run。
 
-Agent idle 不代表写作成功，SSE 已连接也不代表内容已保存。两条业务都不展示模型私有推理、系统 Prompt 或 provider 内部参数；研究过程显示阶段、来源和工具结果。
+Agent idle 不代表写作成功，SSE 已连接也不代表内容已保存。运行期间模型推理以可折叠的预览 part（kind: thinking，"深度思考"）展示，仅存在于流式预览，持久消息到达后随预览一起消失、不进入正文；工具过程以步骤行（kind: tool，running/completed/failed）展示。系统 Prompt 与 provider 内部参数不展示；研究过程显示阶段、来源和工具结果。
 
 ## 6. 插槽与业务扩展
 

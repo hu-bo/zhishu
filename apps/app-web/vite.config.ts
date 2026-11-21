@@ -24,7 +24,7 @@ export default defineConfig(({ mode, command }) => {
         ...(command === 'serve' ? workspaceSourceAliases() : []),
       ],
     },
-    server: { host: '0.0.0.0', port: 5173, strictPort: true, proxy },
+    server: { host: '0.0.0.0', port: 8002, strictPort: true, proxy },
     preview: { host: '127.0.0.1', port: 4173, strictPort: true, proxy },
   };
 });

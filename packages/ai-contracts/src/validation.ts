@@ -11,6 +11,7 @@ import {
   EvidenceBundleSchema,
   QaAnswerSchema,
   ScopeSelectionSchema,
+  WritingDraftPayloadSchema,
   WritingProposalPayloadSchema,
   WritingRequestSchema,
   type Citation,
@@ -19,6 +20,7 @@ import {
   type EvidenceItem,
   type QaAnswer,
   type ScopeSelection,
+  type WritingDraftPayload,
   type WritingProposalPayload,
   type WritingRequest,
 } from "./schema.js";
@@ -56,12 +58,18 @@ export function validateSchema<S extends TSchema>(
 export function validateScopeSelection(value: unknown): ValidationResult<ScopeSelection> {
   const result = validateSchema(ScopeSelectionSchema, value, 32_768);
   if (!result.success) return result;
-  const ids =
-    result.data.kind === "all"
-      ? []
-      : result.data.kind === "workspaces"
-        ? result.data.workspaceIds
-        : result.data.documentIds;
+  let ids: string[];
+  switch (result.data.kind) {
+    case "all":
+      ids = [];
+      break;
+    case "workspaces":
+      ids = result.data.workspaceIds;
+      break;
+    case "documents":
+      ids = result.data.documentIds;
+      break;
+  }
   if (ids.some((id) => !id.trim() || id !== id.trim())) return invalid("INVALID_PAYLOAD");
   return result;
 }
@@ -217,6 +225,27 @@ export function validateQaAnswer(
   return result;
 }
 
+/**
+ * Validates the immutable draft payload of a create-draft Run: content contract, bounded
+ * block count and citations against registered evidence. Document creation re-validates
+ * authoritatively inside the binding transaction.
+ */
+export function validateWritingDraftPayload(
+  value: unknown,
+  context: { evidence: EvidenceBundle; artifactResolver: EvidenceArtifactResolver },
+): ValidationResult<WritingDraftPayload> {
+  const result = validateSchema(WritingDraftPayloadSchema, value, 2_097_152);
+  if (!result.success) return result;
+  const draft = result.data;
+  if (
+    draft.content.content.length === 0 ||
+    draft.content.content.length > 256 ||
+    !citationsMatchEvidence(draft.citations, context.evidence, context.artifactResolver)
+  )
+    return invalid<WritingDraftPayload>("INVALID_CITATION");
+  return result;
+}
+
 export interface ProposalValidationContext {
   request: WritingRequest;
   /** Baseline document version captured at Run admission. */
@@ -225,6 +254,70 @@ export interface ProposalValidationContext {
   snapshot: DocumentSnapshot;
   evidence: EvidenceBundle;
   artifactResolver: EvidenceArtifactResolver;
+}
+
+/**
+ * rewrite-document batch check: the kept prefix is replaced in place (identities preserved),
+ * the surplus old blocks are deleted, and only when nothing was deleted may excess output be
+ * appended as a chained insert tail. Ends with the same application dry run as the other
+ * strategies.
+ */
+function validateDocumentReplacement(
+  request: WritingRequest,
+  proposal: WritingProposalPayload,
+  snapshot: DocumentSnapshot,
+  allowedBlocks: readonly string[],
+): ValidationResult<WritingProposalPayload> {
+  if (request.intent !== "rewrite-document")
+    return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
+  const batch = proposal.operationBatch;
+  const oldBlocks = snapshot.content.content;
+  if (oldBlocks.length > 256 || batch.operations.length < oldBlocks.length)
+    return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
+  let deleting = false,
+    outputs = 0;
+  let after: string | null = null;
+  for (const [index, operation] of batch.operations.entries()) {
+    const old = oldBlocks[index];
+    if (old) {
+      if (!batch.preconditions?.some((p) => p.blockId === old.attrs.blockId))
+        return invalid<WritingProposalPayload>("TARGET_CONFLICT");
+      if (operation.type === "delete-block" && operation.targetBlockId === old.attrs.blockId) {
+        deleting = true;
+        continue;
+      }
+      if (
+        deleting ||
+        operation.type !== "replace-block" ||
+        operation.targetBlockId !== old.attrs.blockId ||
+        operation.block.attrs.blockId !== old.attrs.blockId
+      )
+        return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
+    } else if (
+      deleting ||
+      operation.type !== "insert-block" ||
+      operation.parentBlockId !== null ||
+      operation.beforeBlockId !== undefined ||
+      (operation.afterBlockId ?? null) !== after
+    )
+      return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
+    if (
+      (operation.type !== "insert-block" && operation.type !== "replace-block") ||
+      !allowedBlocks.includes(operation.block.type)
+    )
+      return invalid<WritingProposalPayload>("INVALID_OUTPUT");
+    outputs++;
+    after = operation.block.attrs.blockId;
+  }
+  if (
+    !outputs ||
+    !applyOperationBatch(snapshot.content, batch, {
+      documentId: snapshot.documentId,
+      generationId: proposal.document.generationId,
+    }).success
+  )
+    return invalid<WritingProposalPayload>("INVALID_OUTPUT");
+  return { success: true, data: proposal };
 }
 
 /**
@@ -275,89 +368,46 @@ export function validateWritingProposalPayload(
   const allowedBlocks = ["paragraph", "heading", "codeBlock"];
   if (context.snapshot.schemaVersion >= MATHEMATICS_DOCUMENT_SCHEMA_VERSION)
     allowedBlocks.push("blockMath");
-  if (target.kind === "document") {
-    if (request.intent !== "rewrite-document")
-      return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
-    const oldBlocks = context.snapshot.content.content;
-    if (oldBlocks.length > 256 || batch.operations.length < oldBlocks.length)
-      return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
-    let deleting = false,
-      outputs = 0;
-    let after: string | null = null;
-    for (let index = 0; index < batch.operations.length; index++) {
-      const operation = batch.operations[index]!;
-      const old = oldBlocks[index];
-      if (old) {
-        if (!batch.preconditions?.some((p) => p.blockId === old.attrs.blockId))
-          return invalid<WritingProposalPayload>("TARGET_CONFLICT");
-        if (operation.type === "delete-block" && operation.targetBlockId === old.attrs.blockId) {
-          deleting = true;
-          continue;
-        }
+  // Strategy dispatch follows the target discriminated union. The accepted request already
+  // satisfies the validateWritingRequest intent ↔ target matrix (rewrite/translate ↔ single
+  // blocks, rewrite-document ↔ document, every other intent ↔ document-end), so the blocks
+  // case is always a replacement and document-end always a chained insert.
+  let anchor: string | null;
+  switch (target.kind) {
+    case "document":
+      return validateDocumentReplacement(request, proposal, context.snapshot, allowedBlocks);
+    case "blocks": {
+      anchor = target.blocks.at(-1)?.blockId ?? null;
+      for (const operation of batch.operations) {
         if (
-          deleting ||
+          batch.operations.length !== 1 ||
           operation.type !== "replace-block" ||
-          operation.targetBlockId !== old.attrs.blockId ||
-          operation.block.attrs.blockId !== old.attrs.blockId
+          operation.targetBlockId !== target.blocks[0]?.blockId ||
+          operation.block.attrs.blockId !== operation.targetBlockId
         )
           return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
-      } else if (
-        deleting ||
-        operation.type !== "insert-block" ||
-        operation.parentBlockId !== null ||
-        operation.beforeBlockId !== undefined ||
-        (operation.afterBlockId ?? null) !== after
-      )
-        return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
-      if (
-        (operation.type !== "insert-block" && operation.type !== "replace-block") ||
-        !allowedBlocks.includes(operation.block.type)
-      )
-        return invalid<WritingProposalPayload>("INVALID_OUTPUT");
-      outputs++;
-      after = operation.block.attrs.blockId;
+        if (!allowedBlocks.includes(operation.block.type))
+          return invalid<WritingProposalPayload>("INVALID_OUTPUT");
+      }
+      break;
     }
-    if (
-      !outputs ||
-      !applyOperationBatch(context.snapshot.content, batch, {
-        documentId: context.snapshot.documentId,
-        generationId: proposal.document.generationId,
-      }).success
-    )
-      return invalid<WritingProposalPayload>("INVALID_OUTPUT");
-    return result;
-  }
-  const replacing = request.intent === "rewrite" || request.intent === "translate";
-  let after =
-    target.kind === "document-end"
-      ? target.afterBlockId
-      : ((target.kind === "blocks" ? target.blocks.at(-1)?.blockId : undefined) ?? null);
-  const anchor = after;
-  for (const operation of batch.operations) {
-    if (replacing) {
-      if (
-        batch.operations.length !== 1 ||
-        operation.type !== "replace-block" ||
-        target.kind !== "blocks" ||
-        operation.targetBlockId !== target.blocks[0]?.blockId ||
-        operation.block.attrs.blockId !== operation.targetBlockId
-      )
-        return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
-    } else {
-      if (
-        operation.type !== "insert-block" ||
-        operation.parentBlockId !== null ||
-        operation.beforeBlockId !== undefined ||
-        (operation.afterBlockId ?? null) !== after
-      )
-        return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
-      after = operation.block.attrs.blockId;
+    case "document-end": {
+      anchor = target.afterBlockId;
+      let after = anchor;
+      for (const operation of batch.operations) {
+        if (
+          operation.type !== "insert-block" ||
+          operation.parentBlockId !== null ||
+          operation.beforeBlockId !== undefined ||
+          (operation.afterBlockId ?? null) !== after
+        )
+          return invalid<WritingProposalPayload>("UNSUPPORTED_TARGET");
+        if (!allowedBlocks.includes(operation.block.type))
+          return invalid<WritingProposalPayload>("INVALID_OUTPUT");
+        after = operation.block.attrs.blockId;
+      }
+      break;
     }
-    if (
-      (operation.type === "insert-block" || operation.type === "replace-block") &&
-      !allowedBlocks.includes(operation.block.type)
-    )
-      return invalid<WritingProposalPayload>("INVALID_OUTPUT");
   }
   if (anchor && !batch.preconditions?.some((p) => p.blockId === anchor))
     return invalid<WritingProposalPayload>("TARGET_CONFLICT");

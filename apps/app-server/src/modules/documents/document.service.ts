@@ -687,6 +687,64 @@ export class DocumentService {
     };
   }
 
+  /**
+   * Transaction-scoped draft creation for the assistant binding flow. The caller owns the
+   * surrounding transaction (conversation binding commits atomically with the document);
+   * validation, collaboration initialization, quota and idempotency stay identical to import.
+   */
+  async createDraftInTx(
+    tx: import("../collaboration/owner.js").DocumentWriteTransaction,
+    input: {
+      tenantId: string;
+      identityId: string;
+      title: string;
+      workspaceId: string;
+      content: DocumentContent;
+      schemaVersion: number;
+      idempotencyKey: string;
+    },
+  ): Promise<{ documentId: string; generationId: string; durableSeq: number }> {
+    if (input.schemaVersion !== this.migration.targetSchemaVersion)
+      throw new DomainError("VALIDATION_ERROR", "草稿内容版本与当前文档 Schema 不兼容");
+    const normalized = normalizeTiptapDocumentJSON(input.content);
+    const validation = validateContentForEditor(normalized, createEditorSchema());
+    if (!validation.success) throw new DomainError("VALIDATION_ERROR", "草稿内容无法通过文档校验");
+    const content = validation.content;
+    const updateBytes = createCollaborationStateFromContent(content);
+    const updateHash = createHash("sha256").update(updateBytes).digest("hex");
+    const document = await this.repository.createInTx(
+      tx,
+      input.tenantId,
+      input.identityId,
+      input.title,
+      { schemaVersion: this.migration.targetSchemaVersion, extensions: [] },
+      undefined,
+      this.maxDocumentsPerTenant,
+      { updateHash, updateBytes, content },
+      {
+        operationId: "documents.draft",
+        key: input.idempotencyKey,
+        requestHash: createHash("sha256")
+          .update(
+            stableJsonStringify({
+              title: input.title,
+              workspaceId: input.workspaceId,
+              content,
+            }),
+          )
+          .digest("hex"),
+      },
+      undefined,
+      undefined,
+      { workspaceId: input.workspaceId, catalogId: null },
+    );
+    return {
+      documentId: document.id,
+      generationId: document.generationId,
+      durableSeq: document.durableSeq,
+    };
+  }
+
   async listVersions(principal: Principal, documentId: string) {
     const document = await this.repository.findActiveForAction(
       documentId,

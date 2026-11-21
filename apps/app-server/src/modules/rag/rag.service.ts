@@ -81,6 +81,8 @@ export class RagService {
     const job = await this.repository.claim(
       this.clients.fingerprint,
       this.config.AI_TIMEOUT_MS + 30000,
+      this.config.RAG_INDEX_QUIET_MS,
+      this.config.RAG_INDEX_MAX_WAIT_MS,
     );
     if (!job) return false;
     const signal = AbortSignal.any([

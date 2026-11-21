@@ -1,14 +1,14 @@
 # rag 设计规划
 
-> 2026-11-10 目标以 [问答/写作技术设计](../apps/ai-assistant-and-public-qa.md)为准：ai-qa 与 ai-writing 共用本包检索、证据和中立 scope/rag Skill 资源；本包保持无 DSH、无会话存储、无最终回答生成的边界。问答采用有界流程，旧 LangGraph/checkpoint 目标退役。下文带日期的说明记录历史实现，新增目标尚未实施。
+> 2026-11-13 最新目标见 [主技术文档](../apps/ai-assistant-and-public-qa.md)：本包继续负责索引、分块、Embedding、Qdrant 和可信检索。RAG 问答/research 的指令与工具归 ai-plugins，由同一 DSH Agent 使用，不在本包另建问答执行器或 DSH 状态。当前双流程已实施，以下旧阶段规划仅作迁移背景。
 
-> 平台问答的事实结论必须有可校验的文档/段落引用，内部定位到 documentId/blockId，公开入口使用站点批准的引用投影。写作的 Tavily 网页证据与其共用纯引用合约，但由 writing 应用适配执行，不自动进入本包的平台文档索引；本期问答不自动联网补齐资料。
+> 平台资料和网页共用纯证据/Citation；研究和写作需要资料时使用同一检索端口。来源必须可定位，公开入口固定为站点批准资料，不因插件可组合而扩大权限。
 
 > 2026-10-30 应用已接入 `modules/rag`、`document_indexes`（migration 0036）、独立 Embedding 配置、自动索引 Worker、空间/文档范围向量问答、索引状态及来源文档链接。当前沿用显式文档 ACL，以 `document:<id>` 稳定键过滤；未实施下文规划的 space/user 继承权限迁移。真实 `qwen3.8-flash` 写作 → `qwen3.7-text-embedding-flash` 1024 维索引 → 空间/文档问答已通过，覆盖引用、权限隔离、正文更新与删除。部署和验收说明见 [AI 知识问答验收记录](../ai-knowledge-verification.md)。下面保留的规划条目不代表全部已交付。
 
 > 2026-10-24 应用更新：RagChat 在 app-web 独立维护问答状态与草稿，共用 chat-ui，通过原 LangChain 问答 API 保留历史、取消与 checkpoint 恢复。检索包自身不持有 checkpoint；问答执行仍使用 LangGraph。当前页面基于授权所选资料，不将检索包能力等同于全库向量问答已接入。见 [实施记录](ai-chat-implementation.md)。
 
-> 2026-10-24 两条消费链路：RAG Chat 继续使用 LangChain 驱动问答并组合本包的检索/来源能力；协作 AI 写作的 [research 插件](ai-plugins.md#5-research调研)也可通过宿主注入本包端口。两者分别编排，写作中的 DSH Agent 不接管 RAG Chat。rag 包保持检索职责，不依赖 chat-ui 或 DSH；前端分别封装 RagChat/WritingChat，共用基础组件。
+> 2026-10-24 两条消费链路：RAG Chat 继续使用 LangChain 驱动问答并组合本包的检索/来源能力；协作 AI 写作的 [research 插件](ai-plugins.md)也可通过宿主注入本包端口。两者分别编排，写作中的 DSH Agent 不接管 RAG Chat。rag 包保持检索职责，不依赖 chat-ui 或 DSH；前端分别封装 RagChat/WritingChat，共用基础组件。
 
 状态：2026-10-19 已按用户编码指令实现 `@zhishu/rag`，目录 `packages/rag`；[返回文档地图](../README.md)。本包只适配知书内容与成熟检索组件；应用索引调度和授权模式迁移仍由 app-server 负责。
 

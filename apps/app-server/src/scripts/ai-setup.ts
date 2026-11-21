@@ -1,3 +1,4 @@
+import "../environment.js";
 import { loadConfig } from "../config.js";
 import { createRagClients } from "../modules/rag/rag.config.js";
 import { initializeCollection } from "@zhishu/rag";

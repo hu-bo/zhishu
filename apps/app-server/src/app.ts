@@ -24,16 +24,14 @@ import { registerOpenApi } from "./plugins/openapi.js";
 import type { CollaborationSessionRevoker } from "./modules/collaboration/session-revoker.js";
 import type { PrincipalAuthenticator } from "./modules/identity/identity.types.js";
 import type { CollaborationOwner } from "./modules/collaboration/owner.js";
-import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { assembleAiSystems } from "./ai-systems.js";
 import type { RagService } from "./modules/rag/rag.service.js";
-import { qaModule } from "./modules/qa/index.js";
-import { writingModule } from "./modules/writing/index.js";
+import { assistantModule } from "./modules/ai/index.js";
 import { qaSitesModule } from "./modules/qa-sites/index.js";
 import { DomainError } from "./shared/domain-error.js";
 import { notificationsModule } from "./modules/notifications/index.js";
 import { invitationsModule } from "./modules/invitations/index.js";
-import type { LlmAdapter } from "@zhishu/ai-writing/kernel";
+import type { LlmAdapter } from "@zhishu/dsh-agent/kernel";
 import { AuthorizationEventWorker } from "./modules/authorization/authorization-events.js";
 
 export async function buildApp(
@@ -44,8 +42,7 @@ export async function buildApp(
     identityAuthenticator?: PrincipalAuthenticator;
     operationsMetrics?: OperationsMetricsType;
     collaborationOwner?: CollaborationOwner;
-    aiModel?: BaseChatModel;
-    writingAdapter?: LlmAdapter;
+    assistantAdapter?: LlmAdapter;
     /** Test seam: scripted retrieval for the AI smoke runner (production never sets this). */
     ragStub?: RagService | null;
   } = {},
@@ -106,14 +103,15 @@ export async function buildApp(
     const unavailable = async () => {
       throw new DomainError("SERVICE_UNAVAILABLE", "协同服务尚未就绪");
     };
+    const sessionRevoker = options.sessionRevoker ?? { revokeDocumentSessions() {} };
     const ai = assembleAiSystems(app, config, {
       exportMode: options.exportMode,
       collaborationOwner: options.collaborationOwner ?? {
         snapshot: unavailable,
         apply: unavailable,
       },
-      aiModel: options.aiModel,
-      writingAdapter: options.writingAdapter,
+      sessionRevoker,
+      assistantAdapter: options.assistantAdapter,
       ragStub: options.ragStub,
     });
     await app.register(
@@ -123,13 +121,10 @@ export async function buildApp(
           service: mockIdentityService ?? undefined,
           prefix: "/auth",
         });
-        await api.register((scope) =>
-          authorizationModule(scope, options.sessionRevoker ?? { revokeDocumentSessions() {} }),
-        );
+        await api.register((scope) => authorizationModule(scope, sessionRevoker));
         await api.register(notificationsModule);
         await api.register(invitationsModule);
         await api.register((scope) => assetsModule(scope, config, options.exportMode));
-        const sessionRevoker = options.sessionRevoker ?? { revokeDocumentSessions() {} };
         await api.register((scope) => workspacesModule(scope, sessionRevoker));
         await api.register((scope) => catalogsModule(scope, sessionRevoker, ai.publicLinkage));
         await api.register((scope) =>
@@ -138,18 +133,14 @@ export async function buildApp(
         await api.register(async (scope) =>
           documentsModule(scope, config, sessionRevoker, options.exportMode, ai.publicLinkage),
         );
-        await api.register((scope) => qaModule(scope, ai.qa));
-        await api.register((scope) => writingModule(scope, ai.writing));
-        await api.register((scope) => qaSitesModule(scope, ai.sites, ai.qa));
+        await api.register((scope) => assistantModule(scope, ai.assistant));
+        await api.register((scope) => qaSitesModule(scope, ai.sites, ai.assistant));
       },
       { prefix: "/api" },
     );
     if (!options.exportMode) {
-      const permissionWorker = new AuthorizationEventWorker(
-        app.db,
-        options.sessionRevoker ?? { revokeDocumentSessions() {} },
-        (err) =>
-          app.log.error({ err }, "Permission invalidation failed; durable events will be retried"),
+      const permissionWorker = new AuthorizationEventWorker(app.db, sessionRevoker, (err) =>
+        app.log.error({ err }, "Permission invalidation failed; durable events will be retried"),
       );
       app.addHook("onReady", async () => permissionWorker.start());
       app.addHook("preClose", async () => permissionWorker.stop());

@@ -31,7 +31,6 @@ export function applyAiEvent(
 ): ConversationSnapshot | null {
   if (!Value.Check(AiEventSchemas[event.type], event)) return null;
   if (event.conversationId !== current.conversation.id) return null;
-  if (event.purpose !== current.conversation.purpose) return null;
   // The durable cursor is monotonic; only the immediate next sequence advances it.
   if (BigInt(event.sequence) !== BigInt(current.cursor) + 1n) return null;
   switch (event.type) {
@@ -84,6 +83,12 @@ export function applyAiEvent(
       const { contextRevision, scope } = event.payload;
       return commit(current, event, {
         conversation: { ...current.conversation, contextRevision, scope },
+      });
+    }
+    case "conversation.updated": {
+      const { contextRevision, status, targetDocumentId } = event.payload;
+      return commit(current, event, {
+        conversation: { ...current.conversation, contextRevision, status, targetDocumentId },
       });
     }
     default:

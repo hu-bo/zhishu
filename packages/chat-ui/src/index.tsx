@@ -2,6 +2,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { MessageList } from "./message-list.js";
 export * from "./types.js";
 export * from "./composer.js";
+export * from "./action-card.js";
 export * from "./message-list.js";
 export * from "./approval.js";
 export function ChatStatus({ children, error = false }: { children?: ReactNode; error?: boolean }) {

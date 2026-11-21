@@ -47,15 +47,19 @@ async function main(): Promise<void> {
     };
     const paths = Object.keys(document.paths ?? {});
     // Retirement gate: the deprecated AI/writing protocols must be gone from the source document.
-    for (const removed of ["/api/ai/chat", "/api/ai/authoring", "/api/projects"]) {
+    for (const removed of [
+      "/api/ai/chat",
+      "/api/ai/authoring",
+      "/api/projects",
+      "/api/ai/qa",
+      "/api/ai/writing",
+    ]) {
       if (paths.some((path) => path.startsWith(removed)))
         throw new Error(`OpenAPI document still exposes retired route family ${removed}`);
     }
     for (const required of [
-      "/api/ai/qa/capabilities",
-      "/api/ai/qa/conversations",
-      "/api/ai/writing/capabilities",
-      "/api/ai/writing/conversations",
+      "/api/ai/capabilities",
+      "/api/ai/conversations",
       "/api/qa-sites",
       "/api/public/qa-sites/by-slug/{slug}",
     ]) {

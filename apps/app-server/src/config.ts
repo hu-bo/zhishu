@@ -25,7 +25,12 @@ const environmentSchema = z
       .string()
       .regex(/^[A-Za-z0-9_-]{1,128}$/)
       .default("zhishu_documents"),
-    RAG_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(60000).default(1000),
+    // Polling is only trigger precision; edit debounce lives in the claim quiet window below.
+    RAG_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(60000).default(10000),
+    // A document becomes index-eligible only after the last durable projection stayed this quiet.
+    RAG_INDEX_QUIET_MS: z.coerce.number().int().min(0).max(600000).default(30000),
+    // Continuous collaborative edits cannot starve indexing forever: re-check past this cap.
+    RAG_INDEX_MAX_WAIT_MS: z.coerce.number().int().min(0).max(3600000).default(600000),
     AI_IMAGE_MODEL: z.string().trim().min(1).optional(),
     AI_IMAGE_API_KEY: z.string().min(1).optional(),
     AI_IMAGE_BASE_URL: z.string().url().optional(),

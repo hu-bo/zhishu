@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiBaseUrl } from '../../api/transport';
-import { QaChat } from '../qa/qa-chat';
+import { AssistantChat } from '../assistant/assistant-chat';
 import {
   publicTransport,
   type ConversationTransport,
@@ -111,9 +111,10 @@ export function PublicAskPage({ slug }: { slug: string }) {
           新对话
         </button>
       </div>
-      <QaChat
+      <AssistantChat
         key={`public:${shell.id}:${conversationId ?? 'new'}`}
         transport={transport}
+        mode="public"
         scopeKey={['public', shell.id]}
         welcome={shell.welcome || undefined}
         suggested={shell.suggestedQuestions}

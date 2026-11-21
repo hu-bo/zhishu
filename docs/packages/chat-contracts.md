@@ -1,5 +1,7 @@
 # chat-contracts 设计规划
 
+> 2026-11-13 新目标以 [主技术文档](../apps/ai-assistant-and-public-qa.md) 为准：双流程版本已实施，下一轮删除 qa/writing purpose 的协议分叉，统一会话/命令/Run/事件，并新增明确的同会话草稿创建与文档绑定语义。以下旧日期接口只作历史背景，不能恢复完整产品 snapshot 或双版本解析。
+
 状态：2026-10-24 已实现 TypeBox Schema、派生类型、命令边界、快照/实时 frame 与事件归并。当前 durable wire 使用完整 snapshot 事件；细粒度事件是后续目标。见 [实施记录](ai-chat-implementation.md) 和 [包 README](../../packages/chat-contracts/README.md)。
 
 **原设计时状态（已由上方实施更新覆盖）**：2026-10-22 新增方案，尚未创建 `packages/chat-contracts`。拟定包名 `@zhishu/chat-contracts`。[总方案](ai-chat-architecture.md)；[返回文档地图](../README.md)。本文定义通用产品协议，文中的类型名是拟定接口，不是已实现导出。
@@ -14,14 +16,14 @@
 
 ## 2. 功能与入口
 
-| 编号  | 能力                       | 约束                                           |
-| ----- | -------------------------- | ---------------------------------------------- |
-| CC-01 | Conversation、Message、Run | 业务身份与执行状态分离；标识不能互换           |
-| CC-02 | 内容块和产物引用           | 文本、图片、工具、错误、插件内容；支持降级     |
-| CC-03 | 产品持久化事件与快照       | 顺序、游标、重复检测、恢复和终态校验           |
-| CC-04 | 实时预览 frame             | 不声明 durable；按 attempt/revision/index 归并 |
-| CC-05 | 审批与能力声明             | 单次决定、取消/过期反馈、服务端能力限制        |
-| CC-06 | 版本与安全边界             | 输入/大小/事件校验；未知命令拒绝               |
+| 编号  | 能力                       | 约束                                                                                  |
+| ----- | -------------------------- | ------------------------------------------------------------------------------------- |
+| CC-01 | Conversation、Message、Run | 业务身份与执行状态分离；标识不能互换                                                  |
+| CC-02 | 内容块和产物引用           | 文本、图片、工具、错误、插件内容；支持降级                                            |
+| CC-03 | 产品持久化事件与快照       | 顺序、游标、重复检测、恢复和终态校验                                                  |
+| CC-04 | 实时预览 frame             | 不声明 durable；text/thinking 按 attempt/revision/index 归并，tool 按 id 幂等更新状态 |
+| CC-05 | 审批与能力声明             | 单次决定、取消/过期反馈、服务端能力限制                                               |
+| CC-06 | 版本与安全边界             | 输入/大小/事件校验；未知命令拒绝                                                      |
 
 拟定入口为根入口的数据 Schema/类型、`./events` 的事件与归并前置校验、`./validation` 的纯校验。Schema 只维护一份，OpenAPI 引用共享结构；应用 Zod route contract 负责路径、鉴权外壳、分页、状态码和 HTTP 大小限制。
 
@@ -65,6 +67,8 @@ Message 状态区分 pending、streaming、committed、failed、cancelled。消�
 `ChatLiveFrame` 不带持久化 sequence/cursor，包含运行实例标识 `streamEpoch`、runId、messageId、attemptId、revision、index 和明确类型的内容。支持 assistant.started、assistant.delta、assistant.reset、tool.progress、plugin.progress 等类型。
 
 revision 标识一次活跃流替换，index 在 attempt 内连续。旧实例、旧 attempt 或重复 index 不再追加。断档或 reset 使当前预览失效，转向快照/确认消息。`message.committed` 用完整权威内容替换预览，不在 delta 尾部重复拼接完整文本。
+
+当前实现的 `PreviewFrame.channel` 为 text、stage、thinking、tool：text 与 thinking 是两条独立编号的连续 delta 流（thinking 仅存在于预览，不进入持久消息）；tool 帧携带 `{id, name, status}`，按 id 幂等 upsert、状态不回退；stage 帧是粗粒度进度标签。创作与带引用问答的最终正文由模型流式写入工具参数，ai-runtime 将其中可展示的文本字段解码后并入 text 通道，因此界面逐字“打字”呈现，而不是完成后一次渲染。归并规则见 `src/preview.ts` 的 `applyPreviewFrame`。
 
 ### 5.3 订阅与快照
 

@@ -1,18 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { MessagePart, ConversationPurpose, RunStatus } from "@zhishu/chat-contracts";
+import type { MessagePart, RunStatus } from "@zhishu/chat-contracts";
 import type {
-  ConversationOrigin,
+  AssistantExecution,
+  AssistantRunContext,
   GenerationLimits,
   ProposalApplicationState,
   ProposalReview,
-  QaExecution,
-  QaRunContext,
   RunUsage,
   ScopeSelection,
-  WritingApproval,
-  WritingExecution,
-  WritingRunContext,
+  ToolApproval,
 } from "@zhishu/ai-contracts";
 import { DEFAULT_RUN_USAGE } from "@zhishu/ai-contracts";
 import { hashContent } from "@zhishu/ai-contracts/hash";
@@ -35,26 +32,23 @@ export type ConversationOwner =
   | { kind: "visitor"; tenantId: string; visitorId: string; siteId: string };
 
 export interface CreateConversationCommand {
-  purpose: ConversationPurpose;
   owner: ConversationOwner;
   scope: ScopeSelection;
   targetDocumentId?: string | null;
   configurationId?: string | null;
   creationKey?: string | null;
-  origin?: ConversationOrigin | null;
   ttlMs?: number;
 }
 
 export interface AdmitMessageCommand {
   conversation: ConversationRow;
-  purpose: ConversationPurpose;
   expectedContextRevision: number;
   clientMessageId: string;
   idempotencyKey: string;
   parts: MessagePart[];
   /** Canonical client request material used for the inputHash replay comparison. */
   identityInput: unknown;
-  context: QaRunContext | WritingRunContext;
+  context: AssistantRunContext;
 }
 
 /** Default hourly Run admission budget per owner; the single source for the 120 cap. */
@@ -69,12 +63,12 @@ export interface AdmissionBudget {
 export interface ExecutionWrite {
   run: RunRow;
   owner: string;
-  execution?: QaExecution | WritingExecution;
+  execution?: AssistantExecution;
   /**
    * Shallow merge onto the current fenced execution. Step progress must not rewrite the
    * evidence ledger that registerArtifact folds in concurrently.
    */
-  executionPatch?: Partial<QaExecution> & Partial<WritingExecution>;
+  executionPatch?: Partial<AssistantExecution>;
   status?: "running" | "waiting-approval";
   reserve?: Partial<Record<keyof RunUsage, number>>;
   limits?: GenerationLimits;
@@ -90,7 +84,7 @@ export interface CommitOutputCommand {
   /** Assistant answer content; staged then committed in this transaction. */
   assistantParts?: MessagePart[];
   artifactIdsToCommit?: string[];
-  execution?: QaExecution | WritingExecution;
+  execution?: AssistantExecution;
   /** Settled actual usage added to the reservations; the product metering source of truth. */
   usage?: Partial<Record<keyof RunUsage, number>>;
 }
@@ -110,9 +104,9 @@ export interface RegisterArtifactCommand {
 }
 
 /**
- * The single shared product service. Both purposes drive state through it; no business
- * module writes conversation/run/message/artifact/event rows on its own. All external
- * network calls happen outside these transactions.
+ * The single shared product service. Every assistant command drives state through it; no
+ * business module writes conversation/run/message/artifact/event rows on its own. All
+ * external network calls happen outside these transactions.
  */
 export class AiService {
   readonly repository: AiRepository;
@@ -141,7 +135,6 @@ export class AiService {
       if (cmd.creationKey) {
         const existing = await this.repository.findConversationByCreationKey(tx, {
           tenantId: cmd.owner.tenantId,
-          purpose: cmd.purpose,
           creationKey: cmd.creationKey,
           identityId: cmd.owner.kind === "identity" ? cmd.owner.identityId : undefined,
           visitorId: cmd.owner.kind === "visitor" ? cmd.owner.visitorId : undefined,
@@ -152,7 +145,6 @@ export class AiService {
       const conversation = await this.repository.insertConversation(tx, {
         id,
         tenantId: cmd.owner.tenantId,
-        purpose: cmd.purpose,
         identityId: cmd.owner.kind === "identity" ? cmd.owner.identityId : null,
         visitorId: cmd.owner.kind === "visitor" ? cmd.owner.visitorId : null,
         siteId: cmd.owner.kind === "visitor" ? cmd.owner.siteId : (cmd.owner.siteId ?? null),
@@ -160,7 +152,6 @@ export class AiService {
         targetDocumentId: cmd.targetDocumentId ?? null,
         configurationId: cmd.configurationId ?? null,
         creationKey: cmd.creationKey ?? null,
-        origin: cmd.origin ?? null,
         expiresAt: cmd.ttlMs ? new Date(Date.now() + cmd.ttlMs) : null,
       });
       return { conversation, created: true };
@@ -182,14 +173,13 @@ export class AiService {
 
   async listConversations(
     owner: ConversationOwner,
-    purpose: ConversationPurpose,
     filter: { targetDocumentId?: string; limit?: number } = {},
   ): Promise<ConversationRow[]> {
     return this.repository.listConversations(this.db, {
       tenantId: owner.tenantId,
-      purpose,
       identityId: owner.kind === "identity" ? owner.identityId : undefined,
       visitorId: owner.kind === "visitor" ? owner.visitorId : undefined,
+      siteId: owner.kind === "visitor" ? owner.siteId : undefined,
       targetDocumentId: filter.targetDocumentId,
       limit: filter.limit ?? 20,
     });
@@ -216,8 +206,6 @@ export class AiService {
         cmd.conversation.id,
       );
       if (!conversation) throw new DomainError("NOT_FOUND", "会话不存在");
-      if (conversation.purpose !== cmd.purpose)
-        throw new DomainError("CONFLICT", "会话用途与路由不一致");
       if (conversation.status !== "active") throw new DomainError("CONFLICT", "会话不可继续");
       if (conversation.contextRevision !== cmd.expectedContextRevision)
         throw new DomainError("CONFLICT", "上下文已更新，请基于新上下文重新提交");
@@ -290,7 +278,6 @@ export class AiService {
         id: runId,
         tenantId: conversation.tenantId,
         conversationId: conversation.id,
-        purpose: cmd.purpose,
         idempotencyKey: cmd.idempotencyKey,
         inputHash,
         context: cmd.context,
@@ -389,7 +376,7 @@ export class AiService {
           evidenceRefs: [],
           evidenceArtifactIds: [],
           steps: [],
-        }) as QaExecution | WritingExecution;
+        }) as AssistantExecution;
         execution = { ...base, ...input.executionPatch };
       }
       const updated = await this.repository.patchRunFenced(tx, current, input.owner, {
@@ -406,7 +393,7 @@ export class AiService {
         updated.conversationId,
       );
       if (conversation) {
-        const execution = updated.execution as WritingExecution | null;
+        const execution = updated.execution;
         await this.repository.appendEvent(tx, conversation, {
           eventId: randomUUID(),
           type: "run.updated",
@@ -439,13 +426,12 @@ export class AiService {
         evidenceRefs: [],
         evidenceArtifactIds: [],
         steps: [],
-      }) as QaExecution;
+      }) as AssistantExecution;
       const inserted = await this.repository.insertArtifact(tx, {
         id: `art_${randomUUID().replaceAll("-", "")}`,
         tenantId: current.tenantId,
         conversationId: current.conversationId,
         runId: current.id,
-        purpose: current.purpose,
         producerCallId: cmd.producerCallId,
         resultIndex: cmd.resultIndex,
         kind: cmd.kind,
@@ -533,7 +519,7 @@ export class AiService {
         evidenceRefs: [],
         evidenceArtifactIds: [],
         steps: [],
-      }) as QaExecution | WritingExecution;
+      }) as AssistantExecution;
       await this.repository.patchRunFenced(tx, current, owner, {
         execution: { ...execution, stagedMessageId: staged.id },
       });
@@ -618,11 +604,11 @@ export class AiService {
     });
   }
 
-  /** Persist the active tool approval and flip the Run to waiting-approval (writing only). */
+  /** Persist the active tool approval and flip the Run to waiting-approval. */
   async recordApproval(
     run: RunRow,
     owner: string,
-    approval: WritingApproval,
+    approval: ToolApproval,
   ): Promise<RunRow | undefined> {
     return this.tx(async (tx) => {
       const current = await this.repository.lockRun(tx, run.tenantId, run.id);
@@ -633,8 +619,8 @@ export class AiService {
         current.status !== "running"
       )
         return;
-      const execution: WritingExecution = {
-        ...((current.execution as WritingExecution) ?? {
+      const execution: AssistantExecution = {
+        ...((current.execution as AssistantExecution) ?? {
           evidenceRefs: [],
           evidenceArtifactIds: [],
           proposalArtifactIds: [],
@@ -671,7 +657,7 @@ export class AiService {
     approvalId: string;
     decision?: "allow-once" | "reject";
     decisionId?: string;
-    outcome: WritingApproval["status"];
+    outcome: ToolApproval["status"];
   }): Promise<void> {
     await this.tx(async (tx) => {
       const current = await this.repository.lockRun(tx, input.run.tenantId, input.run.id);
@@ -681,14 +667,14 @@ export class AiService {
         current.fencingToken !== input.run.fencingToken
       )
         return;
-      const execution = (current.execution as WritingExecution) ?? {
+      const execution = (current.execution as AssistantExecution) ?? {
         evidenceRefs: [],
         evidenceArtifactIds: [],
         proposalArtifactIds: [],
         steps: [],
       };
       if (!execution.approval || execution.approval.id !== input.approvalId) return;
-      const approval: WritingApproval = {
+      const approval: ToolApproval = {
         ...execution.approval,
         status: input.outcome,
         ...(input.decision ? { decision: input.decision } : {}),
@@ -769,12 +755,11 @@ export class AiService {
     });
   }
 
-  /** Dispatcher entry: claim the oldest queued run for the purpose across conversations. */
+  /** Dispatcher entry: claim the oldest queued run across conversations. */
   async claimNext(
-    purpose: ConversationPurpose,
     leaseMs: number,
   ): Promise<{ conversation: ConversationRow; run: RunRow } | undefined> {
-    const queued = await this.repository.queuedRuns(purpose, 32);
+    const queued = await this.repository.queuedRuns(32);
     const seen = new Set<string>();
     for (const queuedRun of queued) {
       if (seen.has(queuedRun.conversationId)) continue;
@@ -887,6 +872,57 @@ export class AiService {
         type: "scope.changed",
         entityId: refreshed.id,
         payload: { contextRevision: refreshed.contextRevision, scope, cancelledRunIds },
+        createdAt: new Date(),
+      });
+      return { conversation: refreshed, cancelledRunIds };
+    });
+  }
+
+  /** Explicit target binding bumps the revision, isolates executing runs and emits conversation.updated. */
+  async bindTarget(
+    conversation: ConversationRow,
+    expectedContextRevision: number,
+    targetDocumentId: string,
+  ): Promise<{ conversation: ConversationRow; cancelledRunIds: string[] }> {
+    return this.tx(async (tx) => {
+      const locked = await this.repository.lockConversation(
+        tx,
+        conversation.tenantId,
+        conversation.id,
+      );
+      if (!locked) throw new DomainError("NOT_FOUND", "会话不存在");
+      if (locked.siteId) throw new DomainError("FORBIDDEN", "公开会话不能绑定文档目标");
+      if (locked.contextRevision !== expectedContextRevision)
+        throw new DomainError("CONFLICT", "上下文已更新，请刷新后重试");
+      const active = await this.repository.listActiveRuns(tx, locked.tenantId, locked.id);
+      const cancelledRunIds: string[] = [];
+      for (const run of active) {
+        if (run.status === "queued") {
+          await this.repository.setRunStatusUnleased(tx, locked.tenantId, run.id, "cancelled");
+          cancelledRunIds.push(run.id);
+        } else if (run.status === "running" || run.status === "waiting-approval") {
+          await this.repository.markCancelRequested(tx, locked.tenantId, run.id);
+          cancelledRunIds.push(run.id);
+        }
+      }
+      await this.repository.updateConversation(tx, locked, {
+        targetDocumentId,
+        contextRevision: locked.contextRevision + 1,
+      });
+      const refreshed = {
+        ...locked,
+        targetDocumentId,
+        contextRevision: locked.contextRevision + 1,
+      };
+      await this.repository.appendEvent(tx, refreshed, {
+        eventId: randomUUID(),
+        type: "conversation.updated",
+        entityId: refreshed.id,
+        payload: {
+          contextRevision: refreshed.contextRevision,
+          status: refreshed.status,
+          targetDocumentId,
+        },
         createdAt: new Date(),
       });
       return { conversation: refreshed, cancelledRunIds };

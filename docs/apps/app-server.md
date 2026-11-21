@@ -1,6 +1,6 @@
 # app-server 设计规划
 
-2026-11-10 AI 目标以 [问答/写作技术设计](ai-assistant-and-public-qa.md)为准：qa/writing 模块分别装配 ai-qa 与 ai-writing，共用 ai 模块的产品存储、幂等、预算与事件，qa-sites 管理来源委托和批准文档。问答使用有界检索生成流程，写作使用 DSH；旧混合 AiService、authoring、LangGraph/checkpoint 与 writing-chat 装配迁移后退役。以下旧阶段记录仅用于核对现有实现与迁移来源，目标尚未实施。
+2026-11-13 新目标见 [插件化助手技术设计](ai-assistant-and-public-qa.md)：当前双流程和 0042–0045 已实施，下一轮将 ai-qa/ai-writing 的有效能力迁入 dsh-agent/ai-runtime/ai-plugins，ai 模块统一调度、授权、产品存储与事件。草稿命令复用 documents/协同初始化，并与同一会话绑定联合提交；qa-sites 和 rag Worker 保留。本轮只重写文档，下文旧阶段说明不指导保留双模型或双协议。
 
 ## 当前模块边界（2026-11-01）
 
@@ -282,7 +282,7 @@ Chat 每次追问创建新 requestId/threadId；客户端仅提交有界、按�
 
 独立 schema 使用官方 schema 配置。部署时显式执行应用 migration 和官方 setup，普通启动只检查可用性；OpenAPI 离线导出不创建连接、不初始化 Saver。升级和清理通过锁定 SDK 公开 API 操作，不删 checkpoint_blobs/writes 来压表数，不只保存最新一行 JSONB 替代 pending writes。正文协同原有 generation/version checkpoint 表仍归协同模块，与 AI checkpoint 分开。
 
-同一 thread 的执行互斥、原 owner 退出确认、恢复前全量权限/版本复核、图完成但业务未提交的恢复和 TTL 清理统一遵循 [ai-runtime](../packages/ai-runtime.md#5-checkpoint取消与任务归属)。首期不自动接管归属不明的 running，不承诺 checkpoint 带来模型调用或外部副作用恰好一次。
+同一 thread 的执行互斥、原 owner 退出确认、恢复前全量权限/版本复核、图完成但业务未提交的恢复和 TTL 清理统一遵循 [ai-runtime](../packages/ai-runtime.md)。首期不自动接管归属不明的 running，不承诺 checkpoint 带来模型调用或外部副作用恰好一次。
 
 ### 9.2 空间与写入策略（2026-10-21 设计）
 

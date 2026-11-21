@@ -91,7 +91,9 @@
 .zhishu-chat-spacer {
   flex: 1;
 }
-.zhishu-chat button {
+/* Base skin for plain buttons only. :where keeps specificity at zero so component
+   classes (toolbar triggers, card actions, HeroUI buttons) always win. */
+:where(.zhishu-chat button) {
   font: inherit;
   color: inherit;
   border: 1px solid var(--chat-border);
@@ -125,13 +127,6 @@
   padding: 0;
   margin: 0;
   list-style: none;
-}
-.zhishu-chat-attachments li {
-  border: 1px solid var(--chat-border);
-  border-radius: 8px;
-  padding: 4px;
-  max-width: 100%;
-  overflow-wrap: anywhere;
 }
 .zhishu-chat-latest {
   position: absolute;
@@ -229,7 +224,7 @@
   background: transparent;
   font-size: 12px;
 }
-.zhishu-chat button:not(:disabled):hover {
+:where(.zhishu-chat button:not(:disabled):hover) {
   background: var(--chat-wash);
 }
 .zhishu-chat-composer {
@@ -285,4 +280,389 @@
   .zhishu-chat-composer {
     margin: 6px 8px max(8px, env(safe-area-inset-bottom));
   }
+}
+
+/* ===== Action cards, attachment chips and stage indicator (2026-11 redesign) ===== */
+.zhishu-chat {
+  --chat-success: var(--success, #047857);
+  --chat-warning: var(--warning, #b45309);
+  --chat-danger: var(--danger, #dc2626);
+  --chat-accent-soft: color-mix(in srgb, var(--chat-accent) 10%, var(--chat-surface));
+  --chat-success-soft: color-mix(in srgb, var(--chat-success) 12%, var(--chat-surface));
+  --chat-warning-soft: color-mix(in srgb, var(--chat-warning) 16%, var(--chat-surface));
+  --chat-danger-soft: color-mix(in srgb, var(--chat-danger) 12%, var(--chat-surface));
+}
+.zhishu-chat-card {
+  border: 1px solid var(--chat-border);
+  border-radius: 16px;
+  background: var(--chat-raised);
+  box-shadow: 0 5px 16px -12px var(--chat-muted);
+  padding: 12px 14px;
+  margin: 10px 0;
+  font-size: 13px;
+}
+.zhishu-chat-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.zhishu-chat-card__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.zhishu-chat-card__titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.zhishu-chat-card__title {
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.zhishu-chat-card__subtitle {
+  font-size: 12px;
+  color: var(--chat-muted);
+  line-height: 1.55;
+}
+.zhishu-chat-card__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  flex: none;
+  white-space: nowrap;
+}
+.zhishu-chat-card__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.zhishu-chat-card__time {
+  font-size: 11px;
+  color: var(--chat-muted);
+  flex: none;
+  margin-top: 2px;
+}
+.zhishu-chat-card__body {
+  margin-top: 10px;
+}
+.zhishu-chat-card__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.zhishu-chat-card__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+/* Card action buttons share the 32px toolbar scale, not the 40px page default. */
+.zhishu-chat-card__actions button {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 12.5px;
+  border-radius: 10px;
+}
+.zhishu-chat-card__footnote {
+  font-size: 11px;
+  color: var(--chat-muted);
+  line-height: 1.6;
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--chat-border);
+}
+/* Tone ramp for the icon tile and the status badge. */
+.zhishu-chat-card--neutral .zhishu-chat-card__icon,
+.zhishu-chat-card__badge--neutral {
+  background: var(--chat-wash);
+  color: var(--chat-muted);
+}
+.zhishu-chat-card--info .zhishu-chat-card__icon,
+.zhishu-chat-card__badge--info {
+  background: var(--chat-accent-soft);
+  color: var(--chat-accent);
+}
+.zhishu-chat-card--success .zhishu-chat-card__icon,
+.zhishu-chat-card__badge--success {
+  background: var(--chat-success-soft);
+  color: var(--chat-success);
+}
+.zhishu-chat-card--warning .zhishu-chat-card__icon,
+.zhishu-chat-card__badge--warning {
+  background: var(--chat-warning-soft);
+  color: var(--chat-warning);
+}
+.zhishu-chat-card--danger .zhishu-chat-card__icon,
+.zhishu-chat-card__badge--danger {
+  background: var(--chat-danger-soft);
+  color: var(--chat-danger);
+}
+.zhishu-chat .zhishu-chat-card__primary {
+  background: var(--chat-accent);
+  color: var(--primary-foreground, white);
+  border-color: transparent;
+}
+.zhishu-chat .zhishu-chat-card__primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--chat-accent) 86%, var(--chat-foreground));
+}
+.zhishu-chat .zhishu-chat-card__danger {
+  color: var(--chat-danger);
+}
+.zhishu-chat-spinner {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-top-color: currentColor;
+  animation: zhishu-chat-spin 0.8s linear infinite;
+  display: inline-block;
+}
+@keyframes zhishu-chat-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .zhishu-chat-spinner {
+    animation-duration: 2.4s;
+  }
+  .zhishu-chat-attachment__remove {
+    transition: none;
+  }
+}
+/* Streaming stage chip and empty-preview skeleton. */
+.zhishu-chat-stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--chat-accent-soft);
+  color: var(--chat-accent);
+  margin-bottom: 8px;
+}
+.zhishu-chat-skeleton i {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--chat-muted) 16%, var(--chat-surface));
+  margin: 8px 0;
+}
+.zhishu-chat-skeleton i:first-child {
+  width: 92%;
+}
+.zhishu-chat-skeleton i:last-child {
+  width: 64%;
+}
+/* Attachment chips: uploading / ready / failed, file badge or image thumbnail. */
+.zhishu-chat-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  border: 1px solid var(--chat-border);
+  border-radius: 10px;
+  background: var(--chat-wash);
+  padding: 0 8px;
+  font-size: 12px;
+  max-width: 240px;
+  position: relative;
+  overflow: hidden;
+}
+.zhishu-chat-attachment__kind {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  font-size: 8.5px;
+  font-weight: 800;
+  background: var(--chat-muted);
+  color: var(--chat-surface);
+  flex: none;
+}
+.zhishu-chat-attachment__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zhishu-chat-attachment__meta {
+  color: var(--chat-muted);
+  flex: none;
+}
+.zhishu-chat-attachment__pct {
+  color: var(--chat-accent);
+  font-size: 11px;
+  flex: none;
+}
+.zhishu-chat-attachment__bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2.5px;
+  width: 100%;
+}
+.zhishu-chat-attachment__bar i {
+  display: block;
+  height: 100%;
+  background: var(--chat-accent);
+  border-radius: 2px;
+}
+.zhishu-chat-attachment__remove {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--chat-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: none;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  transition: opacity 0.12s ease;
+}
+.zhishu-chat-attachment__remove:hover {
+  background: color-mix(in srgb, var(--chat-muted) 18%, transparent);
+  color: var(--chat-foreground);
+}
+.zhishu-chat-attachment--failed {
+  border-color: var(--chat-danger);
+  background: var(--chat-danger-soft);
+}
+.zhishu-chat-attachment__error {
+  color: var(--chat-danger);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.zhishu-chat-attachment--failed button {
+  height: 22px;
+  font-size: 11px;
+  padding: 0 7px;
+}
+.zhishu-chat-attachment--image {
+  width: 56px;
+  height: 56px;
+  padding: 0;
+}
+.zhishu-chat-attachment--image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.zhishu-chat-attachment__veil {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--chat-foreground) 45%, transparent);
+  color: white;
+}
+.zhishu-chat-attachment__corner {
+  position: absolute;
+  right: 3px;
+  top: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--chat-success);
+}
+.zhishu-chat-attachment__corner::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 4px;
+  height: 7px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.zhishu-chat-attachment--image .zhishu-chat-attachment__remove {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 18px;
+  height: 18px;
+  background: color-mix(in srgb, var(--chat-surface) 75%, transparent);
+  opacity: 0;
+}
+.zhishu-chat-attachment--image:hover .zhishu-chat-attachment__remove {
+  opacity: 1;
+}
+/* Disabled send reads as inactive surface, not as a dimmed accent button. */
+.zhishu-chat button:is(.zhishu-chat-send):disabled {
+  background: var(--chat-wash);
+  color: var(--chat-muted);
+  opacity: 1;
+}
+/* Thinking panel and tool-step rows for live run process (preview-only facts). */
+.zhishu-chat-thinking {
+  margin: 8px 0;
+  padding: 8px 11px;
+  border-left: 2px solid var(--chat-border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--chat-muted) 5%, var(--chat-surface));
+  color: var(--chat-muted);
+  font-size: 12.5px;
+}
+.zhishu-chat-thinking summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+.zhishu-chat-thinking summary::-webkit-details-marker {
+  display: none;
+}
+.zhishu-chat-thinking p {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+.zhishu-chat-toolstep {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--chat-muted);
+}
+.zhishu-chat-toolstep__label {
+  overflow-wrap: anywhere;
+}
+.zhishu-chat-toolstep small {
+  font-size: 11px;
+}
+.zhishu-chat-toolstep--failed {
+  color: var(--chat-danger);
+}
+.zhishu-chat-part-tool .zhishu-chat-toolstep {
+  padding-left: 2px;
 }

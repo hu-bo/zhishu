@@ -5,7 +5,6 @@ import { z } from "zod";
  * explicit at the protocol boundary; the generated OpenAPI types drive the Orval client.
  */
 
-export const conversationPurposeSchema = z.enum(["qa", "writing"]);
 export const scopeSelectionSchema = z.union([
   z.strictObject({ kind: z.literal("all") }),
   z.strictObject({
@@ -15,9 +14,10 @@ export const scopeSelectionSchema = z.union([
   z.strictObject({ kind: z.literal("documents"), documentIds: z.array(z.string()).min(1).max(64) }),
 ]);
 
+export const assistantPluginIdSchema = z.enum(["scope", "rag", "research", "writing", "image"]);
+
 export const conversationViewSchema = z.strictObject({
   id: z.string(),
-  purpose: conversationPurposeSchema,
   title: z.string(),
   scope: scopeSelectionSchema,
   contextRevision: z.number().int(),
@@ -87,7 +87,6 @@ export const approvalViewSchema = z.strictObject({
 export const runViewSchema = z.strictObject({
   id: z.string(),
   conversationId: z.string(),
-  purpose: conversationPurposeSchema,
   status: runStatusSchema,
   attempt: z.number().int(),
   contextRevision: z.number().int(),
@@ -127,7 +126,6 @@ export const artifactViewSchema = z.strictObject({
   id: z.string(),
   conversationId: z.string(),
   runId: z.string(),
-  purpose: conversationPurposeSchema,
   kind: z.enum(["evidence", "draft", "proposal", "image"]),
   schemaVersion: z.number().int(),
   summary: z.string().optional(),
@@ -168,7 +166,6 @@ export const snapshotViewSchema = z.strictObject({
 export const aiEventViewSchema = z.strictObject({
   eventId: z.string(),
   conversationId: z.string(),
-  purpose: conversationPurposeSchema,
   sequence: z.string(),
   type: z.enum([
     "message.created",
@@ -176,6 +173,7 @@ export const aiEventViewSchema = z.strictObject({
     "artifact.created",
     "artifact.application-updated",
     "scope.changed",
+    "conversation.updated",
   ]),
   entityId: z.string(),
   createdAt: z.string(),
@@ -186,43 +184,34 @@ export const aiEventViewSchema = z.strictObject({
 export const previewFrameViewSchema = z.strictObject({
   type: z.literal("preview"),
   conversationId: z.string(),
-  purpose: conversationPurposeSchema,
   runId: z.string(),
   streamEpoch: z.string(),
   attempt: z.number().int(),
   contextRevision: z.number().int(),
   revision: z.number().int(),
   index: z.number().int(),
-  channel: z.enum(["text", "stage"]),
+  channel: z.enum(["text", "stage", "thinking", "tool"]),
   stage: z.enum(["scope", "searching", "reading", "generating", "validating"]).optional(),
+  tool: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      status: z.enum(["running", "completed", "failed"]),
+    })
+    .strict()
+    .optional(),
   text: z.string().optional(),
 });
 
+/** One acceptance command for every assistant turn; intent is a hint, never an engine fork. */
 export const submitMessageBodySchema = z.strictObject({
   clientMessageId: z.string().min(1).max(160),
   idempotencyKey: z.string().min(1).max(160),
   text: z.string().min(1).max(32_000),
   expectedContextRevision: z.number().int().min(1),
-});
-
-export const qaSubmitBodySchema = submitMessageBodySchema.extend({
+  intentHint: z.enum(["qa", "writing"]).optional(),
   scope: scopeSelectionSchema.optional(),
-  detail: z.enum(["brief", "detailed"]).optional(),
-});
-
-export const writingSubmitBodySchema = submitMessageBodySchema.extend({
-  intent: z
-    .enum([
-      "auto",
-      "create",
-      "continue",
-      "rewrite",
-      "rewrite-document",
-      "summarize",
-      "translate",
-      "research",
-    ])
-    .optional(),
+  plugins: z.array(assistantPluginIdSchema).min(1).max(5).optional(),
   editorContext: z
     .strictObject({
       documentId: z.string().min(1).max(160),
@@ -245,6 +234,31 @@ export const writingSubmitBodySchema = submitMessageBodySchema.extend({
     .optional(),
   webSearch: z.boolean().optional(),
   referenceArtifactIds: z.array(z.string()).max(8).optional(),
+});
+
+/** Public visitors may only ask questions over approved material; no writing/web/plugin fields. */
+export const publicSubmitBodySchema = z.strictObject({
+  clientMessageId: z.string().min(1).max(160),
+  idempotencyKey: z.string().min(1).max(160),
+  text: z.string().min(1).max(32_000),
+  expectedContextRevision: z.number().int().min(1),
+  scope: scopeSelectionSchema.optional(),
+});
+
+/** Explicit user command creating a draft document from this conversation. */
+export const createDraftBodySchema = z.strictObject({
+  idempotencyKey: z.string().min(1).max(160),
+  instruction: z.string().min(1).max(8_000),
+  workspaceId: z.string().min(1).max(160),
+  title: z.string().min(1).max(200).optional(),
+  expectedContextRevision: z.number().int().min(1),
+  referenceArtifactIds: z.array(z.string()).max(32).optional(),
+});
+
+/** Explicit binding of an existing authorized document as the conversation target. */
+export const bindTargetBodySchema = z.strictObject({
+  targetDocumentId: z.string().min(1).max(160),
+  expectedContextRevision: z.number().int().min(1),
 });
 
 export const scopeBodySchema = z.strictObject({

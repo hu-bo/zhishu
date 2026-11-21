@@ -29,8 +29,16 @@ export interface PublishedIndex {
 }
 export class RagRepository {
   constructor(private readonly pool: Pool) {}
-  async claim(fingerprint: string, leaseMs: number): Promise<IndexJob | undefined> {
+  async claim(
+    fingerprint: string,
+    leaseMs: number,
+    quietMs: number,
+    maxWaitMs: number,
+  ): Promise<IndexJob | undefined> {
     // Discover dirty durable projections without competing with the document outbox consumer.
+    // Edits are debounced: the content branch only becomes claimable once the latest projection
+    // has stayed quiet for the window, with the updated_at cap rescuing continuously edited
+    // documents. Deletions skip the window; vector removal costs nothing and must be prompt.
     await this.pool.query(`insert into document_indexes (tenant_id, document_id)
       select d.tenant_id, d.id from documents d where d.status = 'active'
       and not exists (select 1 from document_indexes i where i.tenant_id=d.tenant_id and i.document_id=d.id)
@@ -47,7 +55,9 @@ export class RagRepository {
       and (d.id is null or d.status <> 'active' or (p.durable_seq=g.durable_seq and (
         i.active_index_version is null or i.generation_id is distinct from g.id
         or i.durable_seq is distinct from g.durable_seq::text or i.metadata_revision is distinct from d.metadata_revision
-        or i.config_fingerprint is distinct from $1)))
+        or i.config_fingerprint is distinct from $1)
+         and (p.projected_at < now() - $4 * interval '1 millisecond'
+           or i.updated_at < now() - $5 * interval '1 millisecond')))
       order by i.available_at, i.updated_at limit 1 for update of i skip locked
     ), claimed as (
       update document_indexes i set lease_token=$2, lease_until=now()+$3*interval '1 millisecond', updated_at=now()
@@ -60,7 +70,7 @@ export class RagRepository {
       from claimed i left join documents d on d.tenant_id=i.tenant_id and d.id=i.document_id
       left join document_generations g on g.document_id=d.id and g.status='active'
       left join document_projection_snapshots p on p.tenant_id=d.tenant_id and p.document_id=d.id and p.generation_id=g.id`,
-      [fingerprint, leaseToken, leaseMs],
+      [fingerprint, leaseToken, leaseMs, quietMs, maxWaitMs],
     );
     return result.rows[0];
   }

@@ -21,13 +21,15 @@ import {
 } from "./session.js";
 import {
   ApprovalDecisionSchema,
-  CreateWritingSessionSchema,
+  BindTargetSchema,
+  CreateDraftSchema,
   RetryRunCommandSchema,
   ReviewProposalSchema,
   SubmitMessageSchema,
   UpdateScopeSchema,
   type ApprovalDecision,
-  type CreateWritingSession,
+  type BindTarget,
+  type CreateDraft,
   type RetryRunCommand,
   type ReviewProposal,
   type SubmitMessage,
@@ -44,8 +46,10 @@ export const isReviewProposal = (value: unknown): value is ReviewProposal =>
   Value.Check(ReviewProposalSchema, value);
 export const isRetryRunCommand = (value: unknown): value is RetryRunCommand =>
   Value.Check(RetryRunCommandSchema, value);
-export const isCreateWritingSession = (value: unknown): value is CreateWritingSession =>
-  Value.Check(CreateWritingSessionSchema, value);
+export const isCreateDraft = (value: unknown): value is CreateDraft =>
+  Value.Check(CreateDraftSchema, value);
+export const isBindTarget = (value: unknown): value is BindTarget =>
+  Value.Check(BindTargetSchema, value);
 export const isAiEvent = (value: unknown): value is AiEvent => Value.Check(AiEventSchema, value);
 export const isPreviewFrame = (value: unknown): value is PreviewFrame =>
   Value.Check(PreviewFrameSchema, value);

@@ -1,5 +1,4 @@
 import type {
-  ConversationPurpose,
   ConversationSnapshot,
   Message,
   MessagePart,
@@ -8,15 +7,13 @@ import type {
   Artifact,
 } from "@zhishu/chat-contracts";
 import type {
+  AssistantExecution,
+  AssistantRunContext,
   ProposalApplicationState,
   ProposalReview,
-  QaExecution,
-  QaRunContext,
   RunUsage,
   ScopeSelection,
-  WritingApproval,
-  WritingExecution,
-  WritingRunContext,
+  ToolApproval,
 } from "@zhishu/ai-contracts";
 import type { StructureReceipt } from "@zhishu/document-contracts";
 
@@ -25,7 +22,6 @@ import type { StructureReceipt } from "@zhishu/document-contracts";
 export interface ConversationRow {
   id: string;
   tenantId: string;
-  purpose: ConversationPurpose;
   identityId: string | null;
   visitorId: string | null;
   siteId: string | null;
@@ -34,7 +30,6 @@ export interface ConversationRow {
   targetDocumentId: string | null;
   configurationId: string | null;
   creationKey: string | null;
-  origin: import("@zhishu/ai-contracts").ConversationOrigin | null;
   eventSequence: bigint;
   status: "active" | "target-unavailable" | "closed";
   expiresAt: Date | null;
@@ -46,16 +41,15 @@ export interface RunRow {
   id: string;
   tenantId: string;
   conversationId: string;
-  purpose: ConversationPurpose;
   idempotencyKey: string;
   inputHash: string;
-  context: QaRunContext | WritingRunContext;
+  context: AssistantRunContext;
   status: RunStatus;
   attempt: number;
   leaseOwner: string | null;
   leaseExpiresAt: Date | null;
   fencingToken: bigint | null;
-  execution: QaExecution | WritingExecution | null;
+  execution: AssistantExecution | null;
   usage: RunUsage;
   errorCode: string | null;
   cancelRequested: boolean;
@@ -83,7 +77,6 @@ export interface ArtifactRow {
   tenantId: string;
   conversationId: string;
   runId: string;
-  purpose: ConversationPurpose;
   producerCallId: string;
   resultIndex: number;
   kind: "evidence" | "draft" | "proposal" | "image";
@@ -103,7 +96,6 @@ export const conversationDto = (
   title: string,
 ): import("@zhishu/chat-contracts").Conversation => ({
   id: row.id,
-  purpose: row.purpose,
   title,
   scope: row.scopeSelection,
   contextRevision: row.contextRevision,
@@ -120,7 +112,6 @@ export const runContextRevision = (run: RunRow): number => run.context.contextRe
 export const runDto = (run: RunRow): Run => ({
   id: run.id,
   conversationId: run.conversationId,
-  purpose: run.purpose,
   status: run.status,
   attempt: run.attempt,
   contextRevision: runContextRevision(run),
@@ -128,7 +119,7 @@ export const runDto = (run: RunRow): Run => ({
   errorCode: run.errorCode ?? undefined,
   usage: run.usage,
   cancelRequested: run.cancelRequested || undefined,
-  approval: (run.execution as { approval?: WritingApproval } | null)?.approval ?? undefined,
+  approval: run.execution?.approval ?? undefined,
   createdAt: run.createdAt.toISOString(),
   updatedAt: run.updatedAt.toISOString(),
 });
@@ -148,7 +139,6 @@ export const artifactDto = (row: ArtifactRow): Artifact => ({
   id: row.id,
   conversationId: row.conversationId,
   runId: row.runId,
-  purpose: row.purpose,
   kind: row.kind,
   schemaVersion: row.schemaVersion,
   evidenceRefs: row.evidenceRefs.map((ref) => ref.evidenceId),
@@ -158,26 +148,4 @@ export const artifactDto = (row: ArtifactRow): Artifact => ({
   receipt: row.receipt ?? undefined,
 });
 
-export type { ConversationSnapshot, WritingApproval };
-
-/**
- * QA→writing handoff contract. Lives in the shared ai module so neither purpose depends on
- * the other's type surface; the port is installed by root assembly after both services exist.
- */
-export interface HandoffCommand {
-  tenantId: string;
-  identityId: string;
-  sourceConversationId: string;
-  messageIds: string[];
-  artifactIds: string[];
-  instruction: string;
-  intent?: "auto" | "create" | "continue" | "rewrite" | "summarize" | "translate" | "research";
-  targetDocumentId?: string | null;
-  creationKey: string;
-}
-
-export interface WritingHandoffPort {
-  createFromHandoff(
-    cmd: HandoffCommand,
-  ): Promise<{ conversationId: string; runId: string; replayed: boolean }>;
-}
+export type { ConversationSnapshot, ToolApproval };

@@ -79,14 +79,10 @@ test("new module entry points and the authorization domain API have no transitiv
     visit(join(modules, entry), []);
 });
 
-test("AI modules keep one direction: shared store below, purposes and sites above, no cross-engine imports", () => {
+test("AI modules keep one direction: the unified assistant below, public sites above", () => {
   const forbidden: Record<string, string[]> = {
-    // The shared product store must stay engine-agnostic.
-    ai: ["qa", "writing", "qa-sites"],
-    // The two purposes never import each other's internals; sites own their public layer.
-    qa: ["writing", "qa-sites"],
-    writing: ["qa", "qa-sites"],
-    "qa-sites": ["writing"],
+    // The shared store and unified assistant never reverse-import the public site layer.
+    ai: ["qa-sites"],
     // Business documents never reverse-import the public site module.
     documents: ["qa-sites"],
     knowledge: ["qa-sites"],
@@ -112,18 +108,37 @@ test("AI modules keep one direction: shared store below, purposes and sites abov
   }
 });
 
-test("retired AI engines, legacy product protocols and the template module are gone from the server", () => {
+test("retired dual engines and legacy product protocols are gone from the server", () => {
   const serverRoot = resolve(modules, "../..");
   const sources = readdirSync(join(serverRoot, "src/modules"), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
-  for (const retired of ["writing-chat", "projects"])
+  for (const retired of ["writing-chat", "projects", "qa", "writing"])
     assert.ok(!sources.includes(retired), `module ${retired} must be retired`);
-  const rootManifest = JSON.parse(
-    readFileSync(resolve(serverRoot, "../../package.json"), "utf8"),
-  ) as { dependencies?: Record<string, string> };
-  for (const retired of ["@zhishu/ai-runtime", "@zhishu/ai-plugins", "@zhishu/dsh-agent"])
-    assert.ok(!(rootManifest.dependencies ?? {})[retired], `${retired} must not be a dependency`);
+  // The unified assistant depends on the three current packages, never the retired dual engines.
+  const manifest = JSON.parse(readFileSync(resolve(serverRoot, "package.json"), "utf8")) as {
+    dependencies?: Record<string, string>;
+  };
+  for (const required of ["@zhishu/dsh-agent", "@zhishu/ai-runtime", "@zhishu/ai-plugins"])
+    assert.ok(manifest.dependencies?.[required], `${required} must be an app-server dependency`);
+  for (const retired of ["@zhishu/ai-qa", "@zhishu/ai-writing"])
+    assert.ok(!manifest.dependencies?.[retired], `${retired} must be retired`);
+  // No source file may import the retired packages or revive the purpose fork.
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== "dist") walk(path);
+      } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+        const text = readFileSync(path, "utf8");
+        assert.ok(
+          !/@zhishu\/(ai-qa|ai-writing)/.test(text),
+          `${relative(serverRoot, path)} must not import a retired engine package`,
+        );
+      }
+    }
+  };
+  walk(join(serverRoot, "src"));
   // Database schema may only import pure contracts and its own files — type imports included.
   for (const file of readdirSync(resolve(serverRoot, "database/schema"))) {
     if (!file.endsWith(".table.ts")) continue;
@@ -154,7 +169,7 @@ test("the DSH kernel stays behind @zhishu packages: app-server never touches @de
       } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts"))
         assert.ok(
           !/["']@deepseek-ai\//.test(readFileSync(path, "utf8")),
-          `${relative(serverRoot, path)} must take kernel types and helpers from @zhishu/ai-writing/kernel`,
+          `${relative(serverRoot, path)} must take kernel types and helpers from @zhishu/dsh-agent/kernel`,
         );
     }
   };

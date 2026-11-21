@@ -72,11 +72,15 @@ export function proposalBatch(
             content.content.some((block) => block.attrs.blockId === other.blockId),
         );
       const last = content.content.at(-1)?.attrs.blockId;
+      // An already-applied follower anchors the insert before it; otherwise append to the tail.
+      const position: { beforeBlockId?: string; afterBlockId?: string } = {};
+      if (following) position.beforeBlockId = following.blockId;
+      else if (last) position.afterBlockId = last;
       operation = {
         type: "insert-block",
         parentBlockId: null,
         block: operation.block,
-        ...(following ? { beforeBlockId: following.blockId } : last ? { afterBlockId: last } : {}),
+        ...position,
       };
     }
     const applied = applyOperationBatch(

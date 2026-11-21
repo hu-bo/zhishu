@@ -20,6 +20,10 @@
       "types": "./dist/approval.d.ts",
       "import": "./dist/approval.js"
     },
+    "./action-card": {
+      "types": "./dist/action-card.d.ts",
+      "import": "./dist/action-card.js"
+    },
     "./styles.css": "./dist/styles.css"
   },
   "files": [

@@ -4072,802 +4072,60 @@ export type JoinShare200 = {
   joined: boolean;
 };
 
-export type GetQaCapabilities200RetrievalScopeLimits = {
-  maxWorkspaces: number;
-  maxDocuments: number;
-  maxAllDocuments: number;
-};
+export type GetAiCapabilities200Engine = typeof GetAiCapabilities200Engine[keyof typeof GetAiCapabilities200Engine];
 
-export type GetQaCapabilities200Retrieval = {
-  contextTokenBudget: number;
-  maxEvidenceItems: number;
-  maxRepairRounds: number;
-  scopeLimits: GetQaCapabilities200RetrievalScopeLimits;
-};
 
-export type GetQaCapabilities200 = {
-  enabled: boolean;
-  reason?: string;
-  retrieval: GetQaCapabilities200Retrieval;
-  webSearch: false;
-  handoff: true;
-};
-
-export type ListQaConversations200ItemPurpose = typeof ListQaConversations200ItemPurpose[keyof typeof ListQaConversations200ItemPurpose];
-
-
-export const ListQaConversations200ItemPurpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
-export type ListQaConversations200ItemScope = {
-  kind: 'all';
-} | {
-  kind: 'workspaces';
-  /**
-     * @minItems 1
-     * @maxItems 8
-     */
-  workspaceIds: string[];
-} | {
-  kind: 'documents';
-  /**
-     * @minItems 1
-     * @maxItems 64
-     */
-  documentIds: string[];
-};
-
-export type ListQaConversations200ItemStatus = typeof ListQaConversations200ItemStatus[keyof typeof ListQaConversations200ItemStatus];
-
-
-export const ListQaConversations200ItemStatus = {
-  active: 'active',
-  'target-unavailable': 'target-unavailable',
-  closed: 'closed',
-} as const;
-
-export type ListQaConversations200Item = {
-  id: string;
-  purpose: ListQaConversations200ItemPurpose;
-  title: string;
-  scope: ListQaConversations200ItemScope;
-  contextRevision: number;
-  status: ListQaConversations200ItemStatus;
-  targetDocumentId?: string | null;
-  siteId?: string;
-  eventSequence: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type CreateQaConversationBody = unknown | {
-  scope?: {
-  kind: 'all';
-} | {
-  kind: 'workspaces';
-  /**
-     * @minItems 1
-     * @maxItems 8
-     */
-  workspaceIds: string[];
-} | {
-  kind: 'documents';
-  /**
-     * @minItems 1
-     * @maxItems 64
-     */
-  documentIds: string[];
-};
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  creationKey?: string;
-};
-
-export type CreateQaConversation201Purpose = typeof CreateQaConversation201Purpose[keyof typeof CreateQaConversation201Purpose];
-
-
-export const CreateQaConversation201Purpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
-export type CreateQaConversation201Scope = {
-  kind: 'all';
-} | {
-  kind: 'workspaces';
-  /**
-     * @minItems 1
-     * @maxItems 8
-     */
-  workspaceIds: string[];
-} | {
-  kind: 'documents';
-  /**
-     * @minItems 1
-     * @maxItems 64
-     */
-  documentIds: string[];
-};
-
-export type CreateQaConversation201Status = typeof CreateQaConversation201Status[keyof typeof CreateQaConversation201Status];
-
-
-export const CreateQaConversation201Status = {
-  active: 'active',
-  'target-unavailable': 'target-unavailable',
-  closed: 'closed',
-} as const;
-
-export type CreateQaConversation201 = {
-  id: string;
-  purpose: CreateQaConversation201Purpose;
-  title: string;
-  scope: CreateQaConversation201Scope;
-  contextRevision: number;
-  status: CreateQaConversation201Status;
-  targetDocumentId?: string | null;
-  siteId?: string;
-  eventSequence: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type GetQaConversationParams = {
-not?: unknown;
-/**
- * @maxLength 160
- */
-before?: string;
-/**
- * @minimum 1
- * @maximum 200
- */
-limit?: number;
-};
-
-export type GetQaConversation200ConversationPurpose = typeof GetQaConversation200ConversationPurpose[keyof typeof GetQaConversation200ConversationPurpose];
-
-
-export const GetQaConversation200ConversationPurpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
-export type GetQaConversation200ConversationScope = {
-  kind: 'all';
-} | {
-  kind: 'workspaces';
-  /**
-     * @minItems 1
-     * @maxItems 8
-     */
-  workspaceIds: string[];
-} | {
-  kind: 'documents';
-  /**
-     * @minItems 1
-     * @maxItems 64
-     */
-  documentIds: string[];
-};
-
-export type GetQaConversation200ConversationStatus = typeof GetQaConversation200ConversationStatus[keyof typeof GetQaConversation200ConversationStatus];
-
-
-export const GetQaConversation200ConversationStatus = {
-  active: 'active',
-  'target-unavailable': 'target-unavailable',
-  closed: 'closed',
-} as const;
-
-export type GetQaConversation200Conversation = {
-  id: string;
-  purpose: GetQaConversation200ConversationPurpose;
-  title: string;
-  scope: GetQaConversation200ConversationScope;
-  contextRevision: number;
-  status: GetQaConversation200ConversationStatus;
-  targetDocumentId?: string | null;
-  siteId?: string;
-  eventSequence: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type GetQaConversation200MessagesItemRole = typeof GetQaConversation200MessagesItemRole[keyof typeof GetQaConversation200MessagesItemRole];
-
-
-export const GetQaConversation200MessagesItemRole = {
-  user: 'user',
-  assistant: 'assistant',
-} as const;
-
-export type GetQaConversation200MessagesItemPartsItem = {
-  kind: 'text';
-  text: string;
-} | {
-  kind: 'citation';
-  citation: {
-  citationId: string;
-  evidenceArtifactId: string;
-  evidenceId: string;
-  locator: {
-  kind: 'block';
-  blockId: string;
-  start: number;
-  end: number;
-} | {
-  kind: 'page';
-  page: number;
-  segmentId: string;
-} | {
-  kind: 'section';
-  sectionId: string;
-  start: number;
-  end: number;
-};
-  quote: string;
-};
-} | {
-  kind: 'artifact';
-  artifactId: string;
-  artifactKind: 'evidence' | 'draft' | 'proposal' | 'image';
-  summary?: string;
-};
-
-export type GetQaConversation200MessagesItem = {
-  id: string;
-  conversationId: string;
-  runId: string;
-  role: GetQaConversation200MessagesItemRole;
-  parts: GetQaConversation200MessagesItemPartsItem[];
-  clientMessageId?: string;
-  createdAt: string;
-  committedAt?: string;
-};
-
-export type GetQaConversation200RunsItemPurpose = typeof GetQaConversation200RunsItemPurpose[keyof typeof GetQaConversation200RunsItemPurpose];
-
-
-export const GetQaConversation200RunsItemPurpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
-export type GetQaConversation200RunsItemStatus = typeof GetQaConversation200RunsItemStatus[keyof typeof GetQaConversation200RunsItemStatus];
-
-
-export const GetQaConversation200RunsItemStatus = {
-  queued: 'queued',
-  running: 'running',
-  'waiting-approval': 'waiting-approval',
-  completed: 'completed',
-  interrupted: 'interrupted',
-  failed: 'failed',
-  cancelled: 'cancelled',
-} as const;
-
-export type GetQaConversation200RunsItemUsage = {
-  modelCalls: number;
-  inputTokens: number;
-  outputTokens: number;
-  searchCalls: number;
-  sourceReads: number;
-  webSearchCalls: number;
-  webReadCalls: number;
-  providerCredits?: number;
-  unknownCalls: number;
-};
-
-export type GetQaConversation200RunsItemApprovalStatus = typeof GetQaConversation200RunsItemApprovalStatus[keyof typeof GetQaConversation200RunsItemApprovalStatus];
-
-
-export const GetQaConversation200RunsItemApprovalStatus = {
-  pending: 'pending',
-  allowed: 'allowed',
-  rejected: 'rejected',
-  cancelled: 'cancelled',
-  expired: 'expired',
-  unavailable: 'unavailable',
-} as const;
-
-export type GetQaConversation200RunsItemApprovalDecision = typeof GetQaConversation200RunsItemApprovalDecision[keyof typeof GetQaConversation200RunsItemApprovalDecision];
-
-
-export const GetQaConversation200RunsItemApprovalDecision = {
-  'allow-once': 'allow-once',
-  reject: 'reject',
-} as const;
-
-export type GetQaConversation200RunsItemApproval = {
-  id: string;
-  attempt: number;
-  action: string;
-  description?: string;
-  status: GetQaConversation200RunsItemApprovalStatus;
-  decisionId?: string;
-  decision?: GetQaConversation200RunsItemApprovalDecision;
-  requestedAt: string;
-  expiresAt: string;
-};
-
-export type GetQaConversation200RunsItem = {
-  id: string;
-  conversationId: string;
-  purpose: GetQaConversation200RunsItemPurpose;
-  status: GetQaConversation200RunsItemStatus;
-  attempt: number;
-  contextRevision: number;
-  inputHash: string;
-  errorCode?: string;
-  usage?: GetQaConversation200RunsItemUsage;
-  cancelRequested?: boolean;
-  approval?: GetQaConversation200RunsItemApproval;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type GetQaConversation200ArtifactsItemPurpose = typeof GetQaConversation200ArtifactsItemPurpose[keyof typeof GetQaConversation200ArtifactsItemPurpose];
-
-
-export const GetQaConversation200ArtifactsItemPurpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
-export type GetQaConversation200ArtifactsItemKind = typeof GetQaConversation200ArtifactsItemKind[keyof typeof GetQaConversation200ArtifactsItemKind];
-
-
-export const GetQaConversation200ArtifactsItemKind = {
-  evidence: 'evidence',
-  draft: 'draft',
-  proposal: 'proposal',
-  image: 'image',
-} as const;
-
-export type GetQaConversation200ArtifactsItemReviewDecisionsItemAction = typeof GetQaConversation200ArtifactsItemReviewDecisionsItemAction[keyof typeof GetQaConversation200ArtifactsItemReviewDecisionsItemAction];
-
-
-export const GetQaConversation200ArtifactsItemReviewDecisionsItemAction = {
-  accept: 'accept',
-  reject: 'reject',
-} as const;
-
-export type GetQaConversation200ArtifactsItemReviewDecisionsItem = {
-  blockId: string;
-  action: GetQaConversation200ArtifactsItemReviewDecisionsItemAction;
-};
-
-export type GetQaConversation200ArtifactsItemReviewReceipts = {[key: string]: string};
-
-export type GetQaConversation200ArtifactsItemReview = {
-  revision: number;
-  decisions: GetQaConversation200ArtifactsItemReviewDecisionsItem[];
-  payloadHash?: string;
-  receipts?: GetQaConversation200ArtifactsItemReviewReceipts;
-};
-
-export type GetQaConversation200ArtifactsItemApplicationState = typeof GetQaConversation200ArtifactsItemApplicationState[keyof typeof GetQaConversation200ArtifactsItemApplicationState];
-
-
-export const GetQaConversation200ArtifactsItemApplicationState = {
-  pending: 'pending',
-  partial: 'partial',
-  applied: 'applied',
-  rejected: 'rejected',
-  conflict: 'conflict',
-  unknown: 'unknown',
-} as const;
-
-export type GetQaConversation200ArtifactsItemReceipt = {
-  operationId: string;
-  generationId: string;
-  durableSeq: number;
-  structureRevision: number;
-};
-
-export type GetQaConversation200ArtifactsItem = {
-  id: string;
-  conversationId: string;
-  runId: string;
-  purpose: GetQaConversation200ArtifactsItemPurpose;
-  kind: GetQaConversation200ArtifactsItemKind;
-  schemaVersion: number;
-  summary?: string;
-  evidenceRefs?: string[];
-  reviewRevision?: number;
-  review?: GetQaConversation200ArtifactsItemReview;
-  applicationState?: GetQaConversation200ArtifactsItemApplicationState;
-  receipt?: GetQaConversation200ArtifactsItemReceipt;
-};
-
-export type GetQaConversation200 = {
-  conversation: GetQaConversation200Conversation;
-  messages: GetQaConversation200MessagesItem[];
-  runs: GetQaConversation200RunsItem[];
-  artifacts: GetQaConversation200ArtifactsItem[];
-  cursor: string;
-  hasMoreMessages?: boolean;
-};
-
-export type SubmitQaMessageBodyScope = {
-  kind: 'all';
-} | {
-  kind: 'workspaces';
-  /**
-     * @minItems 1
-     * @maxItems 8
-     */
-  workspaceIds: string[];
-} | {
-  kind: 'documents';
-  /**
-     * @minItems 1
-     * @maxItems 64
-     */
-  documentIds: string[];
-};
-
-export type SubmitQaMessageBodyDetail = typeof SubmitQaMessageBodyDetail[keyof typeof SubmitQaMessageBodyDetail];
-
-
-export const SubmitQaMessageBodyDetail = {
-  brief: 'brief',
-  detailed: 'detailed',
-} as const;
-
-export type SubmitQaMessageBody = {
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  clientMessageId: string;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  idempotencyKey: string;
-  /**
-     * @minLength 1
-     * @maxLength 32000
-     */
-  text: string;
-  /** @minimum 1 */
-  expectedContextRevision: number;
-  scope?: SubmitQaMessageBodyScope;
-  detail?: SubmitQaMessageBodyDetail;
-};
-
-export type SubmitQaMessage202 = {
-  runId: string;
-  conversationId: string;
-  contextRevision: number;
-};
-
-export type UpdateQaScopeBodyScope = {
-  kind: 'all';
-} | {
-  kind: 'workspaces';
-  /**
-     * @minItems 1
-     * @maxItems 8
-     */
-  workspaceIds: string[];
-} | {
-  kind: 'documents';
-  /**
-     * @minItems 1
-     * @maxItems 64
-     */
-  documentIds: string[];
-};
-
-export type UpdateQaScopeBody = {
-  scope: UpdateQaScopeBodyScope;
-  /** @minimum 1 */
-  expectedContextRevision: number;
-};
-
-export type UpdateQaScope200Scope = {
-  kind: 'all';
-} | {
-  kind: 'workspaces';
-  /**
-     * @minItems 1
-     * @maxItems 8
-     */
-  workspaceIds: string[];
-} | {
-  kind: 'documents';
-  /**
-     * @minItems 1
-     * @maxItems 64
-     */
-  documentIds: string[];
-};
-
-export type UpdateQaScope200 = {
-  contextRevision: number;
-  scope: UpdateQaScope200Scope;
-  cancelledRunIds: string[];
-};
-
-export type ObserveQaConversationParams = {
-/**
- * @pattern ^(0|[1-9][0-9]*)$
- */
-cursor: string;
-};
-
-export type CancelQaRun200Purpose = typeof CancelQaRun200Purpose[keyof typeof CancelQaRun200Purpose];
-
-
-export const CancelQaRun200Purpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
-export type CancelQaRun200Status = typeof CancelQaRun200Status[keyof typeof CancelQaRun200Status];
-
-
-export const CancelQaRun200Status = {
-  queued: 'queued',
-  running: 'running',
-  'waiting-approval': 'waiting-approval',
-  completed: 'completed',
-  interrupted: 'interrupted',
-  failed: 'failed',
-  cancelled: 'cancelled',
-} as const;
-
-export type CancelQaRun200Usage = {
-  modelCalls: number;
-  inputTokens: number;
-  outputTokens: number;
-  searchCalls: number;
-  sourceReads: number;
-  webSearchCalls: number;
-  webReadCalls: number;
-  providerCredits?: number;
-  unknownCalls: number;
-};
-
-export type CancelQaRun200ApprovalStatus = typeof CancelQaRun200ApprovalStatus[keyof typeof CancelQaRun200ApprovalStatus];
-
-
-export const CancelQaRun200ApprovalStatus = {
-  pending: 'pending',
-  allowed: 'allowed',
-  rejected: 'rejected',
-  cancelled: 'cancelled',
-  expired: 'expired',
-  unavailable: 'unavailable',
-} as const;
-
-export type CancelQaRun200ApprovalDecision = typeof CancelQaRun200ApprovalDecision[keyof typeof CancelQaRun200ApprovalDecision];
-
-
-export const CancelQaRun200ApprovalDecision = {
-  'allow-once': 'allow-once',
-  reject: 'reject',
-} as const;
-
-export type CancelQaRun200Approval = {
-  id: string;
-  attempt: number;
-  action: string;
-  description?: string;
-  status: CancelQaRun200ApprovalStatus;
-  decisionId?: string;
-  decision?: CancelQaRun200ApprovalDecision;
-  requestedAt: string;
-  expiresAt: string;
-};
-
-export type CancelQaRun200 = {
-  id: string;
-  conversationId: string;
-  purpose: CancelQaRun200Purpose;
-  status: CancelQaRun200Status;
-  attempt: number;
-  contextRevision: number;
-  inputHash: string;
-  errorCode?: string;
-  usage?: CancelQaRun200Usage;
-  cancelRequested?: boolean;
-  approval?: CancelQaRun200Approval;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type RetryQaRun202Kind = typeof RetryQaRun202Kind[keyof typeof RetryQaRun202Kind];
-
-
-export const RetryQaRun202Kind = {
-  'already-terminal': 'already-terminal',
-  queued: 'queued',
-  'redeliver-staged': 'redeliver-staged',
-} as const;
-
-export type RetryQaRun202RunPurpose = typeof RetryQaRun202RunPurpose[keyof typeof RetryQaRun202RunPurpose];
-
-
-export const RetryQaRun202RunPurpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
-export type RetryQaRun202RunStatus = typeof RetryQaRun202RunStatus[keyof typeof RetryQaRun202RunStatus];
-
-
-export const RetryQaRun202RunStatus = {
-  queued: 'queued',
-  running: 'running',
-  'waiting-approval': 'waiting-approval',
-  completed: 'completed',
-  interrupted: 'interrupted',
-  failed: 'failed',
-  cancelled: 'cancelled',
-} as const;
-
-export type RetryQaRun202RunUsage = {
-  modelCalls: number;
-  inputTokens: number;
-  outputTokens: number;
-  searchCalls: number;
-  sourceReads: number;
-  webSearchCalls: number;
-  webReadCalls: number;
-  providerCredits?: number;
-  unknownCalls: number;
-};
-
-export type RetryQaRun202RunApprovalStatus = typeof RetryQaRun202RunApprovalStatus[keyof typeof RetryQaRun202RunApprovalStatus];
-
-
-export const RetryQaRun202RunApprovalStatus = {
-  pending: 'pending',
-  allowed: 'allowed',
-  rejected: 'rejected',
-  cancelled: 'cancelled',
-  expired: 'expired',
-  unavailable: 'unavailable',
-} as const;
-
-export type RetryQaRun202RunApprovalDecision = typeof RetryQaRun202RunApprovalDecision[keyof typeof RetryQaRun202RunApprovalDecision];
-
-
-export const RetryQaRun202RunApprovalDecision = {
-  'allow-once': 'allow-once',
-  reject: 'reject',
-} as const;
-
-export type RetryQaRun202RunApproval = {
-  id: string;
-  attempt: number;
-  action: string;
-  description?: string;
-  status: RetryQaRun202RunApprovalStatus;
-  decisionId?: string;
-  decision?: RetryQaRun202RunApprovalDecision;
-  requestedAt: string;
-  expiresAt: string;
-};
-
-export type RetryQaRun202Run = {
-  id: string;
-  conversationId: string;
-  purpose: RetryQaRun202RunPurpose;
-  status: RetryQaRun202RunStatus;
-  attempt: number;
-  contextRevision: number;
-  inputHash: string;
-  errorCode?: string;
-  usage?: RetryQaRun202RunUsage;
-  cancelRequested?: boolean;
-  approval?: RetryQaRun202RunApproval;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type RetryQaRun202 = {
-  kind: RetryQaRun202Kind;
-  run: RetryQaRun202Run;
-};
-
-export type GetQaArtifactParams = {
-/**
- * @pattern ^ai_[a-f0-9]{32}$
- */
-conversationId: string;
-};
-
-export type GetQaArtifact200 = {[key: string]: unknown};
-
-export type CreateWritingFromQaMessageBodyIntent = typeof CreateWritingFromQaMessageBodyIntent[keyof typeof CreateWritingFromQaMessageBodyIntent];
-
-
-export const CreateWritingFromQaMessageBodyIntent = {
-  auto: 'auto',
-  create: 'create',
-  continue: 'continue',
-  rewrite: 'rewrite',
-  summarize: 'summarize',
-  translate: 'translate',
-  research: 'research',
-} as const;
-
-export type CreateWritingFromQaMessageBody = {
-  /**
-     * @minLength 1
-     * @maxLength 8000
-     */
-  instruction: string;
-  intent?: CreateWritingFromQaMessageBodyIntent;
-  /** @maxLength 160 */
-  targetDocumentId?: string | null;
-  /**
-     * @minLength 1
-     * @maxLength 160
-     */
-  creationKey: string;
-};
-
-export type CreateWritingFromQaMessage201 = {
-  conversationId: string;
-  runId: string;
-  replayed: boolean;
-};
-
-export type GetWritingCapabilities200Engine = typeof GetWritingCapabilities200Engine[keyof typeof GetWritingCapabilities200Engine];
-
-
-export const GetWritingCapabilities200Engine = {
+export const GetAiCapabilities200Engine = {
   'dsh-native-v1': 'dsh-native-v1',
 } as const;
 
-export type GetWritingCapabilities200Image = {
+export type GetAiCapabilities200PluginsItem = typeof GetAiCapabilities200PluginsItem[keyof typeof GetAiCapabilities200PluginsItem];
+
+
+export const GetAiCapabilities200PluginsItem = {
+  scope: 'scope',
+  rag: 'rag',
+  research: 'research',
+  writing: 'writing',
+  image: 'image',
+} as const;
+
+export type GetAiCapabilities200Image = {
   available: boolean;
   reason: string;
 };
 
-export type GetWritingCapabilities200WebSearchLimits = {
+export type GetAiCapabilities200WebSearchLimits = {
   searchCallsPerRun: number;
   resultsPerSearch: number;
   readPagesPerRun: number;
 };
 
-export type GetWritingCapabilities200 = {
+export type GetAiCapabilities200RetrievalScopeLimits = {
+  maxWorkspaces: number;
+  maxDocuments: number;
+  maxAllDocuments: number;
+};
+
+export type GetAiCapabilities200Retrieval = {
+  contextTokenBudget: number;
+  maxEvidenceItems: number;
+  scopeLimits: GetAiCapabilities200RetrievalScopeLimits;
+};
+
+export type GetAiCapabilities200 = {
   enabled: boolean;
-  engine: GetWritingCapabilities200Engine;
+  engine: GetAiCapabilities200Engine;
   reason?: string;
-  image: GetWritingCapabilities200Image;
+  plugins: GetAiCapabilities200PluginsItem[];
+  image: GetAiCapabilities200Image;
   webSearchAvailable: boolean;
-  webSearchLimits?: GetWritingCapabilities200WebSearchLimits;
+  webSearchLimits?: GetAiCapabilities200WebSearchLimits;
+  retrieval: GetAiCapabilities200Retrieval;
   configurationId: string;
 };
 
-export type ListWritingConversationsParams = {
-not?: unknown;
-/**
- * @maxLength 160
- */
-targetDocumentId?: string;
-};
-
-export type ListWritingConversations200ItemPurpose = typeof ListWritingConversations200ItemPurpose[keyof typeof ListWritingConversations200ItemPurpose];
-
-
-export const ListWritingConversations200ItemPurpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
-export type ListWritingConversations200ItemScope = {
+export type ListAiConversations200ItemScope = {
   kind: 'all';
 } | {
   kind: 'workspaces';
@@ -4885,22 +4143,21 @@ export type ListWritingConversations200ItemScope = {
   documentIds: string[];
 };
 
-export type ListWritingConversations200ItemStatus = typeof ListWritingConversations200ItemStatus[keyof typeof ListWritingConversations200ItemStatus];
+export type ListAiConversations200ItemStatus = typeof ListAiConversations200ItemStatus[keyof typeof ListAiConversations200ItemStatus];
 
 
-export const ListWritingConversations200ItemStatus = {
+export const ListAiConversations200ItemStatus = {
   active: 'active',
   'target-unavailable': 'target-unavailable',
   closed: 'closed',
 } as const;
 
-export type ListWritingConversations200Item = {
+export type ListAiConversations200Item = {
   id: string;
-  purpose: ListWritingConversations200ItemPurpose;
   title: string;
-  scope: ListWritingConversations200ItemScope;
+  scope: ListAiConversations200ItemScope;
   contextRevision: number;
-  status: ListWritingConversations200ItemStatus;
+  status: ListAiConversations200ItemStatus;
   targetDocumentId?: string | null;
   siteId?: string;
   eventSequence: string;
@@ -4908,7 +4165,7 @@ export type ListWritingConversations200Item = {
   updatedAt: string;
 };
 
-export type CreateWritingConversationBodyScope = {
+export type CreateAiConversationBodyScope = {
   kind: 'all';
 } | {
   kind: 'workspaces';
@@ -4926,10 +4183,10 @@ export type CreateWritingConversationBodyScope = {
   documentIds: string[];
 };
 
-export type CreateWritingConversationBody = {
+export type CreateAiConversationBody = {
   /** @maxLength 160 */
   targetDocumentId?: string | null;
-  scope?: CreateWritingConversationBodyScope;
+  scope?: CreateAiConversationBodyScope;
   /**
      * @minLength 1
      * @maxLength 160
@@ -4937,15 +4194,7 @@ export type CreateWritingConversationBody = {
   creationKey?: string;
 };
 
-export type CreateWritingConversation201Purpose = typeof CreateWritingConversation201Purpose[keyof typeof CreateWritingConversation201Purpose];
-
-
-export const CreateWritingConversation201Purpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
-export type CreateWritingConversation201Scope = {
+export type CreateAiConversation201Scope = {
   kind: 'all';
 } | {
   kind: 'workspaces';
@@ -4963,22 +4212,21 @@ export type CreateWritingConversation201Scope = {
   documentIds: string[];
 };
 
-export type CreateWritingConversation201Status = typeof CreateWritingConversation201Status[keyof typeof CreateWritingConversation201Status];
+export type CreateAiConversation201Status = typeof CreateAiConversation201Status[keyof typeof CreateAiConversation201Status];
 
 
-export const CreateWritingConversation201Status = {
+export const CreateAiConversation201Status = {
   active: 'active',
   'target-unavailable': 'target-unavailable',
   closed: 'closed',
 } as const;
 
-export type CreateWritingConversation201 = {
+export type CreateAiConversation201 = {
   id: string;
-  purpose: CreateWritingConversation201Purpose;
   title: string;
-  scope: CreateWritingConversation201Scope;
+  scope: CreateAiConversation201Scope;
   contextRevision: number;
-  status: CreateWritingConversation201Status;
+  status: CreateAiConversation201Status;
   targetDocumentId?: string | null;
   siteId?: string;
   eventSequence: string;
@@ -4986,7 +4234,7 @@ export type CreateWritingConversation201 = {
   updatedAt: string;
 };
 
-export type GetWritingConversationParams = {
+export type GetAiConversationParams = {
 not?: unknown;
 /**
  * @maxLength 160
@@ -4999,15 +4247,7 @@ before?: string;
 limit?: number;
 };
 
-export type GetWritingConversation200ConversationPurpose = typeof GetWritingConversation200ConversationPurpose[keyof typeof GetWritingConversation200ConversationPurpose];
-
-
-export const GetWritingConversation200ConversationPurpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
-export type GetWritingConversation200ConversationScope = {
+export type GetAiConversation200ConversationScope = {
   kind: 'all';
 } | {
   kind: 'workspaces';
@@ -5025,22 +4265,21 @@ export type GetWritingConversation200ConversationScope = {
   documentIds: string[];
 };
 
-export type GetWritingConversation200ConversationStatus = typeof GetWritingConversation200ConversationStatus[keyof typeof GetWritingConversation200ConversationStatus];
+export type GetAiConversation200ConversationStatus = typeof GetAiConversation200ConversationStatus[keyof typeof GetAiConversation200ConversationStatus];
 
 
-export const GetWritingConversation200ConversationStatus = {
+export const GetAiConversation200ConversationStatus = {
   active: 'active',
   'target-unavailable': 'target-unavailable',
   closed: 'closed',
 } as const;
 
-export type GetWritingConversation200Conversation = {
+export type GetAiConversation200Conversation = {
   id: string;
-  purpose: GetWritingConversation200ConversationPurpose;
   title: string;
-  scope: GetWritingConversation200ConversationScope;
+  scope: GetAiConversation200ConversationScope;
   contextRevision: number;
-  status: GetWritingConversation200ConversationStatus;
+  status: GetAiConversation200ConversationStatus;
   targetDocumentId?: string | null;
   siteId?: string;
   eventSequence: string;
@@ -5048,15 +4287,15 @@ export type GetWritingConversation200Conversation = {
   updatedAt: string;
 };
 
-export type GetWritingConversation200MessagesItemRole = typeof GetWritingConversation200MessagesItemRole[keyof typeof GetWritingConversation200MessagesItemRole];
+export type GetAiConversation200MessagesItemRole = typeof GetAiConversation200MessagesItemRole[keyof typeof GetAiConversation200MessagesItemRole];
 
 
-export const GetWritingConversation200MessagesItemRole = {
+export const GetAiConversation200MessagesItemRole = {
   user: 'user',
   assistant: 'assistant',
 } as const;
 
-export type GetWritingConversation200MessagesItemPartsItem = {
+export type GetAiConversation200MessagesItemPartsItem = {
   kind: 'text';
   text: string;
 } | {
@@ -5089,29 +4328,21 @@ export type GetWritingConversation200MessagesItemPartsItem = {
   summary?: string;
 };
 
-export type GetWritingConversation200MessagesItem = {
+export type GetAiConversation200MessagesItem = {
   id: string;
   conversationId: string;
   runId: string;
-  role: GetWritingConversation200MessagesItemRole;
-  parts: GetWritingConversation200MessagesItemPartsItem[];
+  role: GetAiConversation200MessagesItemRole;
+  parts: GetAiConversation200MessagesItemPartsItem[];
   clientMessageId?: string;
   createdAt: string;
   committedAt?: string;
 };
 
-export type GetWritingConversation200RunsItemPurpose = typeof GetWritingConversation200RunsItemPurpose[keyof typeof GetWritingConversation200RunsItemPurpose];
+export type GetAiConversation200RunsItemStatus = typeof GetAiConversation200RunsItemStatus[keyof typeof GetAiConversation200RunsItemStatus];
 
 
-export const GetWritingConversation200RunsItemPurpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
-export type GetWritingConversation200RunsItemStatus = typeof GetWritingConversation200RunsItemStatus[keyof typeof GetWritingConversation200RunsItemStatus];
-
-
-export const GetWritingConversation200RunsItemStatus = {
+export const GetAiConversation200RunsItemStatus = {
   queued: 'queued',
   running: 'running',
   'waiting-approval': 'waiting-approval',
@@ -5121,7 +4352,7 @@ export const GetWritingConversation200RunsItemStatus = {
   cancelled: 'cancelled',
 } as const;
 
-export type GetWritingConversation200RunsItemUsage = {
+export type GetAiConversation200RunsItemUsage = {
   modelCalls: number;
   inputTokens: number;
   outputTokens: number;
@@ -5133,10 +4364,10 @@ export type GetWritingConversation200RunsItemUsage = {
   unknownCalls: number;
 };
 
-export type GetWritingConversation200RunsItemApprovalStatus = typeof GetWritingConversation200RunsItemApprovalStatus[keyof typeof GetWritingConversation200RunsItemApprovalStatus];
+export type GetAiConversation200RunsItemApprovalStatus = typeof GetAiConversation200RunsItemApprovalStatus[keyof typeof GetAiConversation200RunsItemApprovalStatus];
 
 
-export const GetWritingConversation200RunsItemApprovalStatus = {
+export const GetAiConversation200RunsItemApprovalStatus = {
   pending: 'pending',
   allowed: 'allowed',
   rejected: 'rejected',
@@ -5145,86 +4376,77 @@ export const GetWritingConversation200RunsItemApprovalStatus = {
   unavailable: 'unavailable',
 } as const;
 
-export type GetWritingConversation200RunsItemApprovalDecision = typeof GetWritingConversation200RunsItemApprovalDecision[keyof typeof GetWritingConversation200RunsItemApprovalDecision];
+export type GetAiConversation200RunsItemApprovalDecision = typeof GetAiConversation200RunsItemApprovalDecision[keyof typeof GetAiConversation200RunsItemApprovalDecision];
 
 
-export const GetWritingConversation200RunsItemApprovalDecision = {
+export const GetAiConversation200RunsItemApprovalDecision = {
   'allow-once': 'allow-once',
   reject: 'reject',
 } as const;
 
-export type GetWritingConversation200RunsItemApproval = {
+export type GetAiConversation200RunsItemApproval = {
   id: string;
   attempt: number;
   action: string;
   description?: string;
-  status: GetWritingConversation200RunsItemApprovalStatus;
+  status: GetAiConversation200RunsItemApprovalStatus;
   decisionId?: string;
-  decision?: GetWritingConversation200RunsItemApprovalDecision;
+  decision?: GetAiConversation200RunsItemApprovalDecision;
   requestedAt: string;
   expiresAt: string;
 };
 
-export type GetWritingConversation200RunsItem = {
+export type GetAiConversation200RunsItem = {
   id: string;
   conversationId: string;
-  purpose: GetWritingConversation200RunsItemPurpose;
-  status: GetWritingConversation200RunsItemStatus;
+  status: GetAiConversation200RunsItemStatus;
   attempt: number;
   contextRevision: number;
   inputHash: string;
   errorCode?: string;
-  usage?: GetWritingConversation200RunsItemUsage;
+  usage?: GetAiConversation200RunsItemUsage;
   cancelRequested?: boolean;
-  approval?: GetWritingConversation200RunsItemApproval;
+  approval?: GetAiConversation200RunsItemApproval;
   createdAt: string;
   updatedAt: string;
 };
 
-export type GetWritingConversation200ArtifactsItemPurpose = typeof GetWritingConversation200ArtifactsItemPurpose[keyof typeof GetWritingConversation200ArtifactsItemPurpose];
+export type GetAiConversation200ArtifactsItemKind = typeof GetAiConversation200ArtifactsItemKind[keyof typeof GetAiConversation200ArtifactsItemKind];
 
 
-export const GetWritingConversation200ArtifactsItemPurpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
-export type GetWritingConversation200ArtifactsItemKind = typeof GetWritingConversation200ArtifactsItemKind[keyof typeof GetWritingConversation200ArtifactsItemKind];
-
-
-export const GetWritingConversation200ArtifactsItemKind = {
+export const GetAiConversation200ArtifactsItemKind = {
   evidence: 'evidence',
   draft: 'draft',
   proposal: 'proposal',
   image: 'image',
 } as const;
 
-export type GetWritingConversation200ArtifactsItemReviewDecisionsItemAction = typeof GetWritingConversation200ArtifactsItemReviewDecisionsItemAction[keyof typeof GetWritingConversation200ArtifactsItemReviewDecisionsItemAction];
+export type GetAiConversation200ArtifactsItemReviewDecisionsItemAction = typeof GetAiConversation200ArtifactsItemReviewDecisionsItemAction[keyof typeof GetAiConversation200ArtifactsItemReviewDecisionsItemAction];
 
 
-export const GetWritingConversation200ArtifactsItemReviewDecisionsItemAction = {
+export const GetAiConversation200ArtifactsItemReviewDecisionsItemAction = {
   accept: 'accept',
   reject: 'reject',
 } as const;
 
-export type GetWritingConversation200ArtifactsItemReviewDecisionsItem = {
+export type GetAiConversation200ArtifactsItemReviewDecisionsItem = {
   blockId: string;
-  action: GetWritingConversation200ArtifactsItemReviewDecisionsItemAction;
+  action: GetAiConversation200ArtifactsItemReviewDecisionsItemAction;
 };
 
-export type GetWritingConversation200ArtifactsItemReviewReceipts = {[key: string]: string};
+export type GetAiConversation200ArtifactsItemReviewReceipts = {[key: string]: string};
 
-export type GetWritingConversation200ArtifactsItemReview = {
+export type GetAiConversation200ArtifactsItemReview = {
   revision: number;
-  decisions: GetWritingConversation200ArtifactsItemReviewDecisionsItem[];
+  decisions: GetAiConversation200ArtifactsItemReviewDecisionsItem[];
   payloadHash?: string;
-  receipts?: GetWritingConversation200ArtifactsItemReviewReceipts;
+  receipts?: GetAiConversation200ArtifactsItemReviewReceipts;
 };
 
-export type GetWritingConversation200ArtifactsItemApplicationState = typeof GetWritingConversation200ArtifactsItemApplicationState[keyof typeof GetWritingConversation200ArtifactsItemApplicationState];
+export type GetAiConversation200ArtifactsItemApplicationState = typeof GetAiConversation200ArtifactsItemApplicationState[keyof typeof GetAiConversation200ArtifactsItemApplicationState];
 
 
-export const GetWritingConversation200ArtifactsItemApplicationState = {
+export const GetAiConversation200ArtifactsItemApplicationState = {
   pending: 'pending',
   partial: 'partial',
   applied: 'applied',
@@ -5233,52 +4455,74 @@ export const GetWritingConversation200ArtifactsItemApplicationState = {
   unknown: 'unknown',
 } as const;
 
-export type GetWritingConversation200ArtifactsItemReceipt = {
+export type GetAiConversation200ArtifactsItemReceipt = {
   operationId: string;
   generationId: string;
   durableSeq: number;
   structureRevision: number;
 };
 
-export type GetWritingConversation200ArtifactsItem = {
+export type GetAiConversation200ArtifactsItem = {
   id: string;
   conversationId: string;
   runId: string;
-  purpose: GetWritingConversation200ArtifactsItemPurpose;
-  kind: GetWritingConversation200ArtifactsItemKind;
+  kind: GetAiConversation200ArtifactsItemKind;
   schemaVersion: number;
   summary?: string;
   evidenceRefs?: string[];
   reviewRevision?: number;
-  review?: GetWritingConversation200ArtifactsItemReview;
-  applicationState?: GetWritingConversation200ArtifactsItemApplicationState;
-  receipt?: GetWritingConversation200ArtifactsItemReceipt;
+  review?: GetAiConversation200ArtifactsItemReview;
+  applicationState?: GetAiConversation200ArtifactsItemApplicationState;
+  receipt?: GetAiConversation200ArtifactsItemReceipt;
 };
 
-export type GetWritingConversation200 = {
-  conversation: GetWritingConversation200Conversation;
-  messages: GetWritingConversation200MessagesItem[];
-  runs: GetWritingConversation200RunsItem[];
-  artifacts: GetWritingConversation200ArtifactsItem[];
+export type GetAiConversation200 = {
+  conversation: GetAiConversation200Conversation;
+  messages: GetAiConversation200MessagesItem[];
+  runs: GetAiConversation200RunsItem[];
+  artifacts: GetAiConversation200ArtifactsItem[];
   cursor: string;
   hasMoreMessages?: boolean;
 };
 
-export type SubmitWritingMessageBodyIntent = typeof SubmitWritingMessageBodyIntent[keyof typeof SubmitWritingMessageBodyIntent];
+export type SubmitAiMessageBodyIntentHint = typeof SubmitAiMessageBodyIntentHint[keyof typeof SubmitAiMessageBodyIntentHint];
 
 
-export const SubmitWritingMessageBodyIntent = {
-  auto: 'auto',
-  create: 'create',
-  continue: 'continue',
-  rewrite: 'rewrite',
-  'rewrite-document': 'rewrite-document',
-  summarize: 'summarize',
-  translate: 'translate',
-  research: 'research',
+export const SubmitAiMessageBodyIntentHint = {
+  qa: 'qa',
+  writing: 'writing',
 } as const;
 
-export type SubmitWritingMessageBodyEditorContextTarget = {
+export type SubmitAiMessageBodyScope = {
+  kind: 'all';
+} | {
+  kind: 'workspaces';
+  /**
+     * @minItems 1
+     * @maxItems 8
+     */
+  workspaceIds: string[];
+} | {
+  kind: 'documents';
+  /**
+     * @minItems 1
+     * @maxItems 64
+     */
+  documentIds: string[];
+};
+
+export type SubmitAiMessageBodyPluginsItem = typeof SubmitAiMessageBodyPluginsItem[keyof typeof SubmitAiMessageBodyPluginsItem];
+
+
+export const SubmitAiMessageBodyPluginsItem = {
+  scope: 'scope',
+  rag: 'rag',
+  research: 'research',
+  writing: 'writing',
+  image: 'image',
+} as const;
+
+export type SubmitAiMessageBodyEditorContextTarget = {
   kind: 'document';
 } | {
   kind: 'selection';
@@ -5300,16 +4544,16 @@ export type SubmitWritingMessageBodyEditorContextTarget = {
   afterBlockId: string | null;
 };
 
-export type SubmitWritingMessageBodyEditorContext = {
+export type SubmitAiMessageBodyEditorContext = {
   /**
      * @minLength 1
      * @maxLength 160
      */
   documentId: string;
-  target: SubmitWritingMessageBodyEditorContextTarget;
+  target: SubmitAiMessageBodyEditorContextTarget;
 };
 
-export type SubmitWritingMessageBody = {
+export type SubmitAiMessageBody = {
   /**
      * @minLength 1
      * @maxLength 160
@@ -5327,20 +4571,26 @@ export type SubmitWritingMessageBody = {
   text: string;
   /** @minimum 1 */
   expectedContextRevision: number;
-  intent?: SubmitWritingMessageBodyIntent;
-  editorContext?: SubmitWritingMessageBodyEditorContext;
+  intentHint?: SubmitAiMessageBodyIntentHint;
+  scope?: SubmitAiMessageBodyScope;
+  /**
+     * @minItems 1
+     * @maxItems 5
+     */
+  plugins?: SubmitAiMessageBodyPluginsItem[];
+  editorContext?: SubmitAiMessageBodyEditorContext;
   webSearch?: boolean;
   /** @maxItems 8 */
   referenceArtifactIds?: string[];
 };
 
-export type SubmitWritingMessage202 = {
+export type SubmitAiMessage202 = {
   runId: string;
   conversationId: string;
   contextRevision: number;
 };
 
-export type UpdateWritingScopeBodyScope = {
+export type UpdateAiContextBodyScope = {
   kind: 'all';
 } | {
   kind: 'workspaces';
@@ -5358,13 +4608,13 @@ export type UpdateWritingScopeBodyScope = {
   documentIds: string[];
 };
 
-export type UpdateWritingScopeBody = {
-  scope: UpdateWritingScopeBodyScope;
+export type UpdateAiContextBody = {
+  scope: UpdateAiContextBodyScope;
   /** @minimum 1 */
   expectedContextRevision: number;
 };
 
-export type UpdateWritingScope200Scope = {
+export type UpdateAiContext200Scope = {
   kind: 'all';
 } | {
   kind: 'workspaces';
@@ -5382,31 +4632,82 @@ export type UpdateWritingScope200Scope = {
   documentIds: string[];
 };
 
-export type UpdateWritingScope200 = {
+export type UpdateAiContext200 = {
   contextRevision: number;
-  scope: UpdateWritingScope200Scope;
+  scope: UpdateAiContext200Scope;
   cancelledRunIds: string[];
 };
 
-export type ObserveWritingConversationParams = {
+export type CreateAiDraftBody = {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  idempotencyKey: string;
+  /**
+     * @minLength 1
+     * @maxLength 8000
+     */
+  instruction: string;
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  workspaceId: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  title?: string;
+  /** @minimum 1 */
+  expectedContextRevision: number;
+  /** @maxItems 32 */
+  referenceArtifactIds?: string[];
+};
+
+export type CreateAiDraft202Status = typeof CreateAiDraft202Status[keyof typeof CreateAiDraft202Status];
+
+
+export const CreateAiDraft202Status = {
+  accepted: 'accepted',
+  'in-progress': 'in-progress',
+  'already-bound': 'already-bound',
+} as const;
+
+export type CreateAiDraft202 = {
+  runId: string | null;
+  documentId?: string;
+  replayed: boolean;
+  status: CreateAiDraft202Status;
+};
+
+export type BindAiTargetBody = {
+  /**
+     * @minLength 1
+     * @maxLength 160
+     */
+  targetDocumentId: string;
+  /** @minimum 1 */
+  expectedContextRevision: number;
+};
+
+export type BindAiTarget200 = {
+  contextRevision: number;
+  targetDocumentId: string;
+  cancelledRunIds: string[];
+};
+
+export type ObserveAiConversationParams = {
 /**
  * @pattern ^(0|[1-9][0-9]*)$
  */
 cursor: string;
 };
 
-export type CancelWritingRun200Purpose = typeof CancelWritingRun200Purpose[keyof typeof CancelWritingRun200Purpose];
+export type CancelAiRun200Status = typeof CancelAiRun200Status[keyof typeof CancelAiRun200Status];
 
 
-export const CancelWritingRun200Purpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
-export type CancelWritingRun200Status = typeof CancelWritingRun200Status[keyof typeof CancelWritingRun200Status];
-
-
-export const CancelWritingRun200Status = {
+export const CancelAiRun200Status = {
   queued: 'queued',
   running: 'running',
   'waiting-approval': 'waiting-approval',
@@ -5416,7 +4717,7 @@ export const CancelWritingRun200Status = {
   cancelled: 'cancelled',
 } as const;
 
-export type CancelWritingRun200Usage = {
+export type CancelAiRun200Usage = {
   modelCalls: number;
   inputTokens: number;
   outputTokens: number;
@@ -5428,10 +4729,10 @@ export type CancelWritingRun200Usage = {
   unknownCalls: number;
 };
 
-export type CancelWritingRun200ApprovalStatus = typeof CancelWritingRun200ApprovalStatus[keyof typeof CancelWritingRun200ApprovalStatus];
+export type CancelAiRun200ApprovalStatus = typeof CancelAiRun200ApprovalStatus[keyof typeof CancelAiRun200ApprovalStatus];
 
 
-export const CancelWritingRun200ApprovalStatus = {
+export const CancelAiRun200ApprovalStatus = {
   pending: 'pending',
   allowed: 'allowed',
   rejected: 'rejected',
@@ -5440,63 +4741,54 @@ export const CancelWritingRun200ApprovalStatus = {
   unavailable: 'unavailable',
 } as const;
 
-export type CancelWritingRun200ApprovalDecision = typeof CancelWritingRun200ApprovalDecision[keyof typeof CancelWritingRun200ApprovalDecision];
+export type CancelAiRun200ApprovalDecision = typeof CancelAiRun200ApprovalDecision[keyof typeof CancelAiRun200ApprovalDecision];
 
 
-export const CancelWritingRun200ApprovalDecision = {
+export const CancelAiRun200ApprovalDecision = {
   'allow-once': 'allow-once',
   reject: 'reject',
 } as const;
 
-export type CancelWritingRun200Approval = {
+export type CancelAiRun200Approval = {
   id: string;
   attempt: number;
   action: string;
   description?: string;
-  status: CancelWritingRun200ApprovalStatus;
+  status: CancelAiRun200ApprovalStatus;
   decisionId?: string;
-  decision?: CancelWritingRun200ApprovalDecision;
+  decision?: CancelAiRun200ApprovalDecision;
   requestedAt: string;
   expiresAt: string;
 };
 
-export type CancelWritingRun200 = {
+export type CancelAiRun200 = {
   id: string;
   conversationId: string;
-  purpose: CancelWritingRun200Purpose;
-  status: CancelWritingRun200Status;
+  status: CancelAiRun200Status;
   attempt: number;
   contextRevision: number;
   inputHash: string;
   errorCode?: string;
-  usage?: CancelWritingRun200Usage;
+  usage?: CancelAiRun200Usage;
   cancelRequested?: boolean;
-  approval?: CancelWritingRun200Approval;
+  approval?: CancelAiRun200Approval;
   createdAt: string;
   updatedAt: string;
 };
 
-export type RetryWritingRun202Kind = typeof RetryWritingRun202Kind[keyof typeof RetryWritingRun202Kind];
+export type RetryAiRun202Kind = typeof RetryAiRun202Kind[keyof typeof RetryAiRun202Kind];
 
 
-export const RetryWritingRun202Kind = {
+export const RetryAiRun202Kind = {
   'already-terminal': 'already-terminal',
   queued: 'queued',
   'redeliver-staged': 'redeliver-staged',
 } as const;
 
-export type RetryWritingRun202RunPurpose = typeof RetryWritingRun202RunPurpose[keyof typeof RetryWritingRun202RunPurpose];
+export type RetryAiRun202RunStatus = typeof RetryAiRun202RunStatus[keyof typeof RetryAiRun202RunStatus];
 
 
-export const RetryWritingRun202RunPurpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
-export type RetryWritingRun202RunStatus = typeof RetryWritingRun202RunStatus[keyof typeof RetryWritingRun202RunStatus];
-
-
-export const RetryWritingRun202RunStatus = {
+export const RetryAiRun202RunStatus = {
   queued: 'queued',
   running: 'running',
   'waiting-approval': 'waiting-approval',
@@ -5506,7 +4798,7 @@ export const RetryWritingRun202RunStatus = {
   cancelled: 'cancelled',
 } as const;
 
-export type RetryWritingRun202RunUsage = {
+export type RetryAiRun202RunUsage = {
   modelCalls: number;
   inputTokens: number;
   outputTokens: number;
@@ -5518,10 +4810,10 @@ export type RetryWritingRun202RunUsage = {
   unknownCalls: number;
 };
 
-export type RetryWritingRun202RunApprovalStatus = typeof RetryWritingRun202RunApprovalStatus[keyof typeof RetryWritingRun202RunApprovalStatus];
+export type RetryAiRun202RunApprovalStatus = typeof RetryAiRun202RunApprovalStatus[keyof typeof RetryAiRun202RunApprovalStatus];
 
 
-export const RetryWritingRun202RunApprovalStatus = {
+export const RetryAiRun202RunApprovalStatus = {
   pending: 'pending',
   allowed: 'allowed',
   rejected: 'rejected',
@@ -5530,65 +4822,97 @@ export const RetryWritingRun202RunApprovalStatus = {
   unavailable: 'unavailable',
 } as const;
 
-export type RetryWritingRun202RunApprovalDecision = typeof RetryWritingRun202RunApprovalDecision[keyof typeof RetryWritingRun202RunApprovalDecision];
+export type RetryAiRun202RunApprovalDecision = typeof RetryAiRun202RunApprovalDecision[keyof typeof RetryAiRun202RunApprovalDecision];
 
 
-export const RetryWritingRun202RunApprovalDecision = {
+export const RetryAiRun202RunApprovalDecision = {
   'allow-once': 'allow-once',
   reject: 'reject',
 } as const;
 
-export type RetryWritingRun202RunApproval = {
+export type RetryAiRun202RunApproval = {
   id: string;
   attempt: number;
   action: string;
   description?: string;
-  status: RetryWritingRun202RunApprovalStatus;
+  status: RetryAiRun202RunApprovalStatus;
   decisionId?: string;
-  decision?: RetryWritingRun202RunApprovalDecision;
+  decision?: RetryAiRun202RunApprovalDecision;
   requestedAt: string;
   expiresAt: string;
 };
 
-export type RetryWritingRun202Run = {
+export type RetryAiRun202Run = {
   id: string;
   conversationId: string;
-  purpose: RetryWritingRun202RunPurpose;
-  status: RetryWritingRun202RunStatus;
+  status: RetryAiRun202RunStatus;
   attempt: number;
   contextRevision: number;
   inputHash: string;
   errorCode?: string;
-  usage?: RetryWritingRun202RunUsage;
+  usage?: RetryAiRun202RunUsage;
   cancelRequested?: boolean;
-  approval?: RetryWritingRun202RunApproval;
+  approval?: RetryAiRun202RunApproval;
   createdAt: string;
   updatedAt: string;
 };
 
-export type RetryWritingRun202 = {
-  kind: RetryWritingRun202Kind;
-  run: RetryWritingRun202Run;
+export type RetryAiRun202 = {
+  kind: RetryAiRun202Kind;
+  run: RetryAiRun202Run;
 };
 
-export type GetWritingArtifactParams = {
+export type DecideAiApprovalBodyDecision = typeof DecideAiApprovalBodyDecision[keyof typeof DecideAiApprovalBodyDecision];
+
+
+export const DecideAiApprovalBodyDecision = {
+  'allow-once': 'allow-once',
+  reject: 'reject',
+} as const;
+
+export type DecideAiApprovalBody = {
+  /**
+     * @minLength 8
+     * @maxLength 64
+     */
+  decisionId: string;
+  decision: DecideAiApprovalBodyDecision;
+};
+
+export type DecideAiApproval200Status = typeof DecideAiApproval200Status[keyof typeof DecideAiApproval200Status];
+
+
+export const DecideAiApproval200Status = {
+  pending: 'pending',
+  allowed: 'allowed',
+  rejected: 'rejected',
+  cancelled: 'cancelled',
+  expired: 'expired',
+  unavailable: 'unavailable',
+} as const;
+
+export type DecideAiApproval200 = {
+  status: DecideAiApproval200Status;
+};
+
+export type GetAiArtifactParams = {
 /**
  * @pattern ^ai_[a-f0-9]{32}$
  */
 conversationId: string;
 };
 
-export type GetWritingArtifact200 = {[key: string]: unknown};
+export type GetAiArtifact200 = {[key: string]: unknown};
 
-export type ReviewWritingProposalBodyAction = typeof ReviewWritingProposalBodyAction[keyof typeof ReviewWritingProposalBodyAction];
+export type ReviewAiProposalBodyAction = typeof ReviewAiProposalBodyAction[keyof typeof ReviewAiProposalBodyAction];
 
 
-export const ReviewWritingProposalBodyAction = {
+export const ReviewAiProposalBodyAction = {
   accept: 'accept',
   reject: 'reject',
 } as const;
 
-export type ReviewWritingProposalBody = {
+export type ReviewAiProposalBody = {
   /**
      * @minLength 8
      * @maxLength 64
@@ -5599,7 +4923,7 @@ export type ReviewWritingProposalBody = {
      * @maximum 256
      */
   revision: number;
-  action: ReviewWritingProposalBodyAction;
+  action: ReviewAiProposalBodyAction;
   /**
      * @maxItems 256
      * @items.minLength 1
@@ -5608,10 +4932,10 @@ export type ReviewWritingProposalBody = {
   blockIds?: string[];
 };
 
-export type ReviewWritingProposal200ApplicationState = typeof ReviewWritingProposal200ApplicationState[keyof typeof ReviewWritingProposal200ApplicationState];
+export type ReviewAiProposal200ApplicationState = typeof ReviewAiProposal200ApplicationState[keyof typeof ReviewAiProposal200ApplicationState];
 
 
-export const ReviewWritingProposal200ApplicationState = {
+export const ReviewAiProposal200ApplicationState = {
   pending: 'pending',
   partial: 'partial',
   applied: 'applied',
@@ -5620,52 +4944,19 @@ export const ReviewWritingProposal200ApplicationState = {
   unknown: 'unknown',
 } as const;
 
-export type ReviewWritingProposal200Receipt = {
+export type ReviewAiProposal200Receipt = {
   operationId: string;
   generationId: string;
   durableSeq: number;
   structureRevision: number;
 };
 
-export type ReviewWritingProposal200 = {
-  applicationState: ReviewWritingProposal200ApplicationState;
-  receipt?: ReviewWritingProposal200Receipt;
+export type ReviewAiProposal200 = {
+  applicationState: ReviewAiProposal200ApplicationState;
+  receipt?: ReviewAiProposal200Receipt;
 };
 
-export type DecideWritingApprovalBodyDecision = typeof DecideWritingApprovalBodyDecision[keyof typeof DecideWritingApprovalBodyDecision];
-
-
-export const DecideWritingApprovalBodyDecision = {
-  'allow-once': 'allow-once',
-  reject: 'reject',
-} as const;
-
-export type DecideWritingApprovalBody = {
-  /**
-     * @minLength 8
-     * @maxLength 64
-     */
-  decisionId: string;
-  decision: DecideWritingApprovalBodyDecision;
-};
-
-export type DecideWritingApproval200Status = typeof DecideWritingApproval200Status[keyof typeof DecideWritingApproval200Status];
-
-
-export const DecideWritingApproval200Status = {
-  pending: 'pending',
-  allowed: 'allowed',
-  rejected: 'rejected',
-  cancelled: 'cancelled',
-  expired: 'expired',
-  unavailable: 'unavailable',
-} as const;
-
-export type DecideWritingApproval200 = {
-  status: DecideWritingApproval200Status;
-};
-
-export type ListWritingImages200ItemJob = {
+export type ListAiImages200ItemJob = {
   id: string;
   status: 'pending' | 'unknown' | 'failed';
   code?: string;
@@ -5681,29 +4972,29 @@ export type ListWritingImages200ItemJob = {
 })[];
 };
 
-export type ListWritingImages200Item = {
+export type ListAiImages200Item = {
   key: string;
   runId: string;
-  job: ListWritingImages200ItemJob;
+  job: ListAiImages200ItemJob;
 };
 
-export type RefreshWritingImage200Status = typeof RefreshWritingImage200Status[keyof typeof RefreshWritingImage200Status];
+export type RefreshAiImage200Status = typeof RefreshAiImage200Status[keyof typeof RefreshAiImage200Status];
 
 
-export const RefreshWritingImage200Status = {
+export const RefreshAiImage200Status = {
   pending: 'pending',
   unknown: 'unknown',
   ready: 'ready',
   failed: 'failed',
 } as const;
 
-export type RefreshWritingImage200 = {
-  status: RefreshWritingImage200Status;
+export type RefreshAiImage200 = {
+  status: RefreshAiImage200Status;
   assetId?: string;
   [key: string]: unknown;
  };
 
-export type GetWritingImageAccess200 = {
+export type GetAiImageAccess200 = {
   url: string;
   expiresAt: string;
 };
@@ -6217,14 +5508,6 @@ export type PreviewQaSiteBodyMessageScope = {
   documentIds: string[];
 };
 
-export type PreviewQaSiteBodyMessageDetail = typeof PreviewQaSiteBodyMessageDetail[keyof typeof PreviewQaSiteBodyMessageDetail];
-
-
-export const PreviewQaSiteBodyMessageDetail = {
-  brief: 'brief',
-  detailed: 'detailed',
-} as const;
-
 export type PreviewQaSiteBodyMessage = {
   /**
      * @minLength 1
@@ -6244,7 +5527,6 @@ export type PreviewQaSiteBodyMessage = {
   /** @minimum 1 */
   expectedContextRevision: number;
   scope?: PreviewQaSiteBodyMessageScope;
-  detail?: PreviewQaSiteBodyMessageDetail;
 };
 
 export type PreviewQaSiteBodyScope = {
@@ -6308,14 +5590,6 @@ export type StartPublicQaVisitorSession201 = {
   expiresAt: string;
 };
 
-export type ListPublicQaConversations200ItemPurpose = typeof ListPublicQaConversations200ItemPurpose[keyof typeof ListPublicQaConversations200ItemPurpose];
-
-
-export const ListPublicQaConversations200ItemPurpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
 export type ListPublicQaConversations200ItemScope = {
   kind: 'all';
 } | {
@@ -6345,7 +5619,6 @@ export const ListPublicQaConversations200ItemStatus = {
 
 export type ListPublicQaConversations200Item = {
   id: string;
-  purpose: ListPublicQaConversations200ItemPurpose;
   title: string;
   scope: ListPublicQaConversations200ItemScope;
   contextRevision: number;
@@ -6379,14 +5652,6 @@ export type CreatePublicQaConversationBody = {
   scope?: CreatePublicQaConversationBodyScope;
 };
 
-export type CreatePublicQaConversation201Purpose = typeof CreatePublicQaConversation201Purpose[keyof typeof CreatePublicQaConversation201Purpose];
-
-
-export const CreatePublicQaConversation201Purpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
 export type CreatePublicQaConversation201Scope = {
   kind: 'all';
 } | {
@@ -6416,7 +5681,6 @@ export const CreatePublicQaConversation201Status = {
 
 export type CreatePublicQaConversation201 = {
   id: string;
-  purpose: CreatePublicQaConversation201Purpose;
   title: string;
   scope: CreatePublicQaConversation201Scope;
   contextRevision: number;
@@ -6427,14 +5691,6 @@ export type CreatePublicQaConversation201 = {
   createdAt: string;
   updatedAt: string;
 };
-
-export type GetPublicQaConversation200ConversationPurpose = typeof GetPublicQaConversation200ConversationPurpose[keyof typeof GetPublicQaConversation200ConversationPurpose];
-
-
-export const GetPublicQaConversation200ConversationPurpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
 
 export type GetPublicQaConversation200ConversationScope = {
   kind: 'all';
@@ -6465,7 +5721,6 @@ export const GetPublicQaConversation200ConversationStatus = {
 
 export type GetPublicQaConversation200Conversation = {
   id: string;
-  purpose: GetPublicQaConversation200ConversationPurpose;
   title: string;
   scope: GetPublicQaConversation200ConversationScope;
   contextRevision: number;
@@ -6529,14 +5784,6 @@ export type GetPublicQaConversation200MessagesItem = {
   committedAt?: string;
 };
 
-export type GetPublicQaConversation200RunsItemPurpose = typeof GetPublicQaConversation200RunsItemPurpose[keyof typeof GetPublicQaConversation200RunsItemPurpose];
-
-
-export const GetPublicQaConversation200RunsItemPurpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
 export type GetPublicQaConversation200RunsItemStatus = typeof GetPublicQaConversation200RunsItemStatus[keyof typeof GetPublicQaConversation200RunsItemStatus];
 
 
@@ -6597,7 +5844,6 @@ export type GetPublicQaConversation200RunsItemApproval = {
 export type GetPublicQaConversation200RunsItem = {
   id: string;
   conversationId: string;
-  purpose: GetPublicQaConversation200RunsItemPurpose;
   status: GetPublicQaConversation200RunsItemStatus;
   attempt: number;
   contextRevision: number;
@@ -6609,14 +5855,6 @@ export type GetPublicQaConversation200RunsItem = {
   createdAt: string;
   updatedAt: string;
 };
-
-export type GetPublicQaConversation200ArtifactsItemPurpose = typeof GetPublicQaConversation200ArtifactsItemPurpose[keyof typeof GetPublicQaConversation200ArtifactsItemPurpose];
-
-
-export const GetPublicQaConversation200ArtifactsItemPurpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
 
 export type GetPublicQaConversation200ArtifactsItemKind = typeof GetPublicQaConversation200ArtifactsItemKind[keyof typeof GetPublicQaConversation200ArtifactsItemKind];
 
@@ -6673,7 +5911,6 @@ export type GetPublicQaConversation200ArtifactsItem = {
   id: string;
   conversationId: string;
   runId: string;
-  purpose: GetPublicQaConversation200ArtifactsItemPurpose;
   kind: GetPublicQaConversation200ArtifactsItemKind;
   schemaVersion: number;
   summary?: string;
@@ -6711,14 +5948,6 @@ export type SubmitPublicQaMessageBodyScope = {
   documentIds: string[];
 };
 
-export type SubmitPublicQaMessageBodyDetail = typeof SubmitPublicQaMessageBodyDetail[keyof typeof SubmitPublicQaMessageBodyDetail];
-
-
-export const SubmitPublicQaMessageBodyDetail = {
-  brief: 'brief',
-  detailed: 'detailed',
-} as const;
-
 export type SubmitPublicQaMessageBody = {
   /**
      * @minLength 1
@@ -6738,7 +5967,6 @@ export type SubmitPublicQaMessageBody = {
   /** @minimum 1 */
   expectedContextRevision: number;
   scope?: SubmitPublicQaMessageBodyScope;
-  detail?: SubmitPublicQaMessageBodyDetail;
 };
 
 export type SubmitPublicQaMessage202 = {
@@ -6802,14 +6030,6 @@ export type ObservePublicQaConversationParams = {
 cursor: string;
 };
 
-export type CancelPublicQaRun200Purpose = typeof CancelPublicQaRun200Purpose[keyof typeof CancelPublicQaRun200Purpose];
-
-
-export const CancelPublicQaRun200Purpose = {
-  qa: 'qa',
-  writing: 'writing',
-} as const;
-
 export type CancelPublicQaRun200Status = typeof CancelPublicQaRun200Status[keyof typeof CancelPublicQaRun200Status];
 
 
@@ -6870,7 +6090,6 @@ export type CancelPublicQaRun200Approval = {
 export type CancelPublicQaRun200 = {
   id: string;
   conversationId: string;
-  purpose: CancelPublicQaRun200Purpose;
   status: CancelPublicQaRun200Status;
   attempt: number;
   contextRevision: number;

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { CreationPage } from '@/features/writing/creation-page';
+import { CreationPage } from '@/features/assistant/creation-page';
 import { useKnowledgeWorkspace } from '@/features/knowledge/workspace-context';
 export const Route = createFileRoute('/_app/ai')({
   validateSearch: (
