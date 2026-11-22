@@ -55,6 +55,7 @@
     "@zhishu/document-contracts": "workspace:*",
     "@zhishu/dsh-agent": "workspace:^",
     "@zhishu/editor-core": "workspace:^",
+    "@zhishu/logger-js": "workspace:^",
     "@zhishu/rag": "workspace:^",
     "casbin": "^5.51.1",
     "dotenv": "^16.4.7",

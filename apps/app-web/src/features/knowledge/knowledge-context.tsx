@@ -22,8 +22,9 @@ export function KnowledgeWorkspaceProvider({
     queryKey: ['authorization-state', identityKey],
     queryFn: ({ signal }) => getAuthorizationState({ signal }),
     enabled: !!user,
-    refetchInterval: 5000,
-    refetchOnWindowFocus: 'always',
+    // 撤权不是分秒级事件：在挂载和切回窗口（数据超过 staleTime）时校验即可；
+    // 本端治理面板改动权限后自行失效该查询，离线缓存联动不依赖轮询。
+    refetchOnWindowFocus: true,
     retry: false,
   });
   useEffect(() => {

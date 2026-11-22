@@ -203,6 +203,12 @@ const webSearchLimits = {
 };
 const HISTORY_LIMIT = 16;
 const HISTORY_BYTE_LIMIT = 16_000;
+// Long grounded answers with many citations exceed 4096; truncation ends the
+// turn as max-tokens and the run fails as MODEL_FAILED. The model profile must
+// declare the same output ceiling: with thinking enabled pi-ai caps the request
+// at min(maxTokens, model.maxTokens), so a lower profile value would silently
+// shrink the request budget back.
+const ASSISTANT_MAX_OUTPUT_TOKENS = 8192;
 
 /**
  * The unified assistant business assembly. One official DSH execution serves question
@@ -972,7 +978,7 @@ export class AssistantService {
       agentOptions: {
         provider: "assistant",
         model: this.deps.config.AI_MODEL ?? "test",
-        maxTokens: 4096,
+        maxTokens: ASSISTANT_MAX_OUTPUT_TOKENS,
       },
       configurationId: this.configurationId(),
       limits: {
@@ -1047,7 +1053,7 @@ export class AssistantService {
             {
               id: c.AI_MODEL!,
               contextWindow: 65536,
-              maxTokens: 4096,
+              maxTokens: ASSISTANT_MAX_OUTPUT_TOKENS,
               input: ["text"],
               ...(reasoning ? { reasoningEfforts: { off: null, [reasoning]: reasoning } } : {}),
               ...(anthropic && c.AI_THINKING === "adaptive"
@@ -1572,6 +1578,13 @@ export class AssistantService {
       const userMessage = await store.userMessageForRun(run.tenantId, run.id, run.conversationId);
       const inputText = userMessage?.parts.find((part) => part.kind === "text");
       if (!inputText || inputText.kind !== "text") throw new DshRuntimeError("INVALID_INPUT");
+      // The accepted create-draft command is a server fact the model cannot infer from the
+      // instruction alone; without it the loop may answer in discussion text and the Run
+      // then fails as OUTPUT_REQUIRED even though the user confirmed the creation.
+      const deliveredText =
+        context.command === "create-draft"
+          ? `${inputText.text}\n\n（系统说明：用户已在本轮明确受理创建草稿（create-draft），目标空间已确认。本轮必须以调用 draft_document 提交结构化草稿收尾；指令宽泛时自行选定合理主题写完，不要只回复讨论性文字，也不要向用户提问。）`
+          : inputText.text;
       await this.loadReferenceEvidence(state, controller.signal);
 
       // A create-draft retry reuses the immutable compiled draft; no second generation.
@@ -1594,7 +1607,7 @@ export class AssistantService {
         runId: run.id,
         attempt: run.attempt,
         contextRevision: run.context.contextRevision,
-        inputText: inputText.text,
+        inputText: deliveredText,
         nativeSessionId: nativeSessionIdFor(conversation.id, conversation.contextRevision),
         ...(execution?.nativeMessageId
           ? {
@@ -2065,25 +2078,36 @@ export class AssistantService {
     const conversation = await store.getConversation(principal.tenantId, artifact.conversationId);
     this.requireOwned(conversation, { kind: "internal", principal });
     if (artifact.state !== "committed") throw new DomainError("CONFLICT", "提案尚未就绪");
-    if (artifact.receipt)
+    const payload = artifact.payload as WritingProposalPayload;
+    const fingerprint = hashContent({ ...body, artifactId });
+    const documentId = payload.document.documentId;
+    // Per-block review: a proposal stays open until every change has an explicit decision.
+    // receipt only terminates the proposal once nothing remains undecided.
+    const allBlockIds = payload.operationBatch.operations.map((operation) =>
+      operation.type === "insert-block" ? operation.block.attrs.blockId : operation.targetBlockId,
+    );
+    const decided = new Map<string, "accept" | "reject">(
+      (artifact.review?.decisions ?? []).map((decision) => [decision.blockId, decision.action]),
+    );
+    if (artifact.receipt && allBlockIds.every((blockId) => decided.has(blockId)))
       return {
         applicationState: artifact.applicationState ?? "applied",
         receipt: artifact.receipt,
       };
-    const payload = artifact.payload as WritingProposalPayload;
-    const fingerprint = hashContent({ ...body, artifactId });
-    const documentId = payload.document.documentId;
     await this.assertDocumentAccess(principal, documentId, ["write", "ai", "read"]);
     if (body.action === "reject") {
+      const targets = (body.blockIds?.length ? body.blockIds : allBlockIds).filter(
+        (blockId) => !decided.has(blockId),
+      );
+      if (!targets.length) throw new DomainError("VALIDATION_ERROR", "所选段落均已有决定");
+      for (const blockId of targets) decided.set(blockId, "reject");
+      const open = allBlockIds.filter((blockId) => !decided.has(blockId));
+      let applicationState: ProposalApplicationState = "rejected";
+      if (open.length) applicationState = "pending";
+      else if ([...decided.values()].includes("accept")) applicationState = "partial";
       const review: ProposalReview = {
         revision: (artifact.reviewRevision ?? 0) + 1,
-        decisions: payload.operationBatch.operations.map((operation) => ({
-          blockId:
-            operation.type === "insert-block"
-              ? operation.block.attrs.blockId
-              : operation.targetBlockId,
-          action: "reject" as const,
-        })),
+        decisions: [...decided].map(([blockId, action]) => ({ blockId, action })),
         receipts: { ...(artifact.review?.receipts ?? {}), [body.decisionId]: fingerprint },
       };
       await store.recordProposalReview({
@@ -2092,13 +2116,17 @@ export class AssistantService {
         expectedRevision: body.revision,
         decisionId: body.decisionId,
         fingerprint,
-        applicationState: "rejected",
+        applicationState,
         review,
       });
-      return { applicationState: "rejected" };
+      return { applicationState };
     }
+    const selectedIds = (body.blockIds?.length ? body.blockIds : allBlockIds).filter(
+      (blockId) => !decided.has(blockId),
+    );
+    if (!selectedIds.length) throw new DomainError("VALIDATION_ERROR", "所选段落均已有决定");
     const current = await this.deps.owner.snapshot(principal, documentId);
-    const batch = this.acceptedBatch(payload, body.blockIds);
+    const batch = this.acceptedBatch(payload, selectedIds);
     const decorated = await this.decorateCitations(principal.tenantId, payload, batch);
     const operationId = `op_${body.decisionId.replaceAll(/[-_]/g, "").slice(0, 48)}`;
     const finalBatch: OperationBatch = {
@@ -2107,19 +2135,11 @@ export class AssistantService {
       documentId,
       generationId: current.snapshot.generationId,
     };
-    const rejectedIds = payload.operationBatch.operations
-      .map((operation) =>
-        operation.type === "insert-block" ? operation.block.attrs.blockId : operation.targetBlockId,
-      )
-      .filter(
-        (id) =>
-          !finalBatch.operations.some((operation) =>
-            operation.type === "insert-block"
-              ? operation.block.attrs.blockId === id
-              : operation.targetBlockId === id,
-          ),
-      );
-    const applicationState = rejectedIds.length ? "partial" : "applied";
+    // Undecided changes keep the proposal open; partial/applied only describe the final state.
+    for (const blockId of selectedIds) decided.set(blockId, "accept");
+    let applicationState: ProposalApplicationState = "pending";
+    if (!allBlockIds.some((blockId) => !decided.has(blockId)))
+      applicationState = [...decided.values()].includes("reject") ? "partial" : "applied";
     const receipt = await this.deps.owner
       .apply({
         principal,
@@ -2128,23 +2148,18 @@ export class AssistantService {
         baseStructureRevision: current.structureRevision,
         guard: async (tx) => {
           const locked = await store.repository.lockArtifact(tx, principal.tenantId, artifactId);
-          if (locked?.receipt) throw new DomainError("CONFLICT", "提案已由其他决定落地");
+          if (!locked) throw new DomainError("NOT_FOUND", "提案不存在");
+          // A receipt no longer means terminal: review is incremental. Revision fencing keeps
+          // concurrent decisions from double-writing the body before the optimistic lock lands.
+          if ((locked.reviewRevision ?? 0) !== (artifact.reviewRevision ?? 0))
+            throw new DomainError("CONFLICT", "提案状态已更新，请刷新后重试");
           await this.assertDocumentAccessTx(tx, principal, documentId);
           await this.assertSourcesDistributable(tx, principal, payload);
         },
         record: async (tx, appliedReceipt) => {
           const review: ProposalReview = {
             revision: (artifact.reviewRevision ?? 0) + 1,
-            decisions: [
-              ...finalBatch.operations.map((operation) => ({
-                blockId:
-                  operation.type === "insert-block"
-                    ? operation.block.attrs.blockId
-                    : operation.targetBlockId,
-                action: "accept" as const,
-              })),
-              ...rejectedIds.map((blockId) => ({ blockId, action: "reject" as const })),
-            ],
+            decisions: [...decided].map(([blockId, action]) => ({ blockId, action })),
             receipts: { ...(artifact.review?.receipts ?? {}), [body.decisionId]: fingerprint },
           };
           const written = await store.repository.recordArtifactReview(tx, artifact, {
@@ -2175,26 +2190,30 @@ export class AssistantService {
         },
       })
       .catch(async (error: unknown) => {
-        if (
-          error instanceof DomainError &&
-          error.code === "CONFLICT" &&
-          !(await store.findArtifact(principal.tenantId, artifactId))?.receipt
-        ) {
-          await store
-            .recordProposalReview({
-              tenantId: principal.tenantId,
-              artifactId,
-              expectedRevision: artifact.reviewRevision ?? 0,
-              decisionId: body.decisionId,
-              fingerprint,
-              applicationState: "conflict",
-              review: {
-                revision: (artifact.reviewRevision ?? 0) + 1,
-                decisions: [],
-                receipts: { ...(artifact.review?.receipts ?? {}), [body.decisionId]: fingerprint },
-              },
-            })
-            .catch(() => undefined);
+        if (error instanceof DomainError && error.code === "CONFLICT") {
+          const fresh = await store.findArtifact(principal.tenantId, artifactId);
+          const stillOpen =
+            !!fresh &&
+            allBlockIds.some(
+              (blockId) => !(fresh.review?.decisions ?? []).some((d) => d.blockId === blockId),
+            );
+          if (stillOpen) {
+            await store
+              .recordProposalReview({
+                tenantId: principal.tenantId,
+                artifactId,
+                expectedRevision: fresh.reviewRevision ?? 0,
+                decisionId: body.decisionId,
+                fingerprint,
+                applicationState: "conflict",
+                review: {
+                  revision: (fresh.reviewRevision ?? 0) + 1,
+                  decisions: fresh.review?.decisions ?? [],
+                  receipts: { ...(fresh.review?.receipts ?? {}), [body.decisionId]: fingerprint },
+                },
+              })
+              .catch(() => undefined);
+          }
         }
         throw error;
       });

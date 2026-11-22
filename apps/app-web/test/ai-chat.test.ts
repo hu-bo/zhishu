@@ -2,7 +2,24 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { applyPreviewFrame } from '@zhishu/chat-contracts';
 import { renderWritingMarkdown } from '../src/components/chat/markdown';
+import { injectCitationTokens, renderAnswerHtml } from '../src/components/chat/answer-markdown';
+import type { CitationPresentation } from '../src/components/chat/citation-model';
 import { sseData } from '../src/api/sse';
+
+const citedPresentation = {
+  citation: {
+    citationId: 'cit_1',
+    evidenceArtifactId: 'art_1',
+    evidenceId: 'ev_1',
+    locator: { kind: 'block', blockId: 'blk_1', start: 0, end: 4 },
+    quote: '关键结论',
+  },
+  ordinal: 1,
+  title: '架构规范',
+  kind: 'document',
+  documentId: 'doc_1',
+  excerpt: '关键结论',
+} satisfies CitationPresentation;
 
 test('markdown keeps LaTeX for the document import pipeline', () => {
   const html = renderWritingMarkdown(
@@ -12,6 +29,27 @@ test('markdown keeps LaTeX for the document import pipeline', () => {
   assert.match(html, /data-type="block-math"/);
   assert.equal((html.match(/data-type="block-math"/g) ?? []).length, 1);
   assert.ok(html.includes('$literal$'), 'fenced code keeps literal dollars');
+});
+
+test('answer markdown keeps block structure and turns citation quotes into marks', () => {
+  const html = renderAnswerHtml('## 摘要\n\n- 关键结论成立\n\n以上。', [citedPresentation]);
+  assert.match(html, /<h2>摘要<\/h2>/);
+  assert.match(
+    html,
+    /关键结论<button type="button" class="citation-mark" data-citation-ordinal="1" aria-label="来源 1">\[1\]<\/button>成立/,
+  );
+  assert.ok(!html.includes('@@cite'), 'tokens never leak into the rendered HTML');
+  assert.ok(
+    !renderAnswerHtml('无引用的回答', []).includes('citation-mark'),
+    'no citations means no marks',
+  );
+});
+
+test('citation tokens are injected after the first occurrence of each quote only', () => {
+  const text = '先讲关键结论，再讲关键结论。';
+  const marked = injectCitationTokens(text, [citedPresentation]);
+  assert.equal(marked.split('@@cite:1:cit_1@@').length - 1, 1, 'each quote is marked once');
+  assert.ok(marked.indexOf('@@cite') < marked.indexOf('，再讲'), 'the first occurrence wins');
 });
 
 test('preview frames merge by epoch/attempt/revision/index and never rewind', () => {

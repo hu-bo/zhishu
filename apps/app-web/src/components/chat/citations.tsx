@@ -1,85 +1,142 @@
-import { useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from '@tanstack/react-router';
+import { renderAnswerHtml } from './answer-markdown';
+import { MarkdownBlock } from './markdown-block';
 import type { CitationPresentation } from './citation-model';
 import './chat.css';
 
-/** Inline citation markers ([1], [2]) rendered next to the text they support. */
-export function CitationText({
+interface CitationPopover {
+  ordinal: number;
+  presentation: CitationPresentation;
+  below: boolean;
+  x: number;
+  y: number;
+}
+
+/**
+ * The whole answer is one Markdown block; the citation marks it contains are plain
+ * HTML buttons (see answer-markdown), so a single delegated click handler maps a mark
+ * back to its presentation and shows the popover in a body portal.
+ */
+export function CitationMarkdown({
   text,
   citations,
+  className,
 }: {
   text: string;
   citations: readonly CitationPresentation[];
+  className?: string;
 }): ReactNode {
-  const nodes: ReactNode[] = [];
-  let rest = text;
-  const used = new Map(citations.map((citation) => [citation.citation.quote, citation]));
-  let guard = 0;
-  while (rest && guard++ < 200) {
-    let best: { index: number; length: number; citation: CitationPresentation } | undefined;
-    for (const [quote, citation] of used) {
-      const index = rest.indexOf(quote);
-      if (index >= 0 && (!best || index < best.index))
-        best = { index, length: quote.length, citation };
-    }
-    if (!best) break;
-    nodes.push(rest.slice(0, best.index + best.length));
-    nodes.push(
-      <CitationMark
-        key={`${best.citation.citation.citationId}-${guard}`}
-        citation={best.citation}
-      />,
-    );
-    used.delete(best.citation.citation.quote);
-    rest = rest.slice(best.index + best.length);
-  }
-  nodes.push(rest);
-  return <>{nodes}</>;
-}
-
-export function CitationMark({ citation }: { citation: CitationPresentation }) {
-  const [open, setOpen] = useState(false);
+  const [popover, setPopover] = useState<CitationPopover | null>(null);
+  const html = useMemo(() => renderAnswerHtml(text, citations), [text, citations]);
+  useDismissPopover(popover, setPopover);
   return (
-    <span className="relative inline-block">
-      <button
-        type="button"
-        className="citation-mark"
-        aria-label={`来源 ${citation.ordinal}：${citation.title}`}
-        onClick={() => setOpen((value) => !value)}
-      >
-        [{citation.ordinal}]
-      </button>
-      {open && (
-        <span className="citation-popover" role="dialog" aria-label="引用来源">
-          <CitationBody citation={citation} />
-          <button type="button" onClick={() => setOpen(false)}>
-            关闭
-          </button>
-        </span>
-      )}
-    </span>
+    <>
+      <div
+        className={className ? `chat-markdown ${className}` : 'chat-markdown'}
+        dangerouslySetInnerHTML={{ __html: html }}
+        onClick={(event) => {
+          const mark =
+            event.target instanceof HTMLElement
+              ? event.target.closest<HTMLElement>('button[data-citation-ordinal]')
+              : null;
+          if (!mark) return;
+          const ordinal = Number(mark.dataset.citationOrdinal);
+          if (popover?.ordinal === ordinal) {
+            setPopover(null);
+            return;
+          }
+          const presentation = citations.find((citation) => citation.ordinal === ordinal);
+          if (!presentation) return;
+          const rect = mark.getBoundingClientRect();
+          // Keep the fixed popover inside the viewport; flip below when there is no room above.
+          const width = Math.min(22 * 16, window.innerWidth * 0.8);
+          const below = rect.top < 220;
+          setPopover({
+            ordinal,
+            presentation,
+            below,
+            x: Math.min(
+              Math.max(rect.left + rect.width / 2, width / 2 + 8),
+              window.innerWidth - width / 2 - 8,
+            ),
+            y: below ? rect.bottom + 6 : rect.top - 6,
+          });
+        }}
+      />
+      {popover &&
+        createPortal(
+          <div
+            className={`citation-popover${popover.below ? ' citation-popover--below' : ''}`}
+            role="dialog"
+            aria-label="引用来源"
+            style={{ left: popover.x, top: popover.y }}
+          >
+            <CitationBody citation={popover.presentation} />
+            <button type="button" onClick={() => setPopover(null)}>
+              关闭
+            </button>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 
+/** Outside clicks, Escape, scroll and resize all retire the popover: it can no longer point at its mark. */
+function useDismissPopover(popover: CitationPopover | null, close: (value: null) => void): void {
+  useEffect(() => {
+    if (!popover) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('.citation-popover, button[data-citation-ordinal]')) return;
+      close(null);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close(null);
+    };
+    const retire = () => close(null);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('scroll', retire, true);
+    window.addEventListener('resize', retire);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('scroll', retire, true);
+      window.removeEventListener('resize', retire);
+    };
+  }, [popover, close]);
+}
+
+/** Which space or site a source belongs to, shown at the end of the article title. */
+function sourceSuffix(citation: CitationPresentation): string | null {
+  return citation.kind === 'document'
+    ? (citation.workspaceLabel ?? null)
+    : (citation.siteName ?? null);
+}
+
 export function CitationBody({ citation }: { citation: CitationPresentation }) {
+  const suffix = sourceSuffix(citation);
   return (
-    <span className="citation-body">
+    <div className="citation-body">
       <span className="citation-kind">{citation.kind === 'web' ? '网页来源' : '平台文档'}</span>
-      {citation.kind === 'document' && citation.documentId ? (
-        <Link
-          className="citation-title"
-          to="/documents/$documentId"
-          params={{ documentId: citation.documentId }}
-          search={citation.blockId ? { block: citation.blockId } : {}}
-        >
-          {citation.title}
-        </Link>
-      ) : (
-        <span className="citation-title">{citation.title}</span>
-      )}
-      {citation.workspaceLabel ? (
-        <span className="citation-meta">{citation.workspaceLabel}</span>
-      ) : null}
+      <span className="citation-title-row">
+        {citation.kind === 'document' && citation.documentId ? (
+          <Link
+            className="citation-title"
+            to="/documents/$documentId"
+            params={{ documentId: citation.documentId }}
+            search={citation.blockId ? { block: citation.blockId } : {}}
+          >
+            {citation.title}
+          </Link>
+        ) : (
+          <span className="citation-title">{citation.title}</span>
+        )}
+        {suffix ? <span className="citation-space">· {suffix}</span> : null}
+      </span>
       {citation.url ? (
         <a
           className="citation-meta citation-url"
@@ -99,8 +156,8 @@ export function CitationBody({ citation }: { citation: CitationPresentation }) {
             : ''}
         </span>
       ) : null}
-      <blockquote className="citation-quote">{citation.excerpt}</blockquote>
-    </span>
+      <MarkdownBlock className="citation-quote" text={citation.excerpt} />
+    </div>
   );
 }
 
@@ -112,17 +169,50 @@ function safeHostname(url: string): string {
   }
 }
 
-/** Source list panel: only the sources actually cited by an answer. */
-export function CitationList({ citations }: { citations: readonly CitationPresentation[] }) {
+/**
+ * Source footer for one answer: collapsed to a single "以上内容来源于《文章》· 空间" line,
+ * with the concrete paragraphs only visible once the reader expands it.
+ */
+export function CitationSources({
+  citations,
+}: {
+  citations: readonly CitationPresentation[];
+}): ReactNode {
   if (!citations.length) return null;
+  const articles = new Map<string, CitationPresentation>();
+  for (const citation of citations) {
+    const key =
+      citation.kind === 'document'
+        ? `doc:${citation.documentId || citation.title}`
+        : `web:${citation.url || citation.title}`;
+    if (!articles.has(key)) articles.set(key, citation);
+  }
   return (
-    <ol className="citation-list" aria-label="引用来源">
-      {citations.map((citation) => (
-        <li key={citation.citation.citationId}>
-          <span className="citation-ordinal">[{citation.ordinal}]</span>
-          <CitationBody citation={citation} />
-        </li>
-      ))}
-    </ol>
+    <details className="citation-sources">
+      <summary>
+        <span className="citation-sources__label">以上内容来源于</span>
+        <span className="citation-sources__titles">
+          {[...articles.values()].map((citation, index) => {
+            const suffix = sourceSuffix(citation);
+            return (
+              <Fragment
+                key={`${citation.kind}:${citation.documentId ?? citation.url ?? citation.title}`}
+              >
+                {index > 0 ? '、' : null}《{citation.title}》
+                {suffix ? <span className="citation-space">· {suffix}</span> : null}
+              </Fragment>
+            );
+          })}
+        </span>
+      </summary>
+      <ol className="citation-list">
+        {citations.map((citation) => (
+          <li key={citation.citation.citationId}>
+            <span className="citation-ordinal">[{citation.ordinal}]</span>
+            <CitationBody citation={citation} />
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }

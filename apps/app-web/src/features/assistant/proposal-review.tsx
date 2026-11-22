@@ -3,7 +3,7 @@ import type { ProposalApplicationState, WritingProposalPayload } from '@zhishu/a
 import { ActionCard, type CardTone } from '@zhishu/chat-ui';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/cn';
-import { Check, ChevronLeft, ChevronRight, PenLine, X } from 'lucide-react';
+import { PenLine } from 'lucide-react';
 import {
   readArtifact,
   type ConversationTransport,
@@ -59,8 +59,6 @@ function blockText(block: {
   return text.length > 160 ? `${text.slice(0, 160)}…` : text;
 }
 
-type Decision = 'accepted' | 'rejected';
-
 /** applicationState → card presentation; every tone/text is a server fact, never local hope. */
 const STATE_VIEW = {
   pending: { tone: 'info', badge: '提案待确认' },
@@ -73,40 +71,33 @@ const STATE_VIEW = {
 
 const KIND_LABEL = { insert: '新增', replace: '替换', delete: '删除' } as const;
 
-const OPEN_STATES: readonly ProposalApplicationState[] = [
-  'pending',
-  'partial',
-  'conflict',
-  'unknown',
-];
+const DECISION_LABEL = { accepted: '已接受', rejected: '已拒绝' } as const;
 
 /**
- * Final proposal review with per-block accept/reject decisions. Accept submits the accepted
- * block set through the existing review API (partial application is a server outcome);
- * adoption writes through the durable structural channel and only the server receipt shows 已应用.
+ * Proposal summary inside the chat stream. Per-block accept/reject happens in the document
+ * body (EditorReplacementReview decorations); this card reports server facts — state,
+ * banners and the decided marks — and points to the in-body review.
  */
 export function ProposalReview({
   transport,
   conversationId,
   artifactId,
-  reviewRevision,
   applicationState = 'pending',
+  decisions,
   onResolved,
+  onReviewInDocument,
 }: {
   transport: ConversationTransport;
   conversationId: string;
   artifactId: string;
-  reviewRevision: number;
   applicationState?: ProposalApplicationState;
+  /** Server-recorded per-block decisions from the snapshot artifact. */
+  decisions?: { blockId: string; action: 'accept' | 'reject' }[];
   onResolved: () => void;
+  onReviewInDocument?: () => void;
 }) {
   const [payload, setPayload] = useState<WritingProposalPayload | null>(null);
-  // Decisions start undecided: accepting is always an explicit user act.
-  const [decisions, setDecisions] = useState<Record<string, Decision>>({});
-  const [current, setCurrent] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<ProposalApplicationState | null>(null);
 
   useEffect(() => {
     void readArtifact<WritingProposalPayload>(transport, conversationId, artifactId)
@@ -129,66 +120,24 @@ export function ProposalReview({
   }
 
   const changes = describe(payload);
-  const state = result ?? applicationState;
-  const view = STATE_VIEW[state];
-  const open = OPEN_STATES.includes(state);
-  const accepted = changes.filter((change) => decisions[change.blockId] === 'accepted');
-  const rejected = changes.filter((change) => decisions[change.blockId] === 'rejected');
-  const undecided = changes.length - accepted.length - rejected.length;
-  if (changes.length === 0)
-    return (
-      <ActionCard
-        label="提案审阅"
-        tone={view.tone}
-        icon={<PenLine className="size-4" />}
-        title="修改提案"
-        subtitle={payload.summary}
-        badge={{ text: view.badge }}
-      />
-    );
-  const focused = changes[Math.min(current, changes.length - 1)];
-
-  function toggle(blockId: string, decision: Decision) {
-    setDecisions((currentMap) => {
-      const next = { ...currentMap };
-      if (next[blockId] === decision) delete next[blockId];
-      else next[blockId] = decision;
-      return next;
-    });
-  }
-
-  function decideAll(decision: Decision) {
-    setDecisions(Object.fromEntries(changes.map((change) => [change.blockId, decision])));
-  }
-
-  async function act(action: 'accept' | 'reject', blockIds?: string[]) {
-    setBusy(true);
-    setError(null);
-    try {
-      const { reviewAiProposal } = await import('../../api/generated/ai');
-      const outcome = await reviewAiProposal(artifactId, {
-        decisionId: crypto.randomUUID(),
-        revision: reviewRevision,
-        action,
-        ...(blockIds?.length ? { blockIds } : {}),
-      });
-      setResult(outcome.applicationState);
-      onResolved();
-    } catch (cause) {
-      setError(errorMessage(cause));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const view = STATE_VIEW[applicationState];
+  const open = ['pending', 'conflict', 'unknown'].includes(applicationState);
+  const decided = new Map<string, 'accepted' | 'rejected'>(
+    (decisions ?? []).map((decision) => [
+      decision.blockId,
+      decision.action === 'accept' ? ('accepted' as const) : ('rejected' as const),
+    ]),
+  );
+  const decidedCount = changes.filter((change) => decided.has(change.blockId)).length;
 
   const banner = () => {
-    if (state === 'conflict')
+    if (applicationState === 'conflict')
       return (
         <p className="proposal-banner danger" role="alert">
           文档已更新导致条件冲突，请基于最新正文重新生成提案；旧提案不会被改写应用。
         </p>
       );
-    if (state === 'unknown')
+    if (applicationState === 'unknown')
       return (
         <p className="proposal-banner warning">
           应用结果未知；系统正按操作标识核对回执，不会重复写入。
@@ -202,7 +151,7 @@ export function ProposalReview({
           </Button>
         </p>
       );
-    if (state === 'partial')
+    if (applicationState === 'partial')
       return (
         <p className="proposal-banner warning">
           部分变更已应用并通过持久化确认；未应用项不会被静默丢弃，可基于最新正文重新发起。
@@ -218,171 +167,59 @@ export function ProposalReview({
       icon={<PenLine className="size-4" />}
       title="修改提案"
       subtitle={payload.summary}
-      badge={{ text: view.badge, spinner: busy }}
+      badge={{ text: view.badge }}
       footnote={
         payload.citations.length
           ? `本提案包含 ${payload.citations.length} 条资料引用，采纳时将写入对应句段链接与文末参考资料。`
           : undefined
       }
       footer={
-        open ? (
+        open && onReviewInDocument ? (
           <>
             <span className="proposal-counts">
-              已接受 {accepted.length} · 已拒绝 {rejected.length} · 未决定 {undecided}
+              已决定 {decidedCount} / {changes.length} · 在正文中逐段确认
             </span>
-            <span className="ms-auto flex gap-2">
-              <Button
-                variant="ghost"
-                size="xs"
-                className={CARD_BUTTON_CLASS}
-                disabled={busy}
-                onPress={() => decideAll('accepted')}
-              >
-                全部接受
-              </Button>
-              <Button
-                variant="ghost"
-                size="xs"
-                className={cn(CARD_BUTTON_CLASS, 'text-danger')}
-                disabled={busy}
-                onPress={() => void act('reject')}
-              >
-                全部拒绝
-              </Button>
-              <Button
-                variant="default"
-                size="xs"
-                className={CARD_BUTTON_CLASS}
-                disabled={busy || accepted.length === 0}
-                title={accepted.length === 0 ? '先接受至少一处变更' : undefined}
-                onPress={() =>
-                  void act(
-                    'accept',
-                    accepted.map((change) => change.blockId),
-                  )
-                }
-              >
-                应用提案（{accepted.length}）
-              </Button>
-            </span>
+            <Button
+              variant="default"
+              size="xs"
+              className={cn(CARD_BUTTON_CLASS, 'ms-auto')}
+              onPress={onReviewInDocument}
+            >
+              在正文中审阅
+            </Button>
           </>
         ) : undefined
       }
     >
-      <div
-        tabIndex={0}
-        className="proposal-review outline-none"
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowRight') setCurrent((index) => (index + 1) % changes.length);
-          if (event.key === 'ArrowLeft')
-            setCurrent((index) => (index - 1 + changes.length) % changes.length);
-        }}
-      >
-        {banner()}
-        {error && (
-          <p className="proposal-banner danger" role="alert">
-            {error}
-          </p>
-        )}
-        {open && (
-          <div className="proposal-nav">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="上一处变更"
-              onPress={() => setCurrent((index) => (index - 1 + changes.length) % changes.length)}
+      {banner()}
+      {error && (
+        <p className="proposal-banner danger" role="alert">
+          {error}
+        </p>
+      )}
+      <ul className="proposal-rows">
+        {changes.map((change) => {
+          const decision = decided.get(change.blockId);
+          return (
+            <li
+              key={change.blockId}
+              className="proposal-row"
+              data-decision={decision ?? 'undecided'}
             >
-              <ChevronLeft className="size-3.5" />
-            </Button>
-            <span className="proposal-counter">
-              {Math.min(current + 1, changes.length)} / {changes.length}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="下一处变更"
-              onPress={() => setCurrent((index) => (index + 1) % changes.length)}
-            >
-              <ChevronRight className="size-3.5" />
-            </Button>
-            <span className="ms-auto flex gap-2">
-              <Button
-                variant="ghost"
-                size="xs"
-                className={CARD_BUTTON_CLASS}
-                disabled={busy}
-                onPress={() => toggle(focused.blockId, 'accepted')}
-              >
-                <Check className="size-3.5" /> 接受本条
-              </Button>
-              <Button
-                variant="ghost"
-                size="xs"
-                className={cn(CARD_BUTTON_CLASS, 'text-danger')}
-                disabled={busy}
-                onPress={() => toggle(focused.blockId, 'rejected')}
-              >
-                <X className="size-3.5" /> 拒绝本条
-              </Button>
-            </span>
-          </div>
-        )}
-        <div className="proposal-focus">
-          <div className="proposal-focus__head">
-            <span className={`proposal-kind proposal-kind--${focused.kind}`}>
-              {KIND_LABEL[focused.kind]}
-            </span>
-            <strong>{focused.title}</strong>
-          </div>
-          {focused.text ? <p className="proposal-focus__text">{focused.text}</p> : null}
-        </div>
-        <ul className="proposal-rows">
-          {changes.map((change, index) => {
-            const decision = decisions[change.blockId];
-            return (
-              <li
-                key={change.blockId}
-                className={cn('proposal-row', index === current && 'current')}
-                data-decision={decision ?? 'undecided'}
-                onClick={() => setCurrent(index)}
-              >
-                <span className={`proposal-kind proposal-kind--${change.kind}`}>
-                  {KIND_LABEL[change.kind]}
-                </span>
-                <span className="proposal-row__name">{change.title}</span>
-                {open && (
-                  <>
-                    <button
-                      type="button"
-                      className="proposal-row__acc"
-                      aria-label={`接受${change.title}`}
-                      aria-pressed={decision === 'accepted'}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggle(change.blockId, 'accepted');
-                      }}
-                    >
-                      <Check className="size-3" />
-                    </button>
-                    <button
-                      type="button"
-                      className="proposal-row__rej"
-                      aria-label={`拒绝${change.title}`}
-                      aria-pressed={decision === 'rejected'}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggle(change.blockId, 'rejected');
-                      }}
-                    >
-                      <X className="size-3" />
-                    </button>
-                  </>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+              <span className={`proposal-kind proposal-kind--${change.kind}`}>
+                {KIND_LABEL[change.kind]}
+              </span>
+              <span className="proposal-row__name">{change.title}</span>
+              {decision && (
+                <span className="proposal-row__decision">{DECISION_LABEL[decision]}</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {changes.some((change) => change.text) && (
+        <p className="proposal-focus__hint">替换对照、接受与拒绝均在正文中就地完成。</p>
+      )}
     </ActionCard>
   );
 }

@@ -43,7 +43,7 @@ const principal: Principal = {
 };
 const internal: AssistantAudience = { kind: "internal", principal };
 
-async function setup() {
+async function setup(overrides: { owner?: CollaborationOwner } = {}) {
   const pg = new PGlite();
   const journal = JSON.parse(await readFile("database/migrations/meta/_journal.json", "utf8")) as {
     entries: { tag: string }[];
@@ -83,7 +83,7 @@ async function setup() {
     AI_TIMEOUT_MS: 120_000,
     APP_PUBLIC_URL: "http://localhost:5173",
   } as unknown as AppConfig;
-  const owner: CollaborationOwner = {
+  const owner: CollaborationOwner = overrides.owner ?? {
     snapshot: async () => {
       throw new Error("not used");
     },
@@ -409,6 +409,203 @@ test("public projection drops answers whose evidence ledger is no longer approve
       conversation.id,
     );
     assert.ok(approved.messages.some((m) => m.role === "assistant"));
+  } finally {
+    await pg.close();
+  }
+});
+
+test("proposal review is incremental: per-block decisions keep the proposal open until every change is decided", async () => {
+  const appliedOperations: string[][] = [];
+  let durableSeq = 1;
+  const dbRef: { current?: Database } = {};
+  const proposalPayload = {
+    document: { documentId: "doc_review", generationId: "gen_r1", structureRevision: 1 },
+    summary: "改写两处段落",
+    target: { kind: "document" },
+    operationBatch: {
+      operationId: "ob-review",
+      documentId: "doc_review",
+      generationId: "gen_r1",
+      preconditions: [],
+      operations: [
+        {
+          type: "replace-block",
+          targetBlockId: "b1",
+          block: {
+            type: "paragraph",
+            attrs: { blockId: "b1" },
+            content: [{ type: "text", text: "新内容一" }],
+          },
+        },
+        {
+          type: "replace-block",
+          targetBlockId: "b2",
+          block: {
+            type: "paragraph",
+            attrs: { blockId: "b2" },
+            content: [{ type: "text", text: "新内容二" }],
+          },
+        },
+      ],
+    },
+    citations: [],
+  };
+  const owner: CollaborationOwner = {
+    snapshot: async () => ({
+      snapshot: {
+        content: {
+          type: "doc",
+          content: [
+            {
+              type: "paragraph",
+              attrs: { blockId: "b1" },
+              content: [{ type: "text", text: "原文一" }],
+            },
+            {
+              type: "paragraph",
+              attrs: { blockId: "b2" },
+              content: [{ type: "text", text: "原文二" }],
+            },
+          ],
+        },
+        generationId: "gen_r1",
+        durableSeq: 1,
+      },
+      structureRevision: 1,
+      workspaceId: "ws_personal",
+      title: "审阅目标",
+    }),
+    apply: async (input) => {
+      const receipt = {
+        operationId: input.batch.operationId,
+        generationId: input.batch.generationId,
+        durableSeq: ++durableSeq,
+        structureRevision: 2,
+      };
+      await dbRef.current!.transaction(async (tx) => {
+        await input.guard(tx);
+        await input.record(tx, receipt);
+      });
+      appliedOperations.push(
+        input.batch.operations.map((operation) =>
+          operation.type === "insert-block"
+            ? String(operation.block.attrs.blockId)
+            : String(operation.targetBlockId),
+        ),
+      );
+      return receipt;
+    },
+  };
+  const { pg, db, assistant } = await setup({ owner });
+  dbRef.current = db;
+  try {
+    const conversation = await assistant.createConversation(internal, {});
+    await db.insert(documents).values({
+      id: "doc_review",
+      tenantId: "t1",
+      title: "审阅目标",
+      createdBy: "id1",
+      accessMode: "personal",
+      workspaceId: "ws_personal",
+      catalogId: "cat_personal",
+    });
+    await db.insert(resourceAcl).values({
+      tenantId: "t1",
+      documentId: "doc_review",
+      identityId: "id1",
+      role: "admin",
+      createdBy: "id1",
+    });
+    await db.insert(aiRuns).values({
+      id: "run_review",
+      tenantId: "t1",
+      conversationId: conversation.id,
+      idempotencyKey: "ik-review",
+      inputHash: `sha256:${"b".repeat(64)}`,
+      context: {
+        contextRevision: 1,
+        command: "chat",
+        intentHint: "writing",
+        plugins: ["scope", "rag", "writing"],
+        scope: { kind: "all" },
+        webSearch: false,
+      },
+      status: "completed",
+      attempt: 1,
+      usage: { ...DEFAULT_RUN_USAGE },
+      execution: {
+        evidenceRefs: [],
+        evidenceArtifactIds: [],
+        proposalArtifactIds: ["art_review", "art_all"],
+        steps: [],
+      },
+      expiresAt: new Date(Date.now() + 86_400_000),
+    });
+    for (const id of ["art_review", "art_all"])
+      await db.insert(aiArtifacts).values({
+        id,
+        tenantId: "t1",
+        conversationId: conversation.id,
+        runId: "run_review",
+        producerCallId: `tool:${id}`,
+        resultIndex: 0,
+        kind: "proposal",
+        schemaVersion: 1,
+        state: "committed",
+        applicationState: "pending",
+        payload: proposalPayload,
+        evidenceRefs: [],
+      });
+
+    // Accepting one of two changes applies only that operation and keeps the proposal open.
+    const first = await assistant.reviewProposal(principal, "art_review", {
+      decisionId: "d1",
+      revision: 0,
+      action: "accept",
+      blockIds: ["b1"],
+    });
+    assert.equal(first.applicationState, "pending");
+    assert.deepEqual(appliedOperations, [["b1"]]);
+
+    // While the proposal is open, a decided block cannot be decided again.
+    await assert.rejects(
+      assistant.reviewProposal(principal, "art_review", {
+        decisionId: "d3",
+        revision: 1,
+        action: "accept",
+        blockIds: ["b1"],
+      }),
+      /均已有决定/,
+    );
+
+    // Rejecting the remaining change closes the proposal as partial.
+    const second = await assistant.reviewProposal(principal, "art_review", {
+      decisionId: "d2",
+      revision: 1,
+      action: "reject",
+      blockIds: ["b2"],
+    });
+    assert.equal(second.applicationState, "partial");
+    assert.equal(appliedOperations.length, 1);
+
+    // Fully decided: further decisions replay the terminal state instead of re-applying.
+    const replay = await assistant.reviewProposal(principal, "art_review", {
+      decisionId: "d5",
+      revision: 2,
+      action: "accept",
+      blockIds: ["b1"],
+    });
+    assert.equal(replay.applicationState, "partial");
+    assert.equal(appliedOperations.length, 1);
+
+    // A fresh proposal accepts everything in one decision and lands as applied.
+    const all = await assistant.reviewProposal(principal, "art_all", {
+      decisionId: "d4",
+      revision: 0,
+      action: "accept",
+    });
+    assert.equal(all.applicationState, "applied");
+    assert.deepEqual(appliedOperations, [["b1"], ["b1", "b2"]]);
   } finally {
     await pg.close();
   }

@@ -7,6 +7,8 @@ import { createEditorSchema, validateContentForEditor } from "@zhishu/editor-cor
 import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
 import * as Y from "yjs";
 import { Connection, Server } from "@hocuspocus/server";
+import type { FastifyBaseLogger } from "fastify";
+import { createLogger } from "@zhishu/logger-js";
 import {
   CURRENT_DOCUMENT_SCHEMA_VERSION,
   validateCollaborationPresence,
@@ -17,7 +19,14 @@ import {
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import type { Database } from "../../../database/index.js";
-import type { AppConfig } from "../../config.js";
+import {
+  COLLABORATION_MAX_ACTIVE_ROOMS,
+  COLLABORATION_MAX_CONNECTIONS,
+  COLLABORATION_MAX_DOCUMENTS_PER_CONNECTION,
+  COLLABORATION_MAX_ROOM_CONNECTIONS,
+  COLLABORATION_MAX_UPDATE_BYTES,
+  type AppConfig,
+} from "../../config.js";
 import type { OperationsMetrics } from "../health/operations-metrics.js";
 import { DocumentRepository } from "../documents/document.repository.js";
 import type { CollaborationSessionClaims } from "./session-ticket.js";
@@ -78,19 +87,6 @@ function isCloseError(error: unknown): error is Error & { code: number; reason: 
     typeof (error as Error & { code?: unknown }).code === "number" &&
     typeof (error as Error & { reason?: unknown }).reason === "string"
   );
-}
-
-function logStorageFailure(
-  event: string,
-  documentId: string,
-  generationId: string,
-  error: unknown,
-): void {
-  console.error(event, {
-    documentId,
-    generationId,
-    errorType: error instanceof Error ? error.name : "unknown",
-  });
 }
 
 function injectPostCommitCrash(config: AppConfig, contentChanged = true): void {
@@ -364,7 +360,22 @@ export function createCollaborationServer(
   pool: Pool,
   onOwnerLockLost: () => void = () => undefined,
   metrics?: Pick<OperationsMetrics, "setCollaborationState">,
+  // Callers pass the app logger; the default stays silent so standalone use never spawns a transport.
+  logger: FastifyBaseLogger = createLogger("app-server", { level: "silent" }),
 ) {
+  const collaborationLog = logger.child({ scope: "collaboration" });
+  // Log only the error name: pg error messages can embed query parameters or credentials.
+  const logStorageFailure = (
+    event: string,
+    documentId: string,
+    generationId: string,
+    error: unknown,
+  ): void => {
+    collaborationLog.error(
+      { documentId, generationId, errorType: error instanceof Error ? error.name : "unknown" },
+      event,
+    );
+  };
   const repository = new DocumentRepository(db);
   const history = new DocumentHistoryRepository(db);
   const allowedOrigins = new Set(config.COLLABORATION_ALLOWED_ORIGINS);
@@ -373,7 +384,7 @@ export function createCollaborationServer(
   const rawConnections = new Set<import("node:net").Socket>();
   const documentLockTails = new Map<string, Promise<void>>();
   const awarenessUpdateTimes = new WeakMap<Connection<CollaborationContext>, number[]>();
-  const maxStatelessPayloadBytes = config.COLLABORATION_MAX_UPDATE_BYTES * 3 + 32_768;
+  const maxStatelessPayloadBytes = COLLABORATION_MAX_UPDATE_BYTES * 3 + 32_768;
   let ownerLeaseClient: PoolClient | undefined;
   const publishCollaborationMetrics = () => {
     metrics?.setCollaborationState({
@@ -599,7 +610,7 @@ export function createCollaborationServer(
       }
       const release = await acquireDocumentLock(documentName, documentLockTails);
       pendingDocumentLocks.set(connection, release);
-      if (payload.byteLength > config.COLLABORATION_MAX_UPDATE_BYTES) {
+      if (payload.byteLength > COLLABORATION_MAX_UPDATE_BYTES) {
         throw closeError("update-too-large", 1009);
       }
 
@@ -899,7 +910,7 @@ export function createCollaborationServer(
           } finally {
             scratch.destroy();
           }
-          if (updateBytes.byteLength > config.COLLABORATION_MAX_UPDATE_BYTES) {
+          if (updateBytes.byteLength > COLLABORATION_MAX_UPDATE_BYTES) {
             connection.sendStateless(
               structureOperationMessage({
                 operationId,
@@ -985,7 +996,7 @@ export function createCollaborationServer(
 
       const bytes = Buffer.from(parsed.data.updateBase64, "base64url");
       if (
-        bytes.byteLength > config.COLLABORATION_MAX_UPDATE_BYTES ||
+        bytes.byteLength > COLLABORATION_MAX_UPDATE_BYTES ||
         bytes.toString("base64url") !== parsed.data.updateBase64 ||
         updateHash(bytes) !== parsed.data.updateHash
       ) {
@@ -1066,7 +1077,7 @@ export function createCollaborationServer(
   });
 
   server.httpServer.on("connection", (socket) => {
-    if (rawConnections.size >= config.COLLABORATION_MAX_CONNECTIONS) {
+    if (rawConnections.size >= COLLABORATION_MAX_CONNECTIONS) {
       socket.destroy();
       return;
     }
@@ -1081,11 +1092,11 @@ export function createCollaborationServer(
   const reserveRoomConnection = (socketId: string, documentName: string): boolean => {
     const documents = socketDocuments.get(socketId) ?? new Set<string>();
     if (documents.has(documentName)) return true;
-    if (documents.size >= config.COLLABORATION_MAX_DOCUMENTS_PER_CONNECTION) return false;
+    if (documents.size >= COLLABORATION_MAX_DOCUMENTS_PER_CONNECTION) return false;
 
     const clients = roomConnections.get(documentName);
-    if (!clients && roomConnections.size >= config.COLLABORATION_MAX_ACTIVE_ROOMS) return false;
-    if (clients && clients.size >= config.COLLABORATION_MAX_ROOM_CONNECTIONS) return false;
+    if (!clients && roomConnections.size >= COLLABORATION_MAX_ACTIVE_ROOMS) return false;
+    if (clients && clients.size >= COLLABORATION_MAX_ROOM_CONNECTIONS) return false;
 
     documents.add(documentName);
     socketDocuments.set(socketId, documents);
@@ -1272,7 +1283,7 @@ export function createCollaborationServer(
           } finally {
             scratch.destroy();
           }
-          if (updateBytes.byteLength > config.COLLABORATION_MAX_UPDATE_BYTES)
+          if (updateBytes.byteLength > COLLABORATION_MAX_UPDATE_BYTES)
             throw new DomainError("VALIDATION_ERROR", "生成内容超出写入限制");
           const persisted = await repository.persistUpdate({
             documentId: batch.documentId,

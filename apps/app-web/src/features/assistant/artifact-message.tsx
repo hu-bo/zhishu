@@ -41,9 +41,10 @@ export function ArtifactMessage({
           transport={context.transport}
           conversationId={context.conversationId}
           artifactId={artifact.id}
-          reviewRevision={artifact.reviewRevision ?? 0}
           applicationState={state}
+          decisions={artifact.review?.decisions}
           onResolved={() => void context.onResolved()}
+          onReviewInDocument={context.onOpenTarget}
         />
       );
     const view = PROPOSAL_RESOLVED[state as keyof typeof PROPOSAL_RESOLVED];

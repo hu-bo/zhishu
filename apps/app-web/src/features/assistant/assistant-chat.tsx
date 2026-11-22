@@ -36,8 +36,9 @@ import {
   submitMessage,
   updateContext,
 } from '../../components/chat/conversation-transport';
-import { CitationList, CitationText } from '../../components/chat/citations';
+import { CitationMarkdown, CitationSources } from '../../components/chat/citations';
 import { useCitationPresentations } from '../../components/chat/citation-model';
+import { MarkdownBlock } from '../../components/chat/markdown-block';
 import { ScopePicker } from './scope-picker';
 import { SaveToPicker } from './save-to-picker';
 import {
@@ -48,6 +49,7 @@ import {
   type AssistantIntent,
 } from './composer-toolbar';
 import { DraftActionCard, type DraftCardState, type DraftPhase } from './draft-action-card';
+import type { PendingProposal } from './editor-proposal-review';
 import { ArtifactMessage, type ArtifactCardContext } from './artifact-message';
 import { AssistantEmpty } from './assistant-empty';
 import { ImageArtifacts } from './image-artifacts';
@@ -80,6 +82,8 @@ export interface AssistantChatProps {
   onTargetChange?: (documentId: string | null) => void;
   /** Focus/switch to the bound document view (created and proposal receipts use it). */
   onOpenTarget?: () => void;
+  /** Open proposal fact for the workbench: the editor pane reviews changes in place. */
+  onPendingProposalChange?: (proposal: PendingProposal | null) => void;
   className?: string;
 }
 
@@ -135,6 +139,7 @@ export function AssistantChat({
   onConversationChange,
   onTargetChange,
   onOpenTarget,
+  onPendingProposalChange,
   className,
 }: AssistantChatProps) {
   const identityKey = getAccessToken() ?? 'anonymous';
@@ -177,27 +182,33 @@ export function AssistantChat({
   });
 
   useEffect(() => {
-    void readRecord(identityKey, 'chat-draft', storageKey).then((value) => {
-      const stored = value as {
-        conversationId?: string;
-        draft?: string;
-        pendingCreate?: StoredDraftCard;
-      } | null;
-      if (!mounted.current) return;
-      if (stored?.conversationId) setConversationId(stored.conversationId);
-      if (stored?.draft) setDraft(stored.draft);
-      const storedCard = stored?.pendingCreate;
-      if (storedCard && RESUMABLE_PHASES.includes(storedCard.phase)) {
-        setDraftCard({
-          // A page reload can only resume observation, never re-submit the command.
-          phase: storedCard.phase === 'submitting' ? 'creating' : storedCard.phase,
-          instruction: storedCard.instruction,
-          workspaceId: storedCard.workspaceId,
-          runId: storedCard.runId,
-        });
-      }
-      setHydrated(true);
-    });
+    void readRecord(identityKey, 'chat-draft', storageKey)
+      .then((value) => {
+        const stored = value as {
+          conversationId?: string;
+          draft?: string;
+          pendingCreate?: StoredDraftCard;
+        } | null;
+        if (!mounted.current) return;
+        if (stored?.conversationId) setConversationId(stored.conversationId);
+        if (stored?.draft) setDraft(stored.draft);
+        const storedCard = stored?.pendingCreate;
+        if (storedCard && RESUMABLE_PHASES.includes(storedCard.phase)) {
+          setDraftCard({
+            // A page reload can only resume observation, never re-submit the command.
+            phase: storedCard.phase === 'submitting' ? 'creating' : storedCard.phase,
+            instruction: storedCard.instruction,
+            workspaceId: storedCard.workspaceId,
+            runId: storedCard.runId,
+          });
+        }
+      })
+      // 存储不可用（私有模式、被其他标签页阻塞等）按“无记录”处理，
+      // 否则 hydrated 永远为 false，快照查询被禁用，界面停在空态收不到任何回复。
+      .catch(() => undefined)
+      .finally(() => {
+        if (mounted.current) setHydrated(true);
+      });
   }, [identityKey, storageKey]);
 
   const snapshotQuery = useQuery({
@@ -213,6 +224,32 @@ export function AssistantChat({
   });
   const snapshot: ConversationSnapshot | null = snapshotQuery.data ?? null;
   const targetDocumentId = snapshot?.conversation.targetDocumentId ?? null;
+
+  // Derive the open proposal from snapshot facts only; the workbench hands it to the editor.
+  const pendingProposal = useMemo<PendingProposal | null>(() => {
+    if (mode !== 'internal' || !conversationId || !snapshot) return null;
+    const open = [...snapshot.artifacts]
+      .reverse()
+      .find(
+        (item) =>
+          item.kind === 'proposal' &&
+          ['pending', 'conflict', 'unknown'].includes(item.applicationState ?? 'pending'),
+      );
+    if (!open) return null;
+    return {
+      conversationId,
+      artifactId: open.id,
+      reviewRevision: open.reviewRevision ?? 0,
+      applicationState: open.applicationState ?? 'pending',
+      decidedBlockIds: (open.review?.decisions ?? []).map((decision) => decision.blockId),
+    };
+  }, [conversationId, mode, snapshot]);
+  const proposalSignature = JSON.stringify(pendingProposal);
+  useEffect(() => {
+    onPendingProposalChange?.(pendingProposal);
+    // Notify on semantic change only: the snapshot object refreshes on every stream frame.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proposalSignature, onPendingProposalChange]);
 
   useEffect(() => {
     onConversationChange?.(conversationId);
@@ -595,6 +632,7 @@ export function AssistantChat({
     <div className={className}>
       <Chat
         messages={messages}
+        renderText={(text) => <MarkdownBlock text={text} />}
         emptyState={
           <AssistantEmpty
             mode={mode}
@@ -610,7 +648,6 @@ export function AssistantChat({
           mode === 'internal' ? (
             <div className="assistant-header">
               <Sparkles className="size-4 shrink-0 text-accent" aria-hidden="true" />
-              <strong className="assistant-header__title">AI 创作</strong>
               <span className="assistant-header__conv">
                 {snapshot?.conversation.title || '新对话'}
               </span>
@@ -870,10 +907,8 @@ function AnswerBody({
   if (!text || text.kind !== 'text') return null;
   return (
     <div className="qa-answer">
-      <p className="qa-answer-text">
-        <CitationText text={text.text} citations={presentations} />
-      </p>
-      {citations.length ? <CitationList citations={presentations} /> : null}
+      <CitationMarkdown text={text.text} citations={presentations} className="qa-answer-text" />
+      {presentations.length ? <CitationSources citations={presentations} /> : null}
       {error ? <p className="qa-answer-note">{error}</p> : null}
     </div>
   );

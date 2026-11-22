@@ -9,7 +9,7 @@ import { workspaceSourceAliases } from './build/workspace-source.ts';
 export default defineConfig(({ mode, command }) => {
   const env = loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), '');
   const proxy = {
-    '/api': { target: env.API_PROXY_TARGET || 'http://127.0.0.1:3000', changeOrigin: true },
+    '/api': { target: env.API_PROXY_TARGET || 'http://127.0.0.1:9010', changeOrigin: true },
   };
   return {
     plugins: [

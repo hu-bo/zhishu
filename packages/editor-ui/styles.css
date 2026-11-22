@@ -1426,6 +1426,25 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--zhishu-editor-muted) 35%, transparent) transparent;
+}
+
+/* WebKit/Safari: slim translucent thumb floating on a transparent track. */
+.zhishu-ui-document-editor .zhishu-ui-surface::-webkit-scrollbar {
+  width: 8px;
+}
+.zhishu-ui-document-editor .zhishu-ui-surface::-webkit-scrollbar-track {
+  background: transparent;
+}
+.zhishu-ui-document-editor .zhishu-ui-surface::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-color: color-mix(in srgb, var(--zhishu-editor-muted) 30%, transparent);
+  background-clip: padding-box;
+}
+.zhishu-ui-document-editor .zhishu-ui-surface::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--zhishu-editor-muted) 55%, transparent);
 }
 
 .zhishu-ui-document-editor .zhishu-ui-toolbar-row,

@@ -5,7 +5,9 @@ import { getDocument } from '@/api/generated/documents';
 import { hasUnconfirmedChanges } from '@/api/transport';
 import { DocumentCollaborationEditor } from '@/features/document/document-collaboration-editor';
 import { internalTransport } from '@/components/chat/conversation-transport';
+import { ResizableSplit } from '@/components/layout/resizable-split';
 import { AssistantChat } from './assistant-chat';
+import { EditorProposalReview, type PendingProposal } from './editor-proposal-review';
 
 const transport = internalTransport();
 
@@ -28,6 +30,7 @@ export function CreationPage({
   const search = useSearch({ from: '/_app/ai' });
   const [boundTarget, setBoundTarget] = useState<string | null>(targetDocumentId ?? null);
   const [mobileView, setMobileView] = useState<'chat' | 'document'>('chat');
+  const [pendingProposal, setPendingProposal] = useState<PendingProposal | null>(null);
   const selectionRef = useRef<string[]>([]);
 
   const document = useQuery({
@@ -77,18 +80,10 @@ export function CreationPage({
       }
       onTargetChange={onTargetChange}
       onOpenTarget={() => setMobileView('document')}
+      onPendingProposalChange={setPendingProposal}
       className="assistant-chat-pane"
     />
   );
-
-  // No bound document yet: a single centered Chat is the whole workspace.
-  if (!boundTarget) {
-    return (
-      <div className="assistant-workbench assistant-chat-only">
-        <div className="assistant-chat-centered">{chat}</div>
-      </div>
-    );
-  }
 
   const editor = document.data ? (
     <DocumentCollaborationEditor
@@ -99,6 +94,11 @@ export function CreationPage({
       onSelectionBlocksChange={(ids) => {
         selectionRef.current = ids;
       }}
+      replacementReview={
+        pendingProposal ? (
+          <EditorProposalReview transport={transport} proposal={pendingProposal} />
+        ) : null
+      }
     />
   ) : (
     <div className="flex h-full items-center justify-center text-sm text-neutral-500" role="status">
@@ -106,9 +106,13 @@ export function CreationPage({
     </div>
   );
 
+  // One stable tree for both layouts: the chat pane never unmounts when a target binds or
+  // unbinds, so the conversation, in-flight runs and drafts survive the layout switch.
   return (
-    <div className="assistant-workbench assistant-split">
-      <div className="assistant-mobile-toggle" role="tablist">
+    <div
+      className={`assistant-workbench${boundTarget ? ' assistant-split' : ' assistant-chat-only'}`}
+    >
+      <div className="assistant-mobile-toggle" role="tablist" hidden={!boundTarget}>
         <button
           role="tab"
           aria-selected={mobileView === 'document'}
@@ -126,14 +130,20 @@ export function CreationPage({
           对话
         </button>
       </div>
-      <section
-        className={`assistant-editor-pane${mobileView === 'document' ? ' mobile-active' : ''}`}
-      >
-        {editor}
-      </section>
-      <aside className={`assistant-chat-pane${mobileView === 'chat' ? ' mobile-active' : ''}`}>
-        {chat}
-      </aside>
+      <ResizableSplit
+        storageKey="zhishu.ai-split-right-width"
+        initialWidth={420}
+        minWidth={400}
+        maxWidth={800}
+        leftClassName={mobileView === 'document' ? 'mobile-active' : undefined}
+        rightClassName={mobileView === 'chat' ? 'mobile-active' : undefined}
+        left={
+          <section className="assistant-editor-pane" hidden={!boundTarget}>
+            {editor}
+          </section>
+        }
+        right={<aside className="assistant-chat-pane">{chat}</aside>}
+      />
     </div>
   );
 }

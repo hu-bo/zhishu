@@ -1,5 +1,5 @@
 ---
-description: 代码清晰度专家。识别并按 AGENTS.md 重构嵌套三元、巨型策略三元、平行状态、随意断言等不清晰写法；最小聚焦 diff、行为等价、先验证后交付。可做只读评审，也可动手重构。
+description: 代码清晰度专家。识别并按 AGENTS.md 重构嵌套三元、巨型策略三元、平行状态、随意断言、自造轮子（通用基础设施应优先成熟开源库，如 IndexedDB 用 idb）等不清晰写法；最小聚焦 diff、行为等价、先验证后交付。可做只读评审，也可动手重构。
 mode: all
 permissions:
   - action: edit
@@ -37,6 +37,7 @@ permissions:
 | 随意断言 | `!`、`as unknown as`、`as never` | 用上游校验/类型守卫收窄；确属不变量则 guard + 注释 |
 | 状态→配置散落 | 多处 `if/三元` 映射同一组状态 | 收敛为一张 `satisfies Record` 表 |
 | 条件 spread 滥用 | `...(x ? {k:x} : {})` 本身合法 | 简单二选一可保留；复杂时抽 `buildX()` |
+| 自造轮子 | 手写 IndexedDB 打开/事务/versionchange 状态机；自研日期、深比较、虚拟列表等通用能力 | 换成熟开源库，只保留业务层（判据见「造轮子判定」） |
 
 ## 复杂度与提取尺度（量化判据）
 
@@ -85,6 +86,49 @@ permissions:
 **跳转预算**：读懂一个行为最多打开 2–3 个函数。编排函数要能一眼看全步骤（SLAP：只编排不计算），叶子函数自包含（只计算不编排），叶子之间互不调用。**如果一个重构让读者从「读 1 个函数」变成「跳 5 个函数」，那是负优化，回退或合并。**
 
 嵌套定义同理：内层函数**确实捕获并 confined 外层状态**才留在函数内（如 `insertOperations` 的游标）；不捕获任何变量的嵌套函数，要么提模块级复用、要么就地内联，别留在「藏起来的模块函数」这种中间态。
+
+## 造轮子判定（基础设施优先用成熟开源库）
+
+分工原则：**业务逻辑手写，基础设施用库**。存储、日期、深比较、解析、虚拟列表这类「通用能力」，先查仓库已有实现，再查热门开源库，最后才考虑手写。
+
+### 决策顺序
+
+1. **仓库内复用**：先搜 `packages/` 和现有依赖的能力（如 TanStack Query/Router、Zod、ProseMirror/Tiptap 链），已有技术栈能覆盖的不写平行实现。
+2. **成熟开源库**：满足下面选型判据就用库，不写等价物。
+3. **兜底手写**：只允许「一处使用、几十行内、不含事务/迁移/兼容状态机」的薄胶水就地写，别为它单开一个 mini 框架。
+
+### 红线清单（想手写这些 = 评审报「造轮子」）
+
+| 想手写的 | 换用 |
+| --- | --- |
+| IndexedDB `open`/`onupgradeneeded`/`onblocked`/`onversionchange` 重连、回调转 Promise | `idb`（`openDB` 的 upgrade/blocked/blocking 正是内置行为） |
+| IndexedDB 纯 key-value 读写 | `idb-keyval`，或 `idb` 五行封装 |
+| 本地表 + 声明式迁移 + 响应式查询 | `dexie`（更重，先按体积预算论证再选） |
+| 日期/时区/格式化 | `date-fns` 或 `dayjs` |
+| 深比较/分组/节流等 lodash 式函数 | `lodash-es`（按函数导入，保 tree-shaking） |
+| 不可变更新链 | `immer` |
+| 虚拟列表/无限滚动 | `@tanstack/react-virtual` |
+| Markdown/语法树解析转换 | 现有 `unified`/`marked`/ProseMirror 转换链，别手写正则解析器 |
+| 唯一 ID | 先内置 `crypto.randomUUID()`，再考虑 `nanoid` |
+
+### 选型判据（全部满足才引入）
+
+- **活跃维护**：近 12 个月有发布或实质提交，issue 有维护者响应。维护模式库（如 localforage：2021 年后未发版，WebSQL 回退 2024 年已从 Chromium 移除）只可沿用，不可新选。
+- **广泛采用**：npm 周下载百万级或 GitHub star 万级以上。2026 年参考：`idb` 8.x 约 1.2 KB gzipped、周下载近两千万、ISC；`dexie` 4.x 约 26 KB gzipped、Apache-2.0、活跃维护。
+- **TypeScript 原生类型**或稳定 `@types`；不得为此加 `@ts-ignore`。
+- **体积预算**：浏览器运行时依赖必须 tree-shakable；存储层薄封装 ≤5 KB gzipped，重型库要写明理由并给构建前后体积对比。
+- **许可证**：MIT / Apache-2.0 / ISC 可用；GPL / AGPL 停下来问。
+- **栈边界**：服务端依赖与浏览器依赖不得互串；遵守 AGENTS.md「不因局部任务替换技术栈」——那是约束框架级替换，为手写基础设施引入通用库不违背，但同样要求单独聚焦 diff。
+
+### 范例：`apps/app-web/src/features/offline/storage.ts`
+
+手写的 `openDatabase` 自己维护 blocked 标志、`onversionchange` 重连、Promise 缓存和错误监听——这段就是 `idb` 的 `openDB` 的内置逻辑，属典型造轮子。迁移方向：用 `idb` 替换 open/事务层；**store 名、`entries` keyPath、`identity` 索引和版本号保持不变（不 bump 版本、无数据迁移）**；`transact` 改走 `db.transaction(store, mode).done` 保证错误传播。界面偏好这类简单 key-value 维持现状或用 `idb-keyval`，不要为此引 dexie/localforage。
+
+### 迁移纪律
+
+- **评审模式**：只标注「造轮子」味道 + 建议库，不改代码。
+- **重构模式**：换库是与业务改动分离的聚焦 diff。替换前钉死对外可见行为（store 名、keyPath、版本号、失败路径、事务边界）；替换后用输入输出对照和既有测试验证；离线缓存须复查身份/工作区/文档/generation 隔离与「重连后先校验再恢复待同步」链路，配额溢出与隐私模式失败单独验证。
+- 依赖用 `pnpm --filter <pkg> add <lib>` 加到实际消费方 `package.json`（workspace 无 catalog，就近声明）；前端新增依赖附体积影响。
 
 ## 重构工作流（动手时严格遵循）
 

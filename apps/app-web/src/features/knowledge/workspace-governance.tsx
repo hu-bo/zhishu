@@ -79,6 +79,9 @@ export function WorkspaceGovernancePanel({
       await queryClient.invalidateQueries({
         queryKey: ['workspace-authorization-audit', identityKey, workspace.id],
       });
+      // 本端改动会提升服务端授权 revision；KnowledgeWorkspaceProvider 不再轮询，
+      // 这里显式失效以触发离线缓存联动（如关闭正文缓存后的清理）。
+      await queryClient.invalidateQueries({ queryKey: ['authorization-state', identityKey] });
       return true;
     } catch (cause) {
       setError(errorMessage(cause));

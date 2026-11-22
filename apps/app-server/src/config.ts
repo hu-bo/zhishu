@@ -9,8 +9,8 @@ const environmentSchema = z
     LOG_LEVEL: z
       .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
       .default("info"),
+    LOG_DIR: z.string().min(1).default("logs"),
     METRICS_BEARER_TOKEN: z.string().min(32).optional(),
-    MOCK_AUTH_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(86400).default(28800),
     DATABASE_URL: z.string().url(),
     AI_MODEL: z.string().trim().min(1).optional(),
     AI_API_KEY: z.string().min(1).optional(),
@@ -51,16 +51,6 @@ const environmentSchema = z
       .default("local-development-qa-visitor-secret-change-me"),
     // Absolute origin used when the server generates citation links for adopted drafts.
     APP_PUBLIC_URL: z.string().url().default("http://localhost:5173"),
-    DATABASE_POOL_MAX: z.coerce.number().int().min(2).max(100).default(10),
-    DATABASE_CONNECT_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
-    DATABASE_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
-    TENANT_MAX_DOCUMENTS: z.coerce.number().int().min(1).max(1_000_000).default(10_000),
-    TENANT_MAX_ASSET_BYTES: z.coerce
-      .number()
-      .int()
-      .min(1_048_576)
-      .max(1_099_511_627_776)
-      .default(10_737_418_240),
     ASSET_STORAGE_ENDPOINT: z
       .string()
       .url()
@@ -99,21 +89,10 @@ const environmentSchema = z
       .string()
       .min(32)
       .default("local-development-collaboration-secret-change-me"),
-    COLLABORATION_SESSION_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
-    COLLABORATION_MAX_UPDATE_BYTES: z.coerce
-      .number()
-      .int()
-      .min(1024)
-      .max(10_485_760)
-      .default(1_048_576),
     COLLABORATION_TEST_CRASH_AFTER_COMMIT: z
       .enum(["true", "false"])
       .default("false")
       .transform((value) => value === "true"),
-    COLLABORATION_MAX_CONNECTIONS: z.coerce.number().int().min(2).max(10_000).default(100),
-    COLLABORATION_MAX_ACTIVE_ROOMS: z.coerce.number().int().min(1).max(2_000).default(50),
-    COLLABORATION_MAX_ROOM_CONNECTIONS: z.coerce.number().int().min(1).max(1_000).default(20),
-    COLLABORATION_MAX_DOCUMENTS_PER_CONNECTION: z.coerce.number().int().min(1).max(100).default(1),
     COLLABORATION_ALLOWED_ORIGINS: z
       .string()
       .default(
@@ -235,6 +214,24 @@ const environmentSchema = z
   });
 
 export type AppConfig = z.infer<typeof environmentSchema>;
+
+// Capacity and timeout values that intentionally stay in code instead of becoming environment
+// options. They are not deployment knobs; change them here when the defaults need adjusting.
+export const MOCK_AUTH_TOKEN_TTL_SECONDS = 28_800; // Mock login token lifetime: 8 hours.
+
+export const DATABASE_POOL_MAX = 10;
+export const DATABASE_CONNECT_TIMEOUT_MS = 5_000;
+export const DATABASE_QUERY_TIMEOUT_MS = 5_000;
+
+export const TENANT_MAX_DOCUMENTS = 10_000;
+export const TENANT_MAX_ASSET_BYTES = 10_737_418_240; // 10 GiB per tenant.
+
+export const COLLABORATION_SESSION_TTL_SECONDS = 300;
+export const COLLABORATION_MAX_UPDATE_BYTES = 1_048_576; // 1 MiB per update frame.
+export const COLLABORATION_MAX_CONNECTIONS = 100;
+export const COLLABORATION_MAX_ACTIVE_ROOMS = 50;
+export const COLLABORATION_MAX_ROOM_CONNECTIONS = 20;
+export const COLLABORATION_MAX_DOCUMENTS_PER_CONNECTION = 1;
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppConfig {
   return environmentSchema.parse(environment);

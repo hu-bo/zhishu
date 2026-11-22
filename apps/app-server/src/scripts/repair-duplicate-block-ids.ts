@@ -1,7 +1,7 @@
 import "../environment.js";
 import type { PoolClient } from "pg";
 import { createDatabase, createPool } from "../../database/index.js";
-import { loadConfig } from "../config.js";
+import { DATABASE_CONNECT_TIMEOUT_MS, DATABASE_QUERY_TIMEOUT_MS, loadConfig } from "../config.js";
 import { collaborationOwnerLock } from "../modules/collaboration/owner-lock.js";
 import { createDocumentService, DocumentRepository } from "../modules/documents/index.js";
 import type { Principal } from "../modules/identity/identity.types.js";
@@ -36,8 +36,8 @@ async function main(): Promise<void> {
   const pool = createPool({
     connectionString: config.DATABASE_URL,
     max: 2,
-    connectionTimeoutMillis: config.DATABASE_CONNECT_TIMEOUT_MS,
-    query_timeout: config.DATABASE_QUERY_TIMEOUT_MS,
+    connectionTimeoutMillis: DATABASE_CONNECT_TIMEOUT_MS,
+    query_timeout: DATABASE_QUERY_TIMEOUT_MS,
   });
   const db = createDatabase(pool);
   const repository = new DocumentRepository(db);

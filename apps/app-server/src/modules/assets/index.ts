@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { AppConfig } from "../../config.js";
+import { TENANT_MAX_ASSET_BYTES, type AppConfig } from "../../config.js";
 import { AssetRepository } from "./asset.repository.js";
 import { assetRoutes } from "./asset.routes.js";
 import { AssetService } from "./asset.service.js";
@@ -23,7 +23,7 @@ export async function assetsModule(
   }
   const service = new AssetService(new AssetRepository(app.db), storage, {
     maxBytes: config.ASSET_UPLOAD_MAX_BYTES,
-    maxTenantBytes: config.TENANT_MAX_ASSET_BYTES,
+    maxTenantBytes: TENANT_MAX_ASSET_BYTES,
     uploadTtlSeconds: config.ASSET_UPLOAD_SESSION_TTL_SECONDS,
     accessUrlTtlSeconds: config.ASSET_ACCESS_URL_TTL_SECONDS,
     orphanRetentionSeconds: config.ASSET_ORPHAN_RETENTION_SECONDS,

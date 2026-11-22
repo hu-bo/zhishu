@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .env
+.env.production
 *.log
 apps/server/openapi.json
 .playwright-cli/

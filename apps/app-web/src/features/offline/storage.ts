@@ -3,6 +3,8 @@ import {
   CURRENT_DOCUMENT_SCHEMA_VERSION,
   validateDocumentContent,
 } from '@zhishu/document-contracts';
+import { openDB, unwrap } from 'idb';
+import type { DBSchema, IDBPDatabase, IDBPObjectStore } from 'idb';
 
 type Entry = {
   key: string;
@@ -25,7 +27,14 @@ export type CollaborationCheckpoint = {
   updatedAt: number;
   tabId: string;
 };
-let database: Promise<IDBDatabase> | undefined;
+interface OfflineSchema extends DBSchema {
+  entries: {
+    key: string;
+    value: Entry;
+    indexes: { identity: string };
+  };
+}
+let database: Promise<IDBPDatabase<OfflineSchema>> | undefined;
 let openConnection: IDBDatabase | undefined;
 const errorListeners = new Set<() => void>();
 export function subscribeStorageError(listener: () => void) {
@@ -37,72 +46,75 @@ export function subscribeStorageError(listener: () => void) {
 function storageFailure() {
   for (const listener of errorListeners) listener();
 }
-function openDatabase(): Promise<IDBDatabase> {
+/** Keeps the old semantics: a blocked upgrade rejects right away, and a late connection is closed instead of leaking. */
+function openDatabase(): Promise<IDBPDatabase<OfflineSchema>> {
   if (!database) {
-    database = new Promise((resolve, reject) => {
-      let blocked = false;
-      const request = indexedDB.open('zhishu-offline', 1);
-      request.onupgradeneeded = () => {
-        const store = request.result.createObjectStore('entries', { keyPath: 'key' });
-        store.createIndex('identity', 'identity');
-      };
-      request.onerror = () => {
-        database = undefined;
-        reject(request.error);
-      };
-      request.onblocked = () => {
-        blocked = true;
-        database = undefined;
-        reject(new Error('Offline storage upgrade blocked'));
-      };
-      request.onsuccess = () => {
-        const db = request.result;
-        if (blocked) {
-          db.close();
-          return;
-        }
-        db.onversionchange = () => {
-          db.close();
+    database = new Promise<IDBPDatabase<OfflineSchema>>((resolve, reject) => {
+      let settled = false;
+      openDB<OfflineSchema>('zhishu-offline', 1, {
+        upgrade: (db) => {
+          const store = db.createObjectStore('entries', { keyPath: 'key' });
+          store.createIndex('identity', 'identity');
+        },
+        blocked: () => {
+          if (settled) return;
+          settled = true;
           database = undefined;
-          openConnection = undefined;
-        };
-        openConnection = db;
-        resolve(db);
-      };
+          reject(new Error('Offline storage upgrade blocked'));
+        },
+      })
+        .then((db) => {
+          if (settled) {
+            db.close();
+            return;
+          }
+          settled = true;
+          db.onversionchange = () => {
+            db.close();
+            database = undefined;
+            openConnection = undefined;
+          };
+          openConnection = unwrap(db);
+          resolve(db);
+        })
+        .catch((error: unknown) => {
+          if (settled) return;
+          settled = true;
+          database = undefined;
+          reject(error);
+        });
     });
   }
   return database;
 }
 const entryKey = (identity: string, kind: string, id: string) =>
   JSON.stringify([identity, kind, id]);
-async function transact<T>(
-  mode: IDBTransactionMode,
-  run: (store: IDBObjectStore, complete: (value: T) => void) => void,
+async function transact<Mode extends IDBTransactionMode, T>(
+  mode: Mode,
+  run: (store: IDBPObjectStore<OfflineSchema, ['entries'], 'entries', Mode>) => Promise<T>,
 ): Promise<T> {
   try {
     const db = await openDatabase();
-    return await new Promise<T>((resolve, reject) => {
-      const tx = db.transaction('entries', mode);
-      let result: T;
-      tx.oncomplete = () => resolve(result);
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error);
-      run(tx.objectStore('entries'), (value) => {
-        result = value;
-      });
-    });
+    const tx = db.transaction('entries', mode);
+    try {
+      const result = await run(tx.objectStore('entries'));
+      await tx.done;
+      return result;
+    } catch (error) {
+      // The wrapper aborts the transaction when run throws; consume tx.done so the
+      // original request error surfaces instead of an unhandled rejection.
+      await tx.done.catch(() => undefined);
+      throw error;
+    }
   } catch (error) {
     storageFailure();
     throw error;
   }
 }
 export function readRecord(identity: string, kind: string, id: string): Promise<unknown> {
-  return transact('readonly', (store, complete) => {
-    const request = store.get(entryKey(identity, kind, id));
-    request.onsuccess = () => {
-      const entry = request.result as Entry | undefined;
-      complete(entry?.value);
-    };
+  return transact('readonly', async (store) => {
+    const entry = await store.get(entryKey(identity, kind, id));
+    return entry?.value;
   });
 }
 export function writeRecord(
@@ -111,8 +123,8 @@ export function writeRecord(
   id: string,
   value: unknown,
 ): Promise<void> {
-  return transact('readwrite', (store, complete) => {
-    store.put({
+  return transact('readwrite', async (store) => {
+    await store.put({
       key: entryKey(identity, kind, id),
       identity,
       kind,
@@ -120,7 +132,6 @@ export function writeRecord(
       value,
       updatedAt: Date.now(),
     } satisfies Entry);
-    complete(undefined);
   });
 }
 /** Start the transaction before pagehide returns; awaiting database opening can lose the final edit. */
@@ -148,9 +159,8 @@ export function writeRecordOnPageExit(
   }
 }
 export function deleteRecord(identity: string, kind: string, id: string): Promise<void> {
-  return transact('readwrite', (store, complete) => {
-    store.delete(entryKey(identity, kind, id));
-    complete(undefined);
+  return transact('readwrite', async (store) => {
+    await store.delete(entryKey(identity, kind, id));
   });
 }
 export function deleteRecordIf(
@@ -159,35 +169,23 @@ export function deleteRecordIf(
   id: string,
   predicate: (value: unknown) => boolean,
 ): Promise<void> {
-  return transact('readwrite', (store, complete) => {
+  return transact('readwrite', async (store) => {
     const key = entryKey(identity, kind, id);
-    const request = store.get(key);
-    request.onsuccess = () => {
-      const entry = request.result as Entry | undefined;
-      if (entry && predicate(entry.value)) store.delete(key);
-    };
-    complete(undefined);
+    const entry = await store.get(key);
+    if (entry && predicate(entry.value)) await store.delete(key);
   });
 }
 export function recordsForIdentity(identity: string): Promise<Entry[]> {
-  return transact('readonly', (store, complete) => {
-    const request = store.index('identity').getAll(identity);
-    request.onsuccess = () => complete(request.result as Entry[]);
-  });
+  return transact('readonly', async (store) => store.index('identity').getAll(identity));
 }
 export function deleteRecords(
   identity: string,
   predicate: (entry: Entry) => boolean = () => true,
 ): Promise<void> {
-  return transact('readwrite', (store, complete) => {
-    const request = store.index('identity').openCursor(identity);
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (!cursor) return;
-      if (predicate(cursor.value as Entry)) cursor.delete();
-      cursor.continue();
-    };
-    complete(undefined);
+  return transact('readwrite', async (store) => {
+    for await (const cursor of store.index('identity').iterate(identity)) {
+      if (predicate(cursor.value)) await cursor.delete();
+    }
   });
 }
 export function isCollaborationCheckpoint(value: unknown): value is CollaborationCheckpoint {

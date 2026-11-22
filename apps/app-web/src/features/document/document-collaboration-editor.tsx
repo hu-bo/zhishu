@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createCollaborationSession } from '@/api/generated/collaboration';
 import { getDocumentContent } from '@/api/generated/documents';
 import { searchIdentityDirectory } from '@/api/generated/identity';
@@ -20,7 +20,7 @@ import {
   useEditorInstance,
   type EditorCollaborationPresence,
 } from '@zhishu/editor-react';
-import { defaultEditorNodeViews, type EditorReplacementReviewProps } from '@zhishu/editor-ui';
+import { defaultEditorNodeViews } from '@zhishu/editor-ui';
 import { HocuspocusCollaborationSession } from '@zhishu/editor-collaboration/hocuspocus';
 import type { CollaborationSessionInfo } from '@zhishu/editor-collaboration';
 import { CURRENT_DOCUMENT_SCHEMA_VERSION } from '@zhishu/document-contracts';
@@ -245,7 +245,12 @@ export function DocumentCollaborationEditor({
   versionsOpen: boolean;
   onVersionsOpenChange: (open: boolean) => void;
   onDocumentInput?: () => void;
-  replacementReview?: EditorReplacementReviewProps;
+  /**
+   * Proposal review overlay rendered inside the editor context (EditorProvider subtree),
+   * so the component can derive in-body decorations from the live document. The business
+   * side owns the UI; nothing writes the body except the durable structural channel.
+   */
+  replacementReview?: ReactNode;
   /** Reports the top-level block ids intersecting the current selection (AI writing targets). */
   onSelectionBlocksChange?: (blockIds: string[]) => void;
 }) {
@@ -581,6 +586,7 @@ export function DocumentCollaborationEditor({
       }
     >
       <SelectionReportBridge onChange={onSelectionBlocksChange} />
+      {currentSession ? replacementReview : null}
       <div className="flex h-full min-h-0 flex-col">
         {editorError?.key === sessionKey && (
           <div
@@ -641,7 +647,6 @@ export function DocumentCollaborationEditor({
             !(currentSession?.info.readOnly ?? !document.canWrite) && viewMode === 'edit'
           }
           loading={!currentSession}
-          replacementReview={currentSession ? replacementReview : undefined}
           onCollaborationPresenceChange={onCollaborationPresenceChange}
         />
       </div>

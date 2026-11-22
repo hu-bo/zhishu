@@ -1,6 +1,7 @@
 import "./environment.js";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { createLogger } from "@zhishu/logger-js";
 import { buildApp } from "./app.js";
 import { loadConfig, type AppConfig } from "./config.js";
 import { createCollaborationServer } from "./modules/collaboration/hocuspocus.server.js";
@@ -46,6 +47,7 @@ export async function startServer(
       process.kill(process.pid, "SIGTERM");
     },
     operationsMetrics,
+    app.log,
   );
   collaborationRef.current = collaboration;
   let collaborationStarted = false;
@@ -99,7 +101,12 @@ export async function startServer(
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   void startServer().catch((err: unknown) => {
-    console.error("Server initialization failed before listeners started:", err);
+    // buildApp may have failed after spawning transport workers; write this bootstrap
+    // failure synchronously to stderr instead of opening a second logger instance.
+    createLogger("app-server", {}, process.stderr).fatal(
+      { err },
+      "Server initialization failed before listeners started",
+    );
     process.exitCode = 1;
   });
 }

@@ -1,4 +1,10 @@
-import { loadConfig } from "../config.js";
+import {
+  DATABASE_CONNECT_TIMEOUT_MS,
+  DATABASE_POOL_MAX,
+  DATABASE_QUERY_TIMEOUT_MS,
+  TENANT_MAX_ASSET_BYTES,
+  loadConfig,
+} from "../config.js";
 import { createDatabase, createPool } from "../../database/index.js";
 import { AssetRepository } from "../modules/assets/asset.repository.js";
 import { AssetService } from "../modules/assets/asset.service.js";
@@ -15,9 +21,9 @@ if (
 
 const pool = createPool({
   connectionString: config.DATABASE_URL,
-  max: config.DATABASE_POOL_MAX,
-  connectionTimeoutMillis: config.DATABASE_CONNECT_TIMEOUT_MS,
-  query_timeout: config.DATABASE_QUERY_TIMEOUT_MS,
+  max: DATABASE_POOL_MAX,
+  connectionTimeoutMillis: DATABASE_CONNECT_TIMEOUT_MS,
+  query_timeout: DATABASE_QUERY_TIMEOUT_MS,
 });
 const storage = new AssetObjectStorage(config);
 
@@ -25,7 +31,7 @@ try {
   await storage.initialize();
   const service = new AssetService(new AssetRepository(createDatabase(pool)), storage, {
     maxBytes: config.ASSET_UPLOAD_MAX_BYTES,
-    maxTenantBytes: config.TENANT_MAX_ASSET_BYTES,
+    maxTenantBytes: TENANT_MAX_ASSET_BYTES,
     uploadTtlSeconds: config.ASSET_UPLOAD_SESSION_TTL_SECONDS,
     accessUrlTtlSeconds: config.ASSET_ACCESS_URL_TTL_SECONDS,
     orphanRetentionSeconds: config.ASSET_ORPHAN_RETENTION_SECONDS,

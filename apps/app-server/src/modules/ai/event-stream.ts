@@ -156,7 +156,9 @@ export async function streamConversation(
       if (signal.aborted || sse.closed) return;
       sse.frame(frame);
     }
-    const woke = await bus.next(key, 1_000, signal);
+    // Same-process commits wake this immediately; the interval only bounds cross-instance
+    // polling and the idle heartbeat, so keep it quiet (proxies tolerate 5s easily).
+    const woke = await bus.next(key, 5_000, signal);
     if (woke === "timeout" && rows.length === 0) sse.heartbeat();
   }
 }

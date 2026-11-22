@@ -223,6 +223,7 @@ const collaboration = createCollaborationServer(
   app.dbPool,
   () => process.exit(1),
   metrics,
+  app.log,
 );
 collaborationRef.current = collaboration;
 await collaboration.listen();

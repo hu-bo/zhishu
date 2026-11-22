@@ -202,16 +202,7 @@ test(
           await authorizationModule(api, revoker);
           await workspacesModule(api, revoker);
           await catalogsModule(api, revoker);
-          await knowledgeModule(
-            api,
-            loadConfig({
-              NODE_ENV: "test",
-              AUTH_MODE: "external",
-              DATABASE_URL: "postgresql://unused/test",
-              LOG_LEVEL: "silent",
-            }),
-            revoker,
-          );
+          await knowledgeModule(api, revoker);
           await documentsModule(
             api,
             loadConfig({

@@ -3,9 +3,11 @@ import { catalogsModule } from "./modules/catalogs/index.js";
 import { knowledgeModule } from "./modules/knowledge/index.js";
 import { authorizationModule } from "./modules/authorization/index.js";
 import { randomUUID } from "node:crypto";
-import Fastify from "fastify";
+import Fastify, { LogController } from "fastify";
+import type { FastifyBaseLogger } from "fastify";
+import { createLogger } from "@zhishu/logger-js";
 import { serializerCompiler, validatorCompiler } from "fastify-type-provider-zod";
-import type { AppConfig } from "./config.js";
+import { MOCK_AUTH_TOKEN_TTL_SECONDS, type AppConfig } from "./config.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
 import { OperationsMetrics } from "./modules/health/operations-metrics.js";
 import type { OperationsMetrics as OperationsMetricsType } from "./modules/health/operations-metrics.js";
@@ -48,29 +50,41 @@ export async function buildApp(
   } = {},
 ) {
   const mockIdentityService =
-    config.AUTH_MODE === "mock"
-      ? new MockIdentityService(config.MOCK_AUTH_TOKEN_TTL_SECONDS)
-      : null;
+    config.AUTH_MODE === "mock" ? new MockIdentityService(MOCK_AUTH_TOKEN_TTL_SECONDS) : null;
   const identityAuthenticator = options.identityAuthenticator ?? mockIdentityService;
   if (!identityAuthenticator) {
     throw new Error("AUTH_MODE=external requires a trusted PrincipalAuthenticator.");
   }
   const operationsMetrics = options.operationsMetrics ?? new OperationsMetrics();
   const requestStartTimes = new WeakMap<object, bigint>();
+  // Typed as FastifyBaseLogger so route modules keep the shared instance type.
+  const logger: FastifyBaseLogger = createLogger("app-server", {
+    environment: config.NODE_ENV,
+    level: config.LOG_LEVEL,
+    directory: config.LOG_DIR,
+    redact: [
+      "req.headers.authorization",
+      "req.headers.cookie",
+      "req.body.password",
+      "req.body.token",
+      // Tavily and visitor secrets must never reach logs even in structured payloads.
+      "req.headers.x-tavily-key",
+    ],
+  });
   const app = Fastify({
     genReqId: () => randomUUID(),
-    logger: {
-      level: config.LOG_LEVEL,
-      redact: [
-        "req.headers.authorization",
-        "req.headers.cookie",
-        "req.body.password",
-        "req.body.token",
-        // Tavily and visitor secrets must never reach logs even in structured payloads.
-        "req.headers.x-tavily-key",
-      ],
-    },
+    // Liveness/readiness probes and Prometheus scrapes fire on a fixed cadence; keep their
+    // framework request lines out of the log. Probe failures surface via the HTTP status
+    // and real database trouble still logs through ordinary request handlers.
+    logController: new LogController({
+      disableRequestLogging: (request) => {
+        const path = request.url.split("?", 1)[0];
+        return path.startsWith("/health/") || path === "/metrics";
+      },
+    }),
     requestIdHeader: false,
+    // Shared Pino instance from @zhishu/logger-js; Fastify request logs flow through it.
+    loggerInstance: logger,
   });
   app.addHook("onSend", async (request, reply, payload) => {
     reply.header("x-request-id", request.id);
@@ -127,9 +141,7 @@ export async function buildApp(
         await api.register((scope) => assetsModule(scope, config, options.exportMode));
         await api.register((scope) => workspacesModule(scope, sessionRevoker));
         await api.register((scope) => catalogsModule(scope, sessionRevoker, ai.publicLinkage));
-        await api.register((scope) =>
-          knowledgeModule(scope, config, sessionRevoker, ai.publicLinkage),
-        );
+        await api.register((scope) => knowledgeModule(scope, sessionRevoker, ai.publicLinkage));
         await api.register(async (scope) =>
           documentsModule(scope, config, sessionRevoker, options.exportMode, ai.publicLinkage),
         );

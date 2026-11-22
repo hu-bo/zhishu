@@ -17,7 +17,11 @@ import {
   validateDocumentContentForSchemaVersion,
 } from "@zhishu/document-contracts";
 import type { ContentMigration, ContentValidationResult } from "@zhishu/document-contracts";
-import type { AppConfig } from "../../config.js";
+import {
+  COLLABORATION_SESSION_TTL_SECONDS,
+  TENANT_MAX_DOCUMENTS,
+  type AppConfig,
+} from "../../config.js";
 import { DocumentRepository } from "./document.repository.js";
 import { documentRoutes } from "./document.routes.js";
 import { DocumentService } from "./document.service.js";
@@ -97,7 +101,7 @@ export function createDocumentService(
     new DocumentHistoryRepository(db),
     {
       tokenSecret: config.COLLABORATION_TOKEN_SECRET,
-      sessionTtlSeconds: config.COLLABORATION_SESSION_TTL_SECONDS,
+      sessionTtlSeconds: COLLABORATION_SESSION_TTL_SECONDS,
       providerUrl: config.COLLABORATION_PUBLIC_URL,
     },
     sessionRevoker,
@@ -107,7 +111,7 @@ export function createDocumentService(
       execute: executeContentMigration,
       validateSource: validateMigrationSource,
     },
-    config.TENANT_MAX_DOCUMENTS,
+    TENANT_MAX_DOCUMENTS,
   );
 }
 

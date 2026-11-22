@@ -58,7 +58,7 @@ API 默认地址为 http://localhost:3000，liveness 为 `/health/live`，readin
 
 ## Mock Authentication
 
-设置 `NODE_ENV=development`、`AUTH_MODE=mock` 后，`POST /api/auth/mock/login` 会为固定测试用户签发一个 8 小时的 Bearer token。使用该 token 调用 `GET /api/auth/me` 或 `/api/projects/`；`POST /api/auth/logout` 会立即撤销当前 token。通过 `MOCK_AUTH_TOKEN_TTL_SECONDS` 可将有效期设置为 60 到 86400 秒。
+设置 `NODE_ENV=development`、`AUTH_MODE=mock` 后，`POST /api/auth/mock/login` 会为固定测试用户签发一个 8 小时的 Bearer token（有效期是代码常量 `MOCK_AUTH_TOKEN_TTL_SECONDS`，不再走环境变量）。使用该 token 调用 `GET /api/auth/me` 或 `/api/projects/`；`POST /api/auth/logout` 会立即撤销当前 token。
 
 mock 会话保存在当前服务进程内，重启后需要重新登录。`NODE_ENV=production` 禁止使用 mock。宿主可设置 `AUTH_MODE=external` 并向 `buildApp` 注入 `PrincipalAuthenticator`；当前默认 `server.ts` 入口尚未接入具体 SSO provider，external 模式会拒绝启动，须由宿主完成身份适配后上线。
 

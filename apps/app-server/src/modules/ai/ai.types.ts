@@ -141,7 +141,8 @@ export const artifactDto = (row: ArtifactRow): Artifact => ({
   runId: row.runId,
   kind: row.kind,
   schemaVersion: row.schemaVersion,
-  evidenceRefs: row.evidenceRefs.map((ref) => ref.evidenceId),
+  // evidenceRefs stays server-side bookkeeping: clients resolve citations from message
+  // parts and load bodies through GET /artifacts/:id, never from this list.
   reviewRevision: row.reviewRevision ?? undefined,
   review: row.review ?? undefined,
   applicationState: row.applicationState ?? undefined,
