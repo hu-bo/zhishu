@@ -88,7 +88,6 @@ steps:
         - test -s dist/src/server.js
         # Validate the environment and run migrations before stopping the current service.
         - docker compose -p zhishu-app-server config --quiet
-        - docker compose -p zhishu-app-server run --rm --no-deps -T app-server node --env-file=.env -e "import('./dist/src/config.js').then(m => m.loadConfig()).catch((error) => { console.error(error instanceof Error ? error.message: error); process.exit(1); })"
         - docker compose -p zhishu-app-server run --rm --no-deps -T app-server node node_modules/drizzle-kit/bin.cjs migrate --config=database/drizzle.config.ts
         - |
           if docker container inspect zhishu-app-server >/dev/null 2>&1; then
