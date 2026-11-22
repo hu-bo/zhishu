@@ -14,7 +14,7 @@ const summary = await writeDocumentIndex({
   embeddings,
   options: indexOptions,
   snapshot,
-  tenantId,
+  userId,
   workspaceId,
   indexVersion,
   metadataRevision: "1",
@@ -28,7 +28,7 @@ const retriever = createKnowledgeRetriever({
   client,
   embeddings,
   index: indexOptions,
-  resolveScope, // 主库解析 tenant、workspace/document 范围和当前稳定授权键
+  resolveScope, // 主库解析 user、workspace/document 范围和当前稳定授权键
   authorizeCandidates, // 批量核对当前权限和 activeIndexVersion/正文版本/配置
   verifyEvidence, // 交付前核对权限、版本、原文与定位
 });
@@ -78,22 +78,22 @@ const prepared = await prepareDocument(
 // prepared.images：已上传图片的 SHA-256、URL、媒体类型和大小。
 ```
 
-`ImageStorage` 是公开 TypeScript 接口，不绑定存储 SDK、环境变量、bucket 或凭据。Base64 data URI 可直接提取；其余来源通过 readImage 获取。每次解析按内容 SHA-256 去重上传，检测实际图片类型并限制输入大小、单图/累计字节与图片数量。uploadImage 接收确定的 sha256/fileName，宿主可按租户和内容摘要实现幂等上传。失败或取消不返回成功解析结果；已经上传的对象由宿主记录和清理，包不删除用户对象。上传回调返回稳定的 HTTP(S) URL，也可以是宿主鉴权代理地址；短期签名 URL 不适合作为索引内的持久地址。
+`ImageStorage` 是公开 TypeScript 接口，不绑定存储 SDK、环境变量、bucket 或凭据。Base64 data URI 可直接提取；其余来源通过 readImage 获取。每次解析按内容 SHA-256 去重上传，检测实际图片类型并限制输入大小、单图/累计字节与图片数量。uploadImage 接收确定的 sha256/fileName，宿主可按用户和内容摘要实现幂等上传。失败或取消不返回成功解析结果；已经上传的对象由宿主记录和清理，包不删除用户对象。上传回调返回稳定的 HTTP(S) URL，也可以是宿主鉴权代理地址；短期签名 URL 不适合作为索引内的持久地址。
 
 图片 URL 只替换解析后的 RAG 文本，原始 DocumentSnapshot 和持久化 assetId 不被修改。原生正文未配置 imageStorage 时沿用 alt 文字；带内嵌图片的导入文档缺少存储接口时明确返回 IMAGE_STORAGE_REQUIRED，不静默丢图。已有 HTTP(S) 图片可在未配置上传时保留原地址。该流程提取图片文件，不执行视觉理解/OCR；Word/PDF 二进制解析需要另行格式适配。
 
 UTF-16 半开区间指向 `prepared.blocks` 的对应规范化文本。原生表格使用表格 blockId，外部文档使用 sectionId；不能再以旧的单元格文本解释新表格区间。内部解析版本已进入配置指纹，旧索引需要重建。上传清单参与派生 snapshotId，平台 URL/图片内容发生变化时必须生成新的索引版本。代码优先按行切分，`onExtractionIssue` 报告无文本/不支持的叶节点。超出安全整数范围的现有 DocumentSnapshot.durableSeq 明确拒绝。
 
-`writeDocumentIndex` 也接受 `{ source, version: { generationId, durableSeq }, parsing, ... }`；外部来源版本由应用提供，durableSeq 是无损十进制字符串。`parsing.imageStorage` 的处理结果直接进入 Embedding 和 Qdrant，不会绕过租户/稳定授权键。返回结果包含 snapshotId 和 images，便于宿主关联规范化来源与上传清单。sourceId 必须由应用绑定到真实授权资源，不能让客户端通过上传文件声明权限。
+`writeDocumentIndex` 也接受 `{ source, version: { generationId, durableSeq }, parsing, ... }`；外部来源版本由应用提供，durableSeq 是无损十进制字符串。`parsing.imageStorage` 的处理结果直接进入 Embedding 和 Qdrant，不会绕过用户/稳定授权键。返回结果包含 snapshotId 和 images，便于宿主关联规范化来源与上传清单。sourceId 必须由应用绑定到真实授权资源，不能让客户端通过上传文件声明权限。
 
-Qdrant 1.17.1 实测通过。collection 使用 dense Cosine；显式初始化核对已有维度与距离并建立 payload 索引。payload.content 存原文，metadata 存嵌套 locator、版本、摘要和稳定 space/user/document 键，兼容 LangChain QdrantVectorStore 默认载荷。point ID 由 tenant/document/indexVersion/ordinal 确定。写入使用 insert_only，等待每批完成，验证向量数量/维度/有限数值，返回前复核实际 point 的不可变来源与 Embedding 输入摘要。
+Qdrant 1.17.1 实测通过。collection 使用 dense Cosine；显式初始化核对已有维度与距离并建立 payload 索引。payload.content 存原文，metadata 存嵌套 locator、版本、摘要和稳定 space/user/document 键，兼容 LangChain QdrantVectorStore 默认载荷。point ID 由 user/document/indexVersion/ordinal 确定。写入使用 insert_only，等待每批完成，验证向量数量/维度/有限数值，返回前复核实际 point 的不可变来源与 Embedding 输入摘要。
 
-`updateIndexPolicy` 只向 metadata 子路径写 readAclKeys/aclRevision，以 tenant/document/indexVersion/previousRevision 精确匹配。新旧修订均为无损十进制字符串；旧更新不会覆盖已更新的修订。应用需要枚举并追赶中间修订、核对所有 point 的键/修订与数量后才提交已同步状态。普通成员增删不调用该函数或重新 Embedding，只改变 resolveScope 的查询键。新文档模式必须先由应用统一授权和安全回填，不能从 viewer 回退签发 space 键。
+`updateIndexPolicy` 只向 metadata 子路径写 readAclKeys/aclRevision，以 user/document/indexVersion/previousRevision 精确匹配。新旧修订均为无损十进制字符串；旧更新不会覆盖已更新的修订。应用需要枚举并追赶中间修订、核对所有 point 的键/修订与数量后才提交已同步状态。普通成员增删不调用该函数或重新 Embedding，只改变 resolveScope 的查询键。新文档模式必须先由应用统一授权和安全回填，不能从 viewer 回退签发 space 键。
 
-检索先取得 ID、分数和最小版本字段，首轮不读取正文、标题或 ACL 名单。应用批准候选后才批量读取精确 point ID；再次核对字段、摘要、来源与上下文预算后形成 EvidenceBundle。授权键按请求字节拆批、固定 tenant/范围，按 point ID 去重，同分候选通过排除已处理 ID 扩查。候选数、查询调用数与键数量均有硬上限；超限明确报错，空键不调用 Embedding/Qdrant，不降级为无 ACL 过滤。
+检索先取得 ID、分数和最小版本字段，首轮不读取正文、标题或 ACL 名单。应用批准候选后才批量读取精确 point ID；再次核对字段、摘要、来源与上下文预算后形成 EvidenceBundle。授权键按请求字节拆批、固定 user/范围，按 point ID 去重，同分候选通过排除已处理 ID 扩查。候选数、查询调用数与键数量均有硬上限；超限明确报错，空键不调用 Embedding/Qdrant，不降级为无 ACL 过滤。
 
 Scope 和三个授权回调只能由应用在服务端构造。包不把 ACL payload 视为权限事实，不根据用户提交的 spaceId、JWT 旧成员声明或模型输入生成授权键。候选回调必须同时检查 activeIndexVersion、generationId、durableSeq、metadataRevision、配置、删除状态及当前读取权限；aclRevision 仅表示稳定键策略修订。
 
 SDK 的 Embeddings 和 Qdrant 方法没有统一 AbortSignal 参数。应用需给客户端配置有限超时和 provider 的取消机制；包在每个调用边界检查 signal 并抑制取消后的结果，不能撤销已经发送的外部请求或费用。
 
-运行 `pnpm test:ai`，设置 `QDRANT_TEST_URL` 启用真实实例集成。测试使用随机 collection 并在 finally 删除，覆盖与 LangChain QdrantVectorStore 的兼容读取、旧构建晚到、条件策略、租户过滤、旧候选扩查和授权后正文读取。语义模型使用确定性测试 Embeddings；这不代表 Recall@K、生产容量或 2,000 人负载已验收。document_indexes、租约 Worker、tombstone、备份恢复与 SQL 发布条件属于 [app-server 集成设计](../../docs/packages/rag.md)。
+运行 `pnpm test:ai`，设置 `QDRANT_TEST_URL` 启用真实实例集成。测试使用随机 collection 并在 finally 删除，覆盖与 LangChain QdrantVectorStore 的兼容读取、旧构建晚到、条件策略、用户过滤、旧候选扩查和授权后正文读取。语义模型使用确定性测试 Embeddings；这不代表 Recall@K、生产容量或 2,000 人负载已验收。document_indexes、租约 Worker、tombstone、备份恢复与 SQL 发布条件属于 [app-server 集成设计](../../docs/packages/rag.md)。

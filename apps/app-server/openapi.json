@@ -5555,7 +5555,7 @@
                         "identityId": {
                           "type": "string"
                         },
-                        "tenantId": {
+                        "userId": {
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 128
@@ -5582,7 +5582,7 @@
                       },
                       "required": [
                         "identityId",
-                        "tenantId",
+                        "userId",
                         "username",
                         "displayName",
                         "email",
@@ -5702,7 +5702,7 @@
                     "identityId": {
                       "type": "string"
                     },
-                    "tenantId": {
+                    "userId": {
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 128
@@ -5729,7 +5729,7 @@
                   },
                   "required": [
                     "identityId",
-                    "tenantId",
+                    "userId",
                     "username",
                     "displayName",
                     "email",
@@ -5927,7 +5927,7 @@
                           "id": {
                             "type": "number"
                           },
-                          "tenantId": {
+                          "userId": {
                             "type": "string"
                           },
                           "workspaceId": {
@@ -5961,7 +5961,7 @@
                         },
                         "required": [
                           "id",
-                          "tenantId",
+                          "userId",
                           "workspaceId",
                           "documentId",
                           "actorId",
@@ -11176,7 +11176,7 @@
                               "type": "string",
                               "pattern": "^doc_[A-Za-z0-9_-]{1,64}$"
                             },
-                            "tenantId": {
+                            "userId": {
                               "type": "string"
                             },
                             "title": {
@@ -11316,7 +11316,7 @@
                           },
                           "required": [
                             "id",
-                            "tenantId",
+                            "userId",
                             "title",
                             "workspaceId",
                             "catalogId",
@@ -11655,7 +11655,7 @@
                             "type": "string",
                             "pattern": "^doc_[A-Za-z0-9_-]{1,64}$"
                           },
-                          "tenantId": {
+                          "userId": {
                             "type": "string"
                           },
                           "title": {
@@ -11809,7 +11809,7 @@
                         },
                         "required": [
                           "id",
-                          "tenantId",
+                          "userId",
                           "title",
                           "workspaceId",
                           "catalogId",
@@ -11940,7 +11940,7 @@
                       "type": "string",
                       "pattern": "^doc_[A-Za-z0-9_-]{1,64}$"
                     },
-                    "tenantId": {
+                    "userId": {
                       "type": "string"
                     },
                     "title": {
@@ -12080,7 +12080,7 @@
                   },
                   "required": [
                     "id",
-                    "tenantId",
+                    "userId",
                     "title",
                     "workspaceId",
                     "catalogId",
@@ -12196,7 +12196,7 @@
                       "type": "string",
                       "pattern": "^doc_[A-Za-z0-9_-]{1,64}$"
                     },
-                    "tenantId": {
+                    "userId": {
                       "type": "string"
                     },
                     "title": {
@@ -12336,7 +12336,7 @@
                   },
                   "required": [
                     "id",
-                    "tenantId",
+                    "userId",
                     "title",
                     "workspaceId",
                     "catalogId",
@@ -12492,7 +12492,7 @@
                       "type": "string",
                       "pattern": "^doc_[A-Za-z0-9_-]{1,64}$"
                     },
-                    "tenantId": {
+                    "userId": {
                       "type": "string"
                     },
                     "title": {
@@ -12632,7 +12632,7 @@
                   },
                   "required": [
                     "id",
-                    "tenantId",
+                    "userId",
                     "title",
                     "workspaceId",
                     "catalogId",
@@ -13724,7 +13724,7 @@
                       "type": "string",
                       "pattern": "^doc_[A-Za-z0-9_-]{1,64}$"
                     },
-                    "tenantId": {
+                    "userId": {
                       "type": "string"
                     },
                     "title": {
@@ -13864,7 +13864,7 @@
                   },
                   "required": [
                     "id",
-                    "tenantId",
+                    "userId",
                     "title",
                     "workspaceId",
                     "catalogId",
@@ -14000,7 +14000,7 @@
                       "type": "string",
                       "pattern": "^doc_[A-Za-z0-9_-]{1,64}$"
                     },
-                    "tenantId": {
+                    "userId": {
                       "type": "string"
                     },
                     "title": {
@@ -14140,7 +14140,7 @@
                   },
                   "required": [
                     "id",
-                    "tenantId",
+                    "userId",
                     "title",
                     "workspaceId",
                     "catalogId",

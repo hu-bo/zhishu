@@ -2,7 +2,7 @@ import {
   DATABASE_CONNECT_TIMEOUT_MS,
   DATABASE_POOL_MAX,
   DATABASE_QUERY_TIMEOUT_MS,
-  TENANT_MAX_ASSET_BYTES,
+  USER_MAX_ASSET_BYTES,
   loadConfig,
 } from "../config.js";
 import { createDatabase, createPool } from "../../database/index.js";
@@ -31,7 +31,7 @@ try {
   await storage.initialize();
   const service = new AssetService(new AssetRepository(createDatabase(pool)), storage, {
     maxBytes: config.ASSET_UPLOAD_MAX_BYTES,
-    maxTenantBytes: TENANT_MAX_ASSET_BYTES,
+    maxUserBytes: USER_MAX_ASSET_BYTES,
     uploadTtlSeconds: config.ASSET_UPLOAD_SESSION_TTL_SECONDS,
     accessUrlTtlSeconds: config.ASSET_ACCESS_URL_TTL_SECONDS,
     orphanRetentionSeconds: config.ASSET_ORPHAN_RETENTION_SECONDS,

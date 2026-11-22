@@ -10,11 +10,11 @@
 
 客户端可从 `@zhishu/editor-collaboration/tiptap` 使用 `createTiptapCollaborationExtension(document, field)`；`HocuspocusCollaborationSession.waitUntilSynced()` 在 provider 已连接且 state vector 同步后 resolve，不兼容、撤权、断开和超时则 reject。Provider 自动使用退避和随机抖动重连；session 的 `retry()` 可手动重新连接，重连时通过 `refreshSession` 获取新 ticket，并重放尚未确认的本地更新。core `collaborative: true` 禁止本地初始 JSON 并停用 StarterKit 普通撤销；`isTiptapCollaborationFieldEmpty()` 只供同步后检测共享 fragment 是否为空。app-server 在事务中原子初始化普通正文、新 generation 和结构投影；React sync gate 等待 Provider 同步后才挂载编辑器，协同 Block 操作通过 `structure-operation` 提交并等待 durable ack。官方要求 UniqueID editor 在 Provider 同步后挂载，且使用 collaboration 历史时关闭 StarterKit UndoRedo，参见 [Collaboration extension](https://tiptap.dev/docs/editor/extensions/functionality/collaboration) 和 [UniqueID 协同设置](https://tiptap.dev/docs/editor/extensions/functionality/uniqueid)。
 
-Provider 会读取 session ticket 中的 tenant/subject 声明，仅用于比较续期前后的主体是否一致；ticket 签名验证和访问控制仍由服务端负责。Hocuspocus session 在 ticket 到期前调用 `sendToken()` 续期，服务端要求同一租户和主体，并按新票据的只读/可写状态重新检查 ACL。宿主未提供 `refreshSession` 时，客户端在 ticket 到期时切为 denied/只读并断开。真实会话已验收双客户端 Presence 身份覆盖、断开清理、强制重连续票、无刷新器时到期转 denied，以及刷新器持续续期后会话保持可用；账号切换和 ACL 权限降级路径仍待验收。
+Provider 会读取 session ticket 中的 user/subject 声明，仅用于比较续期前后的主体是否一致；ticket 签名验证和访问控制仍由服务端负责。Hocuspocus session 在 ticket 到期前调用 `sendToken()` 续期，服务端要求同一用户和主体，并按新票据的只读/可写状态重新检查 ACL。宿主未提供 `refreshSession` 时，客户端在 ticket 到期时切为 denied/只读并断开。真实会话已验收双客户端 Presence 身份覆盖、断开清理、强制重连续票、无刷新器时到期转 denied，以及刷新器持续续期后会话保持可用；账号切换和 ACL 权限降级路径仍待验收。
 
 ### D-02 决策与持久化次序
 
-采用 `@hocuspocus/server` 4.7.x，私有部署在项目自己的 Node 服务中；官方包为 MIT 许可、要求 Node.js 22+。客户端使用匹配主版本的 Hocuspocus Provider。文档名由服务端构造为 `documentId:generationId`，客户端只提交短时 HMAC session ticket；ticket 绑定主体、tenant、文档、代次、读写权限、schemaVersion、扩展要求与过期时间，不接受请求体中的 tenant/owner 身份。HTTP session route 根据客户端报告的 schema/扩展能力与 `read`/`write` action 协商；读者取得 read-only ticket，客户端创建编辑器时必须同时设置不可编辑。连接认证按 read action 检查，写帧、durable replay 和结构命令再次检查 write；ACL 变更会关闭活动代次房间的连接，重新连接时重验权限。当前 ACL 由文档所有者管理，实际外部身份仍由宿主注入 `PrincipalAuthenticator`。
+采用 `@hocuspocus/server` 4.7.x，私有部署在项目自己的 Node 服务中；官方包为 MIT 许可、要求 Node.js 22+。客户端使用匹配主版本的 Hocuspocus Provider。文档名由服务端构造为 `documentId:generationId`，客户端只提交短时 HMAC session ticket；ticket 绑定主体、user、文档、代次、读写权限、schemaVersion、扩展要求与过期时间，不接受请求体中的 user/owner 身份。HTTP session route 根据客户端报告的 schema/扩展能力与 `read`/`write` action 协商；读者取得 read-only ticket，客户端创建编辑器时必须同时设置不可编辑。连接认证按 read action 检查，写帧、durable replay 和结构命令再次检查 write；ACL 变更会关闭活动代次房间的连接，重新连接时重验权限。当前 ACL 由文档所有者管理，实际外部身份仍由宿主注入 `PrincipalAuthenticator`。
 
 每个 SyncStep2/Update 帧通过 Hocuspocus `beforeSync` 取得 Yjs 更新字节，在应用前执行 PostgreSQL 事务：锁定 generation 行，以客户端原始帧的 SHA-256 `sourceUpdateHash` 幂等去重；服务端生成的持久化 delta 可同时包含正文和对应 Block maps，`updateHash` 则是该实际 delta 的 SHA-256。新 delta 分配严格递增的 `durableSeq` 并与两种 hash 一起提交。事务失败时 hook 抛错，服务器不得应用、广播或回执，客户端保留待确认内容。事务提交后 Hocuspocus 应用原帧；`afterHandleMessage` 再合并已持久化的 projection delta，确认它完整存在于服务端 Y.Doc 后，向文档房间广播 `persisted` stateless 帧，字段 `updateHash` 承载客户端原始帧 hash (`sourceUpdateHash`)，并携带 generationId 和 durableSeq。发送端只清除被回执覆盖的本地待确认更新，其他会话推进已知 durableSeq。
 
@@ -148,7 +148,7 @@ Awareness 用于会话级的在场状态，客户端 ID 不等于用户 ID；同
 | 恢复旧版/Schema 迁移 | 结束旧代次会话，提示保留未确认副本，再打开新代次                 | 旧 generation 更新拒绝写回，防止内容“复活” |
 | 同步状态损坏         | 暂停写入并提供重新加载/导出路径                                  | 保留诊断与原始数据，不自动清空线上文档     |
 
-持久离线缓存以后按 tenant/user/document/generation 隔离，默认由部署策略显式允许；退出、切换用户和撤权时执行清理/隔离规则。缓存重连必须重新授权，不能将本地缓存存在视为写入资格。
+持久离线缓存以后按 user/user/document/generation 隔离，默认由部署策略显式允许；退出、切换用户和撤权时执行清理/隔离规则。缓存重连必须重新授权，不能将本地缓存存在视为写入资格。
 
 `HocuspocusCollaborationSession.getPendingUpdateBytes()` 返回未获得 durable ack 的原生更新副本，包含异步计算哈希中的更新，不包含凭据。`restorePendingUpdates()` 仅在连接、同步且可写时应用更新；宿主先核对身份、权限、generation、Schema 和基础结构修订，并通过 `waitForPersisted()` 等待确认。不能用旧整文投影替代增量恢复。
 

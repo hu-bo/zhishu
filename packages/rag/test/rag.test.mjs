@@ -142,7 +142,7 @@ test("empty authorization keys skip query embedding and Qdrant entirely", async 
     index,
     embeddings,
     client: {},
-    resolveScope: async () => ({ tenantId: "t", workspaceIds: ["s"], readAclKeys: [] }),
+    resolveScope: async () => ({ userId: "t", workspaceIds: ["s"], readAclKeys: [] }),
     authorizeCandidates: async () => {
       throw new Error("unreachable");
     },
@@ -160,7 +160,7 @@ test("empty authorization keys skip query embedding and Qdrant entirely", async 
   assert.equal(embeddings.queries, 0);
 });
 test(
-  "real Qdrant insert_only, conditional nested policy, projection-first authorization, tenant isolation and stale candidate expansion",
+  "real Qdrant insert_only, conditional nested policy, projection-first authorization, user isolation and stale candidate expansion",
   { skip: !process.env.QDRANT_TEST_URL },
   async () => {
     const client = new QdrantClient({
@@ -176,7 +176,7 @@ test(
         embeddings,
         options: index,
         snapshot: snapshot(),
-        tenantId: "tenant_a",
+        userId: "user_a",
         workspaceId: "space_a",
         documentTitle: "测试文档",
         indexVersion: "v1",
@@ -187,9 +187,9 @@ test(
       };
       const result = await writeDocumentIndex(base);
       assert.equal(result.chunkCount, 1);
-      await writeDocumentIndex({ ...base, tenantId: "tenant_b" });
+      await writeDocumentIndex({ ...base, userId: "user_b" });
       await writeDocumentIndex({ ...base, indexVersion: "stale" });
-      const id = deterministicPointId("tenant_a", "doc_test", "v1", 0);
+      const id = deterministicPointId("user_a", "doc_test", "v1", 0);
       await updateIndexPolicy({
         ...base,
         documentId: "doc_test",
@@ -220,7 +220,7 @@ test(
       assert.ok(
         (
           await store.similaritySearch("中文", 1, {
-            must: [{ key: "metadata.tenantId", match: { value: "tenant_a" } }],
+            must: [{ key: "metadata.userId", match: { value: "user_a" } }],
           })
         )[0].pageContent.includes("中文"),
       );
@@ -239,7 +239,7 @@ test(
         candidateLimit: 1,
         maxCandidates: 8,
         resolveScope: async () => ({
-          tenantId: "tenant_a",
+          userId: "user_a",
           workspaceIds: ["space_a"],
           readAclKeys: ["space:space_a", "document:doc_test"],
         }),
@@ -250,7 +250,7 @@ test(
               (c) =>
                 !Object.hasOwn(c, "content") &&
                 !Object.hasOwn(c, "headingPath") &&
-                c.tenantId === "tenant_a",
+                c.userId === "user_a",
             ),
           );
           return candidates.filter((c) => allowed && c.indexVersion === "v1").map((c) => c.pointId);
@@ -304,7 +304,7 @@ test(
         embeddings,
         client,
         resolveScope: async () => ({
-          tenantId: "tenant_a",
+          userId: "user_a",
           workspaceIds: ["space_a"],
           documentIds: ["doc_csv"],
           readAclKeys: ["space:space_a"],

@@ -20,7 +20,7 @@ const PROJECTION_LEASE_MS = 30_000;
 
 export async function insertEmptyProjectionSnapshot(
   executor: Pick<Database, "insert">,
-  input: { tenantId: string; documentId: string; generationId: string },
+  input: { userId: string; documentId: string; generationId: string },
 ): Promise<void> {
   await executor.insert(documentProjectionSnapshots).values({
     ...input,
@@ -35,7 +35,7 @@ export async function insertEmptyProjectionSnapshot(
 export async function insertProjectionOutbox(
   executor: ProjectionOutboxExecutor,
   input: {
-    tenantId: string;
+    userId: string;
     documentId: string;
     generationId: string;
     durableSeq: number;
@@ -45,7 +45,7 @@ export async function insertProjectionOutbox(
   },
 ): Promise<void> {
   await executor.insert(documentOutbox).values({
-    tenantId: input.tenantId,
+    userId: input.userId,
     documentId: input.documentId,
     generationId: input.generationId,
     durableSeq: input.durableSeq,
@@ -78,7 +78,7 @@ type ProjectionOutboxExecutor = Pick<Database, "insert" | "update">;
 export type ClaimedProjectionJob = {
   id: string;
   leaseToken: string;
-  tenantId: string;
+  userId: string;
   documentId: string;
   generationId: string;
   durableSeq: number;
@@ -139,7 +139,7 @@ export class DocumentProjectionRepository {
       return {
         id: claimed.id,
         leaseToken,
-        tenantId: claimed.tenantId,
+        userId: claimed.userId,
         documentId: claimed.documentId,
         generationId: claimed.generationId,
         durableSeq: claimed.durableSeq,
@@ -169,7 +169,7 @@ export class DocumentProjectionRepository {
       await tx
         .insert(documentProjectionSnapshots)
         .values({
-          tenantId: job.tenantId,
+          userId: job.userId,
           documentId: job.documentId,
           generationId: job.generationId,
           durableSeq: job.durableSeq,
@@ -181,7 +181,7 @@ export class DocumentProjectionRepository {
         })
         .onConflictDoUpdate({
           target: [
-            documentProjectionSnapshots.tenantId,
+            documentProjectionSnapshots.userId,
             documentProjectionSnapshots.documentId,
             documentProjectionSnapshots.generationId,
           ],
@@ -260,7 +260,7 @@ export class DocumentProjectionRepository {
   }
 
   async backfillProjectionSnapshot(input: {
-    tenantId: string;
+    userId: string;
     documentId: string;
     generationId: string;
     durableSeq: number;
@@ -273,7 +273,7 @@ export class DocumentProjectionRepository {
     const [row] = await this.db
       .insert(documentProjectionSnapshots)
       .values({
-        tenantId: input.tenantId,
+        userId: input.userId,
         documentId: input.documentId,
         generationId: input.generationId,
         durableSeq: input.durableSeq,
@@ -285,7 +285,7 @@ export class DocumentProjectionRepository {
       })
       .onConflictDoUpdate({
         target: [
-          documentProjectionSnapshots.tenantId,
+          documentProjectionSnapshots.userId,
           documentProjectionSnapshots.documentId,
           documentProjectionSnapshots.generationId,
         ],

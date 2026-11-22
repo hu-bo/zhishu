@@ -25,7 +25,7 @@
 
 ## 3. 公共数据形状
 
-以下 TypeScript 展示拟定导出形状，实现时由 Schema 派生。`requestId` 标识一轮生成；取消后重新生成使用新 ID，checkpoint 恢复沿用原 ID 和不可变输入。网络重发沿用同一 ID，服务端按租户、主体、requestId 判定幂等并比对请求摘要，同 ID 不同输入返回冲突；发起会话作为任务元信息记录。requestId 不承担授权，也不替代 HTTP trace ID。threadId/checkpoint_id 属于服务端 SDK 装配，不进入公共请求。
+以下 TypeScript 展示拟定导出形状，实现时由 Schema 派生。`requestId` 标识一轮生成；取消后重新生成使用新 ID，checkpoint 恢复沿用原 ID 和不可变输入。网络重发沿用同一 ID，服务端按用户、主体、requestId 判定幂等并比对请求摘要，同 ID 不同输入返回冲突；发起会话作为任务元信息记录。requestId 不承担授权，也不替代 HTTP trace ID。threadId/checkpoint_id 属于服务端 SDK 装配，不进入公共请求。
 
 ```ts
 import type { Anchor, OperationBatch } from "@zhishu/document-contracts";

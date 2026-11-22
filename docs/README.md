@@ -233,7 +233,7 @@ LangGraph 随 Deep Agents 作为底层运行依赖保留；首期启用官方 Po
 | 向量 RAG                       | document_indexes                      | 一篇文档一行，管理正文/ACL 目标、领取重试、发布与清理         |
 | 向量 RAG                       | zhishu_chunks_v1（Qdrant collection） | 切片文本、向量、来源定位、完整版本和 ACL payload；不是 SQL 表 |
 
-Qdrant point 保存文本、向量、来源定位和稳定 readAclKeys：团队继承文档用 space 键，个人文档用 user 键并预置 document 键供单篇分享，受限文档只用 document 键。服务端按当前空间成员与独立文档授权计算可用键，强制租户/范围/键过滤，再实时复核。普通加人/踢人只更新 PostgreSQL 关系，不修改 points、不同步名单或向量；只有模式/归属使资源键变化时才登记策略更新。旧文档按 restricted 保留原显式授权，团队继承显式启用；该变化必须统一应用于 HTTP/WS/搜索/AI 权限，不能只改检索。详见 [rag](packages/rag.md)。
+Qdrant point 保存文本、向量、来源定位和稳定 readAclKeys：团队继承文档用 space 键，个人文档用 user 键并预置 document 键供单篇分享，受限文档只用 document 键。服务端按当前空间成员与独立文档授权计算可用键，强制用户/范围/键过滤，再实时复核。普通加人/踢人只更新 PostgreSQL 关系，不修改 points、不同步名单或向量；只有模式/归属使资源键变化时才登记策略更新。旧文档按 restricted 保留原显式授权，团队继承显式启用；该变化必须统一应用于 HTTP/WS/搜索/AI 权限，不能只改检索。详见 [rag](packages/rag.md)。
 
 恢复所需的有界原始输入留在 ai_runs，模型/分块参数为应用配置。官方四表仍放在 PostgreSQL 的 ai_checkpoint schema，不因采用 Qdrant 改为自研 Saver；不新增 threads、tasks、proposals、task_events、Store、检索 ACL 表、knowledge_sources、source_snapshots、index_jobs 或 index_generations。字段与索引见 [app-server](apps/app-server.md#91-checkpoint-的最小表设计待审)，恢复和清理见 [ai-runtime](packages/ai-runtime.md)。
 

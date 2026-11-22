@@ -21,7 +21,7 @@ import type { StructureReceipt } from "@zhishu/document-contracts";
 
 export interface ConversationRow {
   id: string;
-  tenantId: string;
+  userId: string;
   identityId: string | null;
   visitorId: string | null;
   siteId: string | null;
@@ -39,7 +39,7 @@ export interface ConversationRow {
 
 export interface RunRow {
   id: string;
-  tenantId: string;
+  userId: string;
   conversationId: string;
   idempotencyKey: string;
   inputHash: string;
@@ -60,7 +60,7 @@ export interface RunRow {
 
 export interface MessageRow {
   id: string;
-  tenantId: string;
+  userId: string;
   conversationId: string;
   runId: string;
   role: "user" | "assistant";
@@ -74,7 +74,7 @@ export interface MessageRow {
 
 export interface ArtifactRow {
   id: string;
-  tenantId: string;
+  userId: string;
   conversationId: string;
   runId: string;
   producerCallId: string;

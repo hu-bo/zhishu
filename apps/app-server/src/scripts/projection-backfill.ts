@@ -30,7 +30,7 @@ let alreadyCurrent = 0;
 try {
   const activeGenerations = await db
     .select({
-      tenantId: documents.tenantId,
+      userId: documents.userId,
       documentId: documents.id,
       generationId: documentGenerations.id,
       durableSeq: documentGenerations.durableSeq,
@@ -58,7 +58,7 @@ try {
       );
       const content = projectDocumentContent(ydoc);
       const changed = await projections.backfillProjectionSnapshot({
-        tenantId: row.tenantId,
+        userId: row.userId,
         documentId: row.documentId,
         generationId: row.generationId,
         durableSeq: row.durableSeq,

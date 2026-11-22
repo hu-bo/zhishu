@@ -16,7 +16,7 @@ export function KnowledgeWorkspaceProvider({
   authPending: boolean;
   children: React.ReactNode;
 }) {
-  const identityKey = user ? `${user.tenantId}:${user.identityId}` : 'anonymous';
+  const identityKey = user ? `${user.userId}:${user.identityId}` : 'anonymous';
   const queryClient = useQueryClient();
   const authorization = useQuery({
     queryKey: ['authorization-state', identityKey],

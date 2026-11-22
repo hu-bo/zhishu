@@ -15,7 +15,7 @@
 | ai-qa 是有界问答流程，ai-writing 内有 DSH runtime、写作和检索工具          | [问答流程](../../packages/ai-qa/src/flow.ts)、[写作 runtime](../../packages/ai-writing/src/runtime/kernel.ts)                                                               | 统一模型与工具编排，迁移有效校验和恢复逻辑，不再保留两个产品执行器             |
 | 写作已经能检索平台知识库，不是缺少 RAG 接入                                | [平台工具](../../packages/ai-writing/src/tools/platform.ts)、[写作服务](../../apps/app-server/src/modules/writing/writing.service.ts)                                       | 将检索和引用作为同一 Agent 可组合的插件能力                                    |
 | 根装配分别构造问答模型、写作服务和调度；产品存储已共享                     | [根装配](../../apps/app-server/src/ai-systems.ts)、[共享存储](../../apps/app-server/src/modules/ai/ai.service.ts)、[调度](../../apps/app-server/src/modules/ai/dispatch.ts) | 一个产品调度和 Agent 接入，继续复用 repository、预算、事件及授权               |
-| purpose=qa/writing 进入会话、Run、产物和原生日志外键，qa 只能产生 evidence | [AI 表](../../apps/app-server/database/schema/ai.table.ts)、[原生日志表](../../apps/app-server/database/schema/writing.table.ts)                                            | 删除用途分叉及其约束，保留租户、会话外键和公开入口限制                         |
+| purpose=qa/writing 进入会话、Run、产物和原生日志外键，qa 只能产生 evidence | [AI 表](../../apps/app-server/database/schema/ai.table.ts)、[原生日志表](../../apps/app-server/database/schema/writing.table.ts)                                            | 删除用途分叉及其约束，保留用户、会话外键和公开入口限制                         |
 | 创作页一直预留左侧区域，右侧切换两个 Chat；问答转写作会新建会话            | [创作页](../../apps/app-web/src/features/writing/creation-page.tsx)                                                                                                         | 初始完整 Chat，意图切换不换会话，用户创建草稿后才展开编辑器                    |
 | 自由草稿是页面 draftText 及 Markdown 预览，创建文档后离开工作台            | [草稿预览](../../apps/app-web/src/features/writing/writing-draft.tsx)                                                                                                       | 草稿绑定服务端真实文档，在原页面、原对话继续编辑；不以本地字符串决定已创建状态 |
 | 已有文档导入会校验内容、构建协同初始状态并幂等创建文档                     | [文档服务](../../apps/app-server/src/modules/documents/document.service.ts)                                                                                                 | 复用初始化能力，补上与会话绑定联合提交的真实事务边界                           |
@@ -216,7 +216,7 @@ rag 和 research 复用同一份平台搜索/读取工具，不分别实现 keyw
 | -------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | ai_conversations                             | 同名          | 删除 qa/writing purpose 及强制跨用途交接的 origin；保留所有权、scopeSelection、contextRevision、targetDocumentId、配置、幂等与状态 |
 | ai_runs                                      | 同名          | 删除 purpose，统一 context/execution，保留输入身份、租约、状态、attempt、用量和错误                                                |
-| ai_messages                                  | 同名          | 继续通过同租户/会话的 Run 外键存用户和助手消息，保留结构化引用                                                                     |
+| ai_messages                                  | 同名          | 继续通过同一用户/会话的 Run 外键存用户和助手消息，保留结构化引用                                                                   |
 | ai_artifacts                                 | 同名          | 删除 purpose 及 qa-only 限制，仍只存 evidence/draft/proposal/image 及其真实应用状态                                                |
 | ai_events                                    | 同名          | 保留紧凑产品 outbox，不保存整份会话/正文快照                                                                                       |
 | writing_sessions                             | ai_sessions   | 重命名并删除 writing-only 字段/外键，供所有 DSH 会话使用                                                                           |
@@ -231,7 +231,7 @@ rag 和 research 复用同一份平台搜索/读取工具，不分别实现 keyw
 
 不以 purpose 决定执行器或允许的产物。内部/公开策略由当前身份和 siteId 构造；siteId 非空的会话必须没有 targetDocumentId，服务器的公共命令白名单同时拒绝草稿创建、编辑、图片和联网。所有权/siteId 创建后不能被客户端转换，访客不能借切换意图变成内部会话。
 
-保留 tenantId/id 及会话/Run 复合唯一键，子表仍通过租户与会话外键防止错绑。删除 purpose 相关冗余唯一键和 CHECK 后，补齐不含 purpose 的对应约束；不能简单 drop 外键就让跨租户关系失去约束。身份与访客互斥，匿名必须绑定站点，creationKey 的唯一索引继续正确处理 siteId 为 NULL 的内部场景。
+保留 userId/id 及会话/Run 复合唯一键，子表仍通过用户与会话外键防止错绑。删除 purpose 相关冗余唯一键和 CHECK 后，补齐不含 purpose 的对应约束；不能简单 drop 外键就让跨用户关系失去约束。身份与访客互斥，匿名必须绑定站点，creationKey 的唯一索引继续正确处理 siteId 为 NULL 的内部场景。
 
 同一会话依旧只允许一个活跃 Run，有界排队。用户消息和 Run 在同一短事务受理，引用方向为 conversation → Run → message，不增加 inputMessageId 循环引用。用户消息正文只存一次，幂等重试比对原始请求 inputHash。
 
@@ -261,7 +261,7 @@ artifact 身份归 id/runId，WritingProposalPayload 不复制 requestId/proposa
 
 ### 8.2 平台检索与问答门槛
 
-继续使用同一个 rag 服务、索引 Worker、Embedding 和 Qdrant collection。范围由服务器当前授权与选择求交，向量 ACL 只作预过滤；候选和交付证据复核租户、真实文档归属、权限及当前持久化/索引版本。
+继续使用同一个 rag 服务、索引 Worker、Embedding 和 Qdrant collection。范围由服务器当前授权与选择求交，向量 ACL 只作预过滤；候选和交付证据复核用户、真实文档归属、权限及当前持久化/索引版本。
 
 RAG 插件的知识事实回答必须经过检索/证据校验并带有效引用。确定性前置检索或结果门槛由 runtime/宿主保证，不能因为只有一个 Agent 就把检索变成可以被模型跳过的提示。无依据、索引未就绪和服务故障保持独立状态。
 
@@ -365,7 +365,7 @@ AI 原生完成、证据就绪、产品消息提交、文档初始化、用户�
 | ai-qa/ai-writing 双执行器、两套直接模型装配、重复调度/缓存/transport                   | 一个 DSH 执行与一份产品存储/计量/事件               |
 | 参考版 legacy-authoring、createChatRuntime 旧图、Deep Agents、PostgresSaver 及兼容出口 | LangChain 中真实用于分块/Embedding/Qdrant 的组件    |
 | ChatRecord/ChatStore 的完整产品快照、整份 snapshot 事件、旧事件解析                    | SDK 当前原生日志、紧凑产品 outbox 与规范化消息      |
-| purpose 分叉、qa-only 产物限制、写作专属原生日志约束、handoff API                      | 租户/会话外键、当前授权、公开能力上限和文档目标约束 |
+| purpose 分叉、qa-only 产物限制、写作专属原生日志约束、handoff API                      | 用户/会话外键、当前授权、公开能力上限和文档目标约束 |
 | 固定 free 草稿身份、前端本地正文作为“已创建”事实、隐藏空文档                           | Run/operationId 幂等、实际文档绑定、协同持久化回执  |
 | 同名包转发新旧实现、旧路由别名、根据旧版本补字段/选择旧执行器                          | 当前单一 Schema、明确错误、必要的离线迁移           |
 
@@ -431,7 +431,7 @@ erDiagram
   AI_RUNS ||--o{ AI_IMAGE_JOBS : external_effects
 ```
 
-外键包含 tenantId 及会话/来源定位。targetDocumentId 指向真实可编辑文档，公开会话必须为空。document_indexes 保留逻辑文档定位和 tombstone 清理，不因源文档删除被历史引用外键阻止；Qdrant 不参与 SQL 外键。
+外键包含 userId 及会话/来源定位。targetDocumentId 指向真实可编辑文档，公开会话必须为空。document_indexes 保留逻辑文档定位和 tombstone 清理，不因源文档删除被历史引用外键阻止；Qdrant 不参与 SQL 外键。
 
 ```mermaid
 flowchart LR

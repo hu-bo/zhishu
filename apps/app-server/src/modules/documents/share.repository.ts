@@ -23,7 +23,7 @@ const SHARE_INVALID_MESSAGE = "分享链接已失效或已被撤销";
 export type SharePermission = "read" | "edit";
 
 type ShareRow = {
-  tenantId: string;
+  userId: string;
   id: string;
   documentId: string;
   permission: string;
@@ -40,7 +40,7 @@ export type PublicShareState = "active" | "expired" | "revoked" | "unknown";
 // Left-joined shape: every document/generation column is nullable until narrowed.
 type ShareWithDocumentRow = {
   shareId: string;
-  tenantId: string;
+  userId: string;
   documentId: string;
   permission: string;
   expiresAt: Date;
@@ -73,7 +73,7 @@ export type PublicShareDetail = {
 };
 
 export type PublicShareDocument = {
-  tenantId: string;
+  userId: string;
   documentId: string;
   title: string;
   icon: string | null;
@@ -109,7 +109,7 @@ function shareActions(permission: string): readonly PermissionAction[] {
 
 function grantorCanDelegateSql() {
   const principal = {
-    tenantId: sql`document_shares.tenant_id`,
+    userId: sql`document_shares.user_id`,
     identityId: sql`document_shares.created_by`,
   };
   return sql<boolean>`(${documentActionSql(principal, "read", undefined, false)} and ${documentActionSql(principal, "share", undefined, false)}
@@ -124,13 +124,13 @@ export class ShareRepository {
 
   async create(principal: Principal, documentId: string, input: CreateShareInput) {
     return this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
       const [document] = await tx
         .select({ id: documents.id })
         .from(documents)
         .where(
           and(
-            eq(documents.tenantId, principal.tenantId),
+            eq(documents.userId, principal.userId),
             eq(documents.id, documentId),
             eq(documents.status, "active"),
             documentActionSql(principal, "share"),
@@ -149,7 +149,7 @@ export class ShareRepository {
       const [row] = await tx
         .insert(documentShares)
         .values({
-          tenantId: principal.tenantId,
+          userId: principal.userId,
           id,
           documentId,
           permission: input.permission,
@@ -160,7 +160,7 @@ export class ShareRepository {
         .returning();
       if (!row) throw new Error("Share insert returned no row");
       await tx.insert(documentAuditEvents).values({
-        tenantId: principal.tenantId,
+        userId: principal.userId,
         actorIdentityId: principal.identityId,
         action: "document.share-created",
         resourceId: documentId,
@@ -173,7 +173,7 @@ export class ShareRepository {
   async list(principal: Principal, documentId: string) {
     const document = await this.documents.findActiveForAction(
       documentId,
-      principal.tenantId,
+      principal.userId,
       principal.identityId,
       "share",
     );
@@ -182,10 +182,7 @@ export class ShareRepository {
       .select()
       .from(documentShares)
       .where(
-        and(
-          eq(documentShares.tenantId, principal.tenantId),
-          eq(documentShares.documentId, documentId),
-        ),
+        and(eq(documentShares.userId, principal.userId), eq(documentShares.documentId, documentId)),
       )
       .orderBy(desc(documentShares.createdAt), desc(documentShares.id))
       .limit(50);
@@ -194,13 +191,13 @@ export class ShareRepository {
 
   async revoke(principal: Principal, documentId: string, shareId: string): Promise<void> {
     await this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
       const [share] = await tx
         .select()
         .from(documentShares)
         .where(
           and(
-            eq(documentShares.tenantId, principal.tenantId),
+            eq(documentShares.userId, principal.userId),
             eq(documentShares.documentId, documentId),
             eq(documentShares.id, shareId),
           ),
@@ -216,9 +213,9 @@ export class ShareRepository {
       await tx
         .update(documentShares)
         .set({ revokedAt: new Date() })
-        .where(and(eq(documentShares.tenantId, share.tenantId), eq(documentShares.id, shareId)));
+        .where(and(eq(documentShares.userId, share.userId), eq(documentShares.id, shareId)));
       await tx.insert(documentAuditEvents).values({
-        tenantId: principal.tenantId,
+        userId: principal.userId,
         actorIdentityId: principal.identityId,
         action: "document.share-revoked",
         resourceId: documentId,
@@ -228,14 +225,14 @@ export class ShareRepository {
   }
 
   /**
-   * Capability lookup by share id alone (no tenant known for anonymous callers).
+   * Capability lookup by share id alone (no user known for anonymous callers).
    * The 128-bit UUID id is the capability; a miss never reveals which part failed.
    */
   private async findShareWithDocument(shareId: string) {
     const [row] = await this.db
       .select({
         shareId: documentShares.id,
-        tenantId: documentShares.tenantId,
+        userId: documentShares.userId,
         documentId: documentShares.documentId,
         permission: documentShares.permission,
         kind: documentShares.kind,
@@ -254,7 +251,7 @@ export class ShareRepository {
       .leftJoin(
         documents,
         and(
-          eq(documents.tenantId, documentShares.tenantId),
+          eq(documents.userId, documentShares.userId),
           eq(documents.id, documentShares.documentId),
         ),
       )
@@ -285,7 +282,7 @@ export class ShareRepository {
     )
       return null;
     return {
-      tenantId: row.tenantId,
+      userId: row.userId,
       documentId: row.documentId,
       title: row.title,
       icon: row.icon,
@@ -351,7 +348,7 @@ export class ShareRepository {
     const document = await this.requireActivePublicDocument(shareId);
     // Anonymous visitors are always read-only; the edit tier only applies after join.
     const snapshot = await this.documents.findProjectionContentSnapshot(
-      document.tenantId,
+      document.userId,
       document.documentId,
       document.generationId,
     );
@@ -380,7 +377,7 @@ export class ShareRepository {
       .from(assets)
       .where(
         and(
-          eq(assets.tenantId, document.tenantId),
+          eq(assets.userId, document.userId),
           eq(assets.id, assetId),
           eq(assets.documentId, document.documentId),
           eq(assets.status, "ready"),
@@ -396,16 +393,16 @@ export class ShareRepository {
     shareId: string,
   ): Promise<{ joined: boolean; documentId: string }> {
     return this.db.transaction(async (tx) => {
-      // Same tenant lock as membership, policy, access-mode and tree mutations.
+      // Same user lock as membership, policy, access-mode and tree mutations.
       // Recheck all authority after locking; a preflight read is never sufficient.
-      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
       const [share] = await tx
         .select()
         .from(documentShares)
-        .where(and(eq(documentShares.tenantId, principal.tenantId), eq(documentShares.id, shareId)))
+        .where(and(eq(documentShares.userId, principal.userId), eq(documentShares.id, shareId)))
         .for("update")
         .limit(1);
-      if (!share || share.tenantId !== principal.tenantId)
+      if (!share || share.userId !== principal.userId)
         throw new DomainError("NOT_FOUND", SHARE_INVALID_MESSAGE);
       if (shareState(share, new Date()) !== "active")
         throw new DomainError("NOT_FOUND", SHARE_INVALID_MESSAGE);
@@ -414,7 +411,7 @@ export class ShareRepository {
         .from(documents)
         .where(
           and(
-            eq(documents.tenantId, share.tenantId),
+            eq(documents.userId, share.userId),
             eq(documents.id, share.documentId),
             eq(documents.status, "active"),
           ),
@@ -424,7 +421,7 @@ export class ShareRepository {
       if (!document) throw new DomainError("NOT_FOUND", SHARE_INVALID_MESSAGE);
 
       const actions = shareActions(share.permission);
-      const grantor = { tenantId: share.tenantId, identityId: share.createdBy };
+      const grantor = { userId: share.userId, identityId: share.createdBy };
       for (const action of ["share" as const, ...actions])
         if (!(await hasDocumentPermission(tx, grantor, share.documentId, action)))
           throw new DomainError("NOT_FOUND", SHARE_INVALID_MESSAGE);
@@ -434,13 +431,11 @@ export class ShareRepository {
         .innerJoin(
           documents,
           and(
-            eq(documents.tenantId, documentShares.tenantId),
+            eq(documents.userId, documentShares.userId),
             eq(documents.id, documentShares.documentId),
           ),
         )
-        .where(
-          and(eq(documentShares.tenantId, principal.tenantId), eq(documentShares.id, shareId)),
-        );
+        .where(and(eq(documentShares.userId, principal.userId), eq(documentShares.id, shareId)));
       if (!delegation?.allowed) throw new DomainError("NOT_FOUND", SHARE_INVALID_MESSAGE);
       const alreadyAllowed: boolean[] = [];
       for (const action of actions)
@@ -452,7 +447,7 @@ export class ShareRepository {
         const grants = await tx
           .insert(resourceAcl)
           .values({
-            tenantId: principal.tenantId,
+            userId: principal.userId,
             documentId: share.documentId,
             identityId: principal.identityId,
             role: action,
@@ -467,10 +462,10 @@ export class ShareRepository {
       await tx
         .update(documentShares)
         .set({ joinCount: sql`${documentShares.joinCount} + 1` })
-        .where(and(eq(documentShares.tenantId, share.tenantId), eq(documentShares.id, shareId)));
+        .where(and(eq(documentShares.userId, share.userId), eq(documentShares.id, shareId)));
       await insertNotifications(tx, [
         {
-          tenantId: principal.tenantId,
+          userId: principal.userId,
           actorId: share.createdBy,
           recipientId: principal.identityId,
           type: "share",
@@ -480,7 +475,7 @@ export class ShareRepository {
         },
       ]);
       await tx.insert(documentAuditEvents).values({
-        tenantId: principal.tenantId,
+        userId: principal.userId,
         actorIdentityId: principal.identityId,
         action: "document.acl-updated",
         resourceId: share.documentId,

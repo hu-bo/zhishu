@@ -54,13 +54,13 @@ export class KnowledgeService {
   }
   async move(principal: Principal, documentId: string, input: KnowledgeMoveInput) {
     const result = await this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
       const [document] = await tx
         .select()
         .from(documents)
         .where(
           and(
-            eq(documents.tenantId, principal.tenantId),
+            eq(documents.userId, principal.userId),
             eq(documents.id, documentId),
             eq(documents.status, "active"),
             documentActionSql(principal, "move"),
@@ -71,14 +71,12 @@ export class KnowledgeService {
       if (!document) throw new DomainError("NOT_FOUND", "Document not found");
       if (document.metadataRevision !== input.metadataRevision)
         throw new DomainError("CONFLICT", "Document location changed");
-      const oldRecipients = await documentRecipients(tx, principal.tenantId, documentId);
+      const oldRecipients = await documentRecipients(tx, principal.userId, documentId);
       await requireWorkspaceOrganizer(tx, principal, input.workspaceId);
       const [workspace] = await tx
         .select({ id: workspaces.id, kind: workspaces.kind })
         .from(workspaces)
-        .where(
-          and(eq(workspaces.tenantId, principal.tenantId), eq(workspaces.id, input.workspaceId)),
-        )
+        .where(and(eq(workspaces.userId, principal.userId), eq(workspaces.id, input.workspaceId)))
         .limit(1);
       if (!workspace) throw new DomainError("NOT_FOUND", "Workspace not found");
       const [catalog] = await tx
@@ -86,7 +84,7 @@ export class KnowledgeService {
         .from(catalogs)
         .where(
           and(
-            eq(catalogs.tenantId, principal.tenantId),
+            eq(catalogs.userId, principal.userId),
             eq(catalogs.id, input.catalogId),
             eq(catalogs.workspaceId, input.workspaceId),
             catalogActionSql(principal, "write"),
@@ -103,13 +101,13 @@ export class KnowledgeService {
         if (preview.token !== input.authorizationPreview)
           throw new DomainError("CONFLICT", "请确认最新的跨空间权限影响预览后再移动");
         // Dissolve any public site approval for this document before changing its owner space.
-        await this.publicLinkage?.detachDocuments(tx, principal.tenantId, [documentId]);
+        await this.publicLinkage?.detachDocuments(tx, principal.userId, [documentId]);
         await tx
           .update(documentShares)
           .set({ revokedAt: new Date() })
           .where(
             and(
-              eq(documentShares.tenantId, principal.tenantId),
+              eq(documentShares.userId, principal.userId),
               eq(documentShares.documentId, documentId),
             ),
           );
@@ -119,7 +117,7 @@ export class KnowledgeService {
         .from(documents)
         .where(
           and(
-            eq(documents.tenantId, principal.tenantId),
+            eq(documents.userId, principal.userId),
             eq(documents.catalogId, input.catalogId),
             eq(documents.status, "active"),
             ne(documents.id, documentId),
@@ -135,7 +133,7 @@ export class KnowledgeService {
       order.splice(insertIndex, 0, documentId);
       // One statement keeps order changes bounded even for large sibling groups.
       await tx.execute(
-        sql`update documents d set position = ordered.ordinality - 1 from unnest(${sql.param(order)}::text[]) with ordinality as ordered(id, ordinality) where d.tenant_id = ${principal.tenantId} and d.id = ordered.id`,
+        sql`update documents d set position = ordered.ordinality - 1 from unnest(${sql.param(order)}::text[]) with ordinality as ordered(id, ordinality) where d.user_id = ${principal.userId} and d.id = ordered.id`,
       );
       await tx
         .update(documents)
@@ -151,18 +149,18 @@ export class KnowledgeService {
           metadataRevision: document.metadataRevision + 1,
           updatedAt: new Date(),
         })
-        .where(and(eq(documents.tenantId, principal.tenantId), eq(documents.id, documentId)));
-      await requireDocumentManager(tx, principal.tenantId, documentId);
+        .where(and(eq(documents.userId, principal.userId), eq(documents.id, documentId)));
+      await requireDocumentManager(tx, principal.userId, documentId);
       if (document.workspaceId !== input.workspaceId) {
         const recipients = new Set([
           ...oldRecipients,
-          ...(await documentRecipients(tx, principal.tenantId, documentId)),
+          ...(await documentRecipients(tx, principal.userId, documentId)),
         ]);
         const eventKey = `document-moved:${randomUUID()}`;
         await insertNotifications(
           tx,
           [...recipients].map((recipientId) => ({
-            tenantId: principal.tenantId,
+            userId: principal.userId,
             actorId: principal.identityId,
             recipientId,
             type: "permission",
@@ -174,7 +172,7 @@ export class KnowledgeService {
         );
       }
       await tx.insert(documentAuditEvents).values({
-        tenantId: principal.tenantId,
+        userId: principal.userId,
         actorIdentityId: principal.identityId,
         action: "document.title-updated",
         resourceId: documentId,
@@ -187,7 +185,7 @@ export class KnowledgeService {
       });
       return { metadataRevision: document.metadataRevision + 1 };
     });
-    await this.sessions.document(principal.tenantId, documentId);
+    await this.sessions.document(principal.userId, documentId);
     return result;
   }
   async search(principal: Principal, input: KnowledgeSearchInput) {
@@ -224,7 +222,7 @@ export class KnowledgeService {
       .from(documents)
       .innerJoin(
         workspaces,
-        and(eq(workspaces.tenantId, documents.tenantId), eq(workspaces.id, documents.workspaceId)),
+        and(eq(workspaces.userId, documents.userId), eq(workspaces.id, documents.workspaceId)),
       )
       .innerJoin(
         documentGenerations,
@@ -236,14 +234,14 @@ export class KnowledgeService {
       .leftJoin(
         documentProjectionSnapshots,
         and(
-          eq(documentProjectionSnapshots.tenantId, documents.tenantId),
+          eq(documentProjectionSnapshots.userId, documents.userId),
           eq(documentProjectionSnapshots.documentId, documents.id),
           eq(documentProjectionSnapshots.generationId, documentGenerations.id),
         ),
       )
       .where(
         and(
-          eq(documents.tenantId, principal.tenantId),
+          eq(documents.userId, principal.userId),
           eq(documents.status, "active"),
           readable(principal),
           ...(input.workspaceId ? [eq(documents.workspaceId, input.workspaceId)] : []),
@@ -275,14 +273,14 @@ export class KnowledgeService {
     const presets = createKnowledgePresets();
     return this.db.transaction(async (tx) => {
       await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`document-quota:${principal.tenantId}`}, 718267))`,
+        sql`select pg_advisory_xact_lock(hashtextextended(${`document-quota:${principal.userId}`}, 718267))`,
       );
-      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
       const access = await requireWorkspaceOrganizer(tx, principal, workspaceId);
       const [workspace] = await tx
         .select({ id: workspaces.id })
         .from(workspaces)
-        .where(and(eq(workspaces.tenantId, principal.tenantId), eq(workspaces.id, workspaceId)))
+        .where(and(eq(workspaces.userId, principal.userId), eq(workspaces.id, workspaceId)))
         .limit(1);
       if (!workspace) throw new DomainError("NOT_FOUND", "Workspace not found");
       const installed = await tx
@@ -290,7 +288,7 @@ export class KnowledgeService {
         .from(knowledgePresetInstallations)
         .where(
           and(
-            eq(knowledgePresetInstallations.tenantId, principal.tenantId),
+            eq(knowledgePresetInstallations.userId, principal.userId),
             eq(knowledgePresetInstallations.identityId, principal.identityId),
             eq(knowledgePresetInstallations.workspaceId, workspaceId),
           ),
@@ -298,7 +296,7 @@ export class KnowledgeService {
       const [count] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(documents)
-        .where(eq(documents.tenantId, principal.tenantId));
+        .where(eq(documents.userId, principal.userId));
       const pending = presets.filter(
         (preset) => !installed.some((row) => row.presetId === preset.id),
       );
@@ -306,7 +304,7 @@ export class KnowledgeService {
         throw new DomainError("RESOURCE_LIMIT", "Document quota reached");
       const rootCatalog = await ensureRootCatalog(
         tx,
-        principal.tenantId,
+        principal.userId,
         workspaceId,
         principal.identityId,
       );
@@ -315,7 +313,7 @@ export class KnowledgeService {
         .from(documents)
         .where(
           and(
-            eq(documents.tenantId, principal.tenantId),
+            eq(documents.userId, principal.userId),
             eq(documents.workspaceId, workspaceId),
             eq(documents.catalogId, rootCatalog),
           ),
@@ -333,7 +331,7 @@ export class KnowledgeService {
             .from(documents)
             .where(
               and(
-                eq(documents.tenantId, principal.tenantId),
+                eq(documents.userId, principal.userId),
                 eq(documents.id, existing.documentId),
                 eq(documents.status, "active"),
                 readable(principal),
@@ -352,7 +350,7 @@ export class KnowledgeService {
         const content = cloneContentWithFreshBlockIds(preset.content);
         await tx.insert(documents).values({
           id: documentId,
-          tenantId: principal.tenantId,
+          userId: principal.userId,
           workspaceId,
           accessMode:
             access.workspace.kind === "team"
@@ -368,13 +366,13 @@ export class KnowledgeService {
         });
         if (access.workspace.kind !== "team")
           await tx.insert(resourceAcl).values({
-            tenantId: principal.tenantId,
+            userId: principal.userId,
             documentId,
             identityId: principal.identityId,
             role: "admin",
             createdBy: principal.identityId,
           });
-        await requireDocumentManager(tx, principal.tenantId, documentId);
+        await requireDocumentManager(tx, principal.userId, documentId);
         // Preset documents are collaborative from the start: seed the initial Yjs
         // update plus a projection outbox entry so the document opens in the live
         // editor immediately (mirrors repository.create with an initial update).
@@ -396,7 +394,7 @@ export class KnowledgeService {
           createdBy: principal.identityId,
         });
         await insertProjectionOutbox(tx, {
-          tenantId: principal.tenantId,
+          userId: principal.userId,
           documentId,
           generationId,
           durableSeq: 1,
@@ -405,14 +403,14 @@ export class KnowledgeService {
           content,
         });
         await tx.insert(knowledgePresetInstallations).values({
-          tenantId: principal.tenantId,
+          userId: principal.userId,
           identityId: principal.identityId,
           workspaceId,
           presetId: preset.id,
           documentId,
         });
         await tx.insert(documentAuditEvents).values({
-          tenantId: principal.tenantId,
+          userId: principal.userId,
           actorIdentityId: principal.identityId,
           action: "document.created",
           resourceId: documentId,

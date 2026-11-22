@@ -88,6 +88,7 @@ test(
       ) as { entries: { tag: string }[] };
       for (const { tag } of journal.entries) {
         if (tag.startsWith("0039")) {
+          // Mid-chain seeds run before 0049 renames the column, so they must use tenant_id.
           await pg.exec(`insert into documents (tenant_id,id,workspace_id,catalog_id,title,created_by,access_mode) values ('migration','doc_inherited','ws_old','cat_old','团队文档','reader','workspace-inherited');
             insert into workspaces (tenant_id,id,name,kind,created_by) values ('migration','ws_system','旧系统空间','team','system');
             insert into catalogs (tenant_id,id,workspace_id,name,position,created_by) values ('migration','cat_system','ws_system','根目录',0,'system');
@@ -103,7 +104,7 @@ test(
         await pg.exec(await readFile(`database/migrations/${tag}.sql`, "utf8"));
       }
       const migrated = await pg.query<{ role: string; created_by: string; year: number }>(
-        "select role,created_by,extract(year from created_at)::int as year from resource_acl where tenant_id='migration' and identity_id='reader' and created_by <> 'migration:explicit-document-managers' order by role",
+        "select role,created_by,extract(year from created_at)::int as year from resource_acl where user_id='migration' and identity_id='reader' and created_by <> 'migration:explicit-document-managers' order by role",
       );
       assert.deepEqual(
         migrated.rows.map((r) => [r.role, r.year]),
@@ -120,7 +121,7 @@ test(
       assert.equal(
         await hasDocumentPermission(
           db,
-          { tenantId: "migration", identityId: "owner" },
+          { userId: "migration", identityId: "owner" },
           "doc_old",
           "manage",
         ),
@@ -129,7 +130,7 @@ test(
       assert.equal(
         await hasDocumentPermission(
           db,
-          { tenantId: "migration", identityId: "reader" },
+          { userId: "migration", identityId: "reader" },
           "doc_inherited",
           "write",
         ),
@@ -138,7 +139,7 @@ test(
       assert.equal(
         await hasDocumentPermission(
           db,
-          { tenantId: "migration", identityId: "reader" },
+          { userId: "migration", identityId: "reader" },
           "doc_system",
           "manage",
         ),
@@ -150,12 +151,12 @@ test(
       );
       await assert.rejects(
         pg.exec(
-          "insert into resource_acl(tenant_id,identity_id,role,created_by) values ('migration','x','viewer','owner')",
+          "insert into resource_acl(user_id,identity_id,role,created_by) values ('migration','x','viewer','owner')",
         ),
       );
       await assert.rejects(
         pg.exec(
-          "insert into resource_acl(tenant_id,workspace_id,identity_id,role,created_by) values ('other','ws_old','x','viewer','owner')",
+          "insert into resource_acl(user_id,workspace_id,identity_id,role,created_by) values ('other','ws_old','x','viewer','owner')",
         ),
       );
 
@@ -164,7 +165,7 @@ test(
           identityId,
           {
             identityId,
-            tenantId: identityId === "other" ? "other" : "test",
+            userId: identityId === "other" ? "other" : "test",
             username: identityId,
             displayName: identityId,
             email: `${identityId}@example.test`,
@@ -175,7 +176,7 @@ test(
       );
       await db.insert(schema.identityProfiles).values(
         [...principals.values()].map((p) => ({
-          tenantId: p.tenantId,
+          userId: p.userId,
           identityId: p.identityId,
           displayName: p.displayName,
           email: p.email,
@@ -264,7 +265,7 @@ test(
       await db
         .insert(schema.resourceAcl)
         .values({
-          tenantId: "test",
+          userId: "test",
           workspaceId: "ws_default",
           identityId: "owner",
           role: "admin",
@@ -272,7 +273,7 @@ test(
         })
         .onConflictDoNothing();
       await t.test(
-        "workspace and catalog receipts replay safely across operation, actor and tenant scopes",
+        "workspace and catalog receipts replay safely across operation, actor and user scopes",
         async () => {
           const key = "shared-create-receipt";
           async function create(url: string, payload: object, identity = "owner", expected = 201) {
@@ -390,7 +391,7 @@ test(
             )
           ).json<{ id: string }>();
           await db.insert(schema.resourceAcl).values({
-            tenantId: "test",
+            userId: "test",
             catalogId: branch.id,
             identityId: "guest",
             role: "move",
@@ -534,7 +535,7 @@ test(
               );
               await waitForBlocked(1);
               await blocker.query(
-                "delete from resource_acl where tenant_id=$1 and workspace_id=$2 and identity_id=$3",
+                "delete from resource_acl where user_id=$1 and workspace_id=$2 and identity_id=$3",
                 ["test", space.id, "editor"],
               );
               await blocker.query("commit");
@@ -679,7 +680,7 @@ test(
                   .delete(schema.resourceAcl)
                   .where(
                     and(
-                      eq(schema.resourceAcl.tenantId, "test"),
+                      eq(schema.resourceAcl.userId, "test"),
                       eq(schema.resourceAcl.documentId, created.id),
                       eq(schema.resourceAcl.identityId, "guest"),
                     ),
@@ -1260,14 +1261,14 @@ test(
           ).json<{ id: string }>();
           await db.insert(schema.resourceAcl).values([
             {
-              tenantId: "test",
+              userId: "test",
               catalogId: parent.id,
               identityId: "owner",
               role: "admin",
               createdBy: "owner",
             },
             {
-              tenantId: "test",
+              userId: "test",
               catalogId: child.id,
               identityId: "viewer",
               role: "viewer",
@@ -1625,7 +1626,7 @@ test(
       await db
         .insert(schema.resourceAcl)
         .values({
-          tenantId: "test",
+          userId: "test",
           workspaceId: "ws_default",
           identityId: "owner",
           role: "admin",
@@ -1651,7 +1652,7 @@ test(
         objectKey: "test/permission.png",
         file: { fileName: "permission.png", mediaType: "image/png" as const, size: 1 },
         maxBytes: 1024,
-        maxTenantBytes: 10240,
+        maxUserBytes: 10240,
         expiresAt: new Date(Date.now() + 60000),
       };
       assert.equal(
@@ -1796,7 +1797,7 @@ test(
       );
       // Directory bindings use the same policy and resource table, and restricted stops ancestors.
       await db.insert(schema.resourceAcl).values({
-        tenantId: "test",
+        userId: "test",
         catalogId: space.rootCatalogId,
         identityId: "guest",
         role: "viewer",

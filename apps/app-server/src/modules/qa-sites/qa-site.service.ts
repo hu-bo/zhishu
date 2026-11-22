@@ -114,7 +114,7 @@ export class QaSiteService {
       .insert(qaSites)
       .values({
         id,
-        tenantId: principal.tenantId,
+        userId: principal.userId,
         ownerWorkspaceId: body.ownerWorkspaceId,
         slug: body.slug,
         name: body.name,
@@ -141,7 +141,7 @@ export class QaSiteService {
     const rows = await this.deps.db
       .select()
       .from(qaSites)
-      .where(eq(qaSites.tenantId, principal.tenantId))
+      .where(eq(qaSites.userId, principal.userId))
       .orderBy(sql`${qaSites.createdAt} desc`);
     const managed = new Map<string, boolean>();
     const result: QaSiteRow[] = [];
@@ -165,7 +165,7 @@ export class QaSiteService {
     const [row] = await this.deps.db
       .select()
       .from(qaSites)
-      .where(and(eq(qaSites.tenantId, principal.tenantId), eq(qaSites.id, siteId)))
+      .where(and(eq(qaSites.userId, principal.userId), eq(qaSites.id, siteId)))
       .limit(1);
     if (!row) throw new DomainError("NOT_FOUND", "站点不存在");
     await this.requireManager(principal, row.ownerWorkspaceId);
@@ -177,13 +177,11 @@ export class QaSiteService {
     const sources = await this.deps.db
       .select()
       .from(qaSiteSources)
-      .where(and(eq(qaSiteSources.tenantId, site.tenantId), eq(qaSiteSources.siteId, site.id)));
+      .where(and(eq(qaSiteSources.userId, site.userId), eq(qaSiteSources.siteId, site.id)));
     const docs = await this.deps.db
       .select()
       .from(qaSiteDocuments)
-      .where(
-        and(eq(qaSiteDocuments.tenantId, site.tenantId), eq(qaSiteDocuments.sourceId, site.id)),
-      );
+      .where(and(eq(qaSiteDocuments.userId, site.userId), eq(qaSiteDocuments.sourceId, site.id)));
     return { site, sources, documents: docs };
   }
 
@@ -228,7 +226,7 @@ export class QaSiteService {
       })
       .where(
         and(
-          eq(qaSites.tenantId, principal.tenantId),
+          eq(qaSites.userId, principal.userId),
           eq(qaSites.id, siteId),
           eq(qaSites.revision, body.expectedRevision),
         ),
@@ -262,11 +260,11 @@ export class QaSiteService {
       for (const source of sources) await this.requireManager(principal, source.workspaceId, tx);
       await tx
         .delete(qaSiteSources)
-        .where(and(eq(qaSiteSources.tenantId, site.tenantId), eq(qaSiteSources.siteId, site.id)));
+        .where(and(eq(qaSiteSources.userId, site.userId), eq(qaSiteSources.siteId, site.id)));
       for (const source of sources)
         await tx.insert(qaSiteSources).values({
           id: `src_${randomUUID().replaceAll("-", "")}`,
-          tenantId: site.tenantId,
+          userId: site.userId,
           siteId: site.id,
           workspaceId: source.workspaceId,
           publicLabel: source.publicLabel.trim(),
@@ -277,7 +275,7 @@ export class QaSiteService {
         .set({ revision: site.revision + 1, updatedAt: new Date() })
         .where(
           and(
-            eq(qaSites.tenantId, site.tenantId),
+            eq(qaSites.userId, site.userId),
             eq(qaSites.id, site.id),
             eq(qaSites.revision, expectedRevision),
           ),
@@ -287,7 +285,7 @@ export class QaSiteService {
     });
     // Conversation invalidation opens its own transaction: run it only after commit so a
     // rolled-back configuration change never cancels live sessions.
-    await this.invalidateSiteConversations(site.tenantId, site.id);
+    await this.invalidateSiteConversations(site.userId, site.id);
     return this.get(principal, siteId);
   }
 
@@ -305,7 +303,7 @@ export class QaSiteService {
       .from(qaSiteSources)
       .where(
         and(
-          eq(qaSiteSources.tenantId, site.tenantId),
+          eq(qaSiteSources.userId, site.userId),
           eq(qaSiteSources.id, sourceId),
           eq(qaSiteSources.siteId, site.id),
         ),
@@ -322,7 +320,7 @@ export class QaSiteService {
           const [doc] = await tx
             .select({ workspaceId: documents.workspaceId })
             .from(documents)
-            .where(and(eq(documents.tenantId, site.tenantId), eq(documents.id, item.documentId)))
+            .where(and(eq(documents.userId, site.userId), eq(documents.id, item.documentId)))
             .limit(1);
           if (!doc || doc.workspaceId !== source.workspaceId)
             throw new DomainError("VALIDATION_ERROR", "文档不属于该来源空间");
@@ -330,7 +328,7 @@ export class QaSiteService {
             .insert(qaSiteDocuments)
             .values({
               id: `qsdoc_${randomUUID().replaceAll("-", "")}`,
-              tenantId: site.tenantId,
+              userId: site.userId,
               sourceId: source.id,
               workspaceId: source.workspaceId,
               documentId: item.documentId,
@@ -339,7 +337,7 @@ export class QaSiteService {
             })
             .onConflictDoUpdate({
               target: [
-                qaSiteDocuments.tenantId,
+                qaSiteDocuments.userId,
                 qaSiteDocuments.sourceId,
                 qaSiteDocuments.documentId,
               ],
@@ -360,7 +358,7 @@ export class QaSiteService {
             })
             .where(
               and(
-                eq(qaSiteDocuments.tenantId, site.tenantId),
+                eq(qaSiteDocuments.userId, site.userId),
                 eq(qaSiteDocuments.sourceId, source.id),
                 eq(qaSiteDocuments.documentId, item.documentId),
               ),
@@ -370,7 +368,7 @@ export class QaSiteService {
             .delete(qaSiteDocuments)
             .where(
               and(
-                eq(qaSiteDocuments.tenantId, site.tenantId),
+                eq(qaSiteDocuments.userId, site.userId),
                 eq(qaSiteDocuments.sourceId, source.id),
                 eq(qaSiteDocuments.documentId, item.documentId),
               ),
@@ -382,7 +380,7 @@ export class QaSiteService {
         .set({ revision: site.revision + 1, updatedAt: new Date() })
         .where(
           and(
-            eq(qaSites.tenantId, site.tenantId),
+            eq(qaSites.userId, site.userId),
             eq(qaSites.id, site.id),
             eq(qaSites.revision, expectedRevision),
           ),
@@ -390,7 +388,7 @@ export class QaSiteService {
         .returning({ id: qaSites.id });
       if (!bumped.length) throw new DomainError("CONFLICT", "站点配置已被更新，请刷新后重试");
     });
-    await this.invalidateSiteConversations(site.tenantId, site.id);
+    await this.invalidateSiteConversations(site.userId, site.id);
     return this.detail(principal, siteId);
   }
 
@@ -407,7 +405,7 @@ export class QaSiteService {
         .from(documents)
         .where(
           and(
-            eq(documents.tenantId, principal.tenantId),
+            eq(documents.userId, principal.userId),
             eq(documents.id, documentId),
             eq(documents.workspaceId, workspaceId),
             eq(documents.status, "active"),
@@ -449,7 +447,7 @@ export class QaSiteService {
       })
       .where(
         and(
-          eq(qaSites.tenantId, principal.tenantId),
+          eq(qaSites.userId, principal.userId),
           eq(qaSites.id, siteId),
           eq(qaSites.revision, expectedRevision),
         ),
@@ -458,7 +456,7 @@ export class QaSiteService {
     if (!rows.length) throw new DomainError("CONFLICT", "站点状态已被更新，请刷新后重试");
     if (credentialBump) {
       await this.revokeCredentials(site);
-      await this.invalidateSiteConversations(site.tenantId, site.id);
+      await this.invalidateSiteConversations(site.userId, site.id);
     }
     return rows[0]!;
   }
@@ -484,7 +482,7 @@ export class QaSiteService {
     };
   }
 
-  /** Public entry paths carry no tenant: the globally unique site id resolves the tenant. */
+  /** Public entry paths carry no user: the globally unique site id resolves the user. */
   async activeSiteById(siteId: string): Promise<QaSiteRow> {
     const [row] = await this.deps.db.select().from(qaSites).where(eq(qaSites.id, siteId)).limit(1);
     if (!row) throw new DomainError("NOT_FOUND", "站点不存在");
@@ -525,7 +523,7 @@ export class QaSiteService {
     const sources = await this.deps.db
       .select()
       .from(qaSiteSources)
-      .where(and(eq(qaSiteSources.tenantId, site.tenantId), eq(qaSiteSources.siteId, site.id)));
+      .where(and(eq(qaSiteSources.userId, site.userId), eq(qaSiteSources.siteId, site.id)));
     const delegators = new Map<string, boolean>();
     const result: ApprovedSource[] = [];
     for (const source of sources) {
@@ -533,7 +531,7 @@ export class QaSiteService {
       if (valid === undefined) {
         const access = await workspaceAccess(
           this.deps.db,
-          { tenantId: site.tenantId, identityId: source.grantedBy },
+          { userId: site.userId, identityId: source.grantedBy },
           source.workspaceId,
         );
         valid = access.canManage;
@@ -545,7 +543,7 @@ export class QaSiteService {
         .from(qaSiteDocuments)
         .where(
           and(
-            eq(qaSiteDocuments.tenantId, site.tenantId),
+            eq(qaSiteDocuments.userId, site.userId),
             eq(qaSiteDocuments.sourceId, source.id),
             eq(qaSiteDocuments.state, "active"),
           ),
@@ -574,11 +572,11 @@ export class QaSiteService {
   }
 
   /** Quota lookup without the active gate: used while admitting an already-open session. */
-  async messagesPerHourFor(tenantId: string, siteId: string): Promise<number> {
+  async messagesPerHourFor(userId: string, siteId: string): Promise<number> {
     const [row] = await this.deps.db
       .select({ quotaPolicy: qaSites.quotaPolicy })
       .from(qaSites)
-      .where(and(eq(qaSites.tenantId, tenantId), eq(qaSites.id, siteId)))
+      .where(and(eq(qaSites.userId, userId), eq(qaSites.id, siteId)))
       .limit(1);
     return (row?.quotaPolicy as { messagesPerHour?: number } | undefined)?.messagesPerHour ?? 120;
   }
@@ -592,20 +590,20 @@ export class QaSiteService {
   }
 
   /** Business-scope changes isolate affected public conversations through the shared store. */
-  private async invalidateSiteConversations(tenantId: string, siteId: string): Promise<void> {
+  private async invalidateSiteConversations(userId: string, siteId: string): Promise<void> {
     const rows = await this.deps.db
       .select({ id: aiConversations.id })
       .from(aiConversations)
       .where(
         and(
-          eq(aiConversations.tenantId, tenantId),
+          eq(aiConversations.userId, userId),
           eq(aiConversations.siteId, siteId),
           eq(aiConversations.status, "active"),
         ),
       );
     if (rows.length)
       await this.deps.store.invalidateContext(
-        tenantId,
+        userId,
         rows.map((c) => c.id),
         "site-scope-changed",
       );
@@ -618,10 +616,10 @@ export class QaSiteService {
  */
 export async function detachDocumentFromSites(
   tx: Parameters<Parameters<Database["transaction"]>[0]>[0],
-  tenantId: string,
+  userId: string,
   documentId: string,
 ): Promise<void> {
   await tx
     .delete(qaSiteDocuments)
-    .where(and(eq(qaSiteDocuments.tenantId, tenantId), eq(qaSiteDocuments.documentId, documentId)));
+    .where(and(eq(qaSiteDocuments.userId, userId), eq(qaSiteDocuments.documentId, documentId)));
 }

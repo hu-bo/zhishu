@@ -16,13 +16,13 @@ export async function insertNotifications(
 
 export async function documentRecipients(
   db: Pick<Database, "execute">,
-  tenantId: string,
+  userId: string,
   documentId: string,
 ) {
   const rows = await db.execute<{ identity_id: string }>(sql`
-    select i.identity_id from identity_profiles i where i.tenant_id = ${tenantId} and exists (
-      select 1 from documents where documents.tenant_id = ${tenantId} and documents.id = ${documentId}
-      and ${documentActionSql({ tenantId, identityId: sql`i.identity_id` }, "read")}
+    select i.identity_id from identity_profiles i where i.user_id = ${userId} and exists (
+      select 1 from documents where documents.user_id = ${userId} and documents.id = ${documentId}
+      and ${documentActionSql({ userId, identityId: sql`i.identity_id` }, "read")}
     )
   `);
   return rows.rows.map((r) => r.identity_id);
@@ -58,20 +58,17 @@ export class NotificationRepository {
       .leftJoin(
         identityProfiles,
         and(
-          eq(identityProfiles.tenantId, notifications.tenantId),
+          eq(identityProfiles.userId, notifications.userId),
           eq(identityProfiles.identityId, notifications.actorId),
         ),
       )
       .leftJoin(
         documents,
-        and(
-          eq(documents.tenantId, notifications.tenantId),
-          eq(documents.id, notifications.documentId),
-        ),
+        and(eq(documents.userId, notifications.userId), eq(documents.id, notifications.documentId)),
       )
       .where(
         and(
-          eq(notifications.tenantId, principal.tenantId),
+          eq(notifications.userId, principal.userId),
           eq(notifications.recipientId, principal.identityId),
           input.unread ? isNull(notifications.readAt) : undefined,
           cursor
@@ -94,7 +91,7 @@ export class NotificationRepository {
       .from(notifications)
       .where(
         and(
-          eq(notifications.tenantId, principal.tenantId),
+          eq(notifications.userId, principal.userId),
           eq(notifications.recipientId, principal.identityId),
           isNull(notifications.readAt),
         ),
@@ -121,7 +118,7 @@ export class NotificationRepository {
       .set({ readAt: new Date() })
       .where(
         and(
-          eq(notifications.tenantId, principal.tenantId),
+          eq(notifications.userId, principal.userId),
           eq(notifications.recipientId, principal.identityId),
           id ? eq(notifications.id, id) : undefined,
           isNull(notifications.readAt),
@@ -134,7 +131,7 @@ export class NotificationRepository {
         .from(notifications)
         .where(
           and(
-            eq(notifications.tenantId, principal.tenantId),
+            eq(notifications.userId, principal.userId),
             eq(notifications.recipientId, principal.identityId),
             eq(notifications.id, id),
           ),

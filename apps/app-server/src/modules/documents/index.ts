@@ -19,7 +19,7 @@ import {
 import type { ContentMigration, ContentValidationResult } from "@zhishu/document-contracts";
 import {
   COLLABORATION_SESSION_TTL_SECONDS,
-  TENANT_MAX_DOCUMENTS,
+  USER_MAX_DOCUMENTS,
   type AppConfig,
 } from "../../config.js";
 import { DocumentRepository } from "./document.repository.js";
@@ -111,7 +111,7 @@ export function createDocumentService(
       execute: executeContentMigration,
       validateSource: validateMigrationSource,
     },
-    TENANT_MAX_DOCUMENTS,
+    USER_MAX_DOCUMENTS,
   );
 }
 

@@ -70,7 +70,7 @@ export async function authorizationModule(
                 z
                   .object({
                     id: z.number(),
-                    tenantId: z.string(),
+                    userId: z.string(),
                     workspaceId: z.string(),
                     documentId: z.string().nullable(),
                     actorId: z.string().nullable(),

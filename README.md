@@ -80,9 +80,9 @@ Prettier 统一人工代码与文档，跳过 lockfile、generated migration、O
 
 本地 Compose 的 trust authentication 仅绑定 localhost。
 指定指向临时数据库的 `DATABASE_URL` 后，可运行 `pnpm --dir apps/app-server db:migrate` 和 `pnpm smoke`，
-统一验证 health、OpenAPI、CRUD、tenant 隔离、文档 ACL、输入校验和错误响应；smoke 创建并清理自己的 project 和 document。
+统一验证 health、OpenAPI、CRUD、用户隔离、文档 ACL、输入校验和错误响应；smoke 创建并清理自己的 project 和 document。
 
-`pnpm --dir apps/app-server smoke:knowledge` 要求数据库名包含 `qa`、`test` 或 `smoke`，覆盖工作区/目录移动与层级限制、ACL/租户隔离、图标标签修订、正文检索、历史恢复及预设幂等初始化。脚本创建并清理独立测试租户，显式禁用对象存储，不连接 MinIO。
+`pnpm --dir apps/app-server smoke:knowledge` 要求数据库名包含 `qa`、`test` 或 `smoke`，覆盖工作区/目录移动与层级限制、ACL/用户隔离、图标标签修订、正文检索、历史恢复及预设幂等初始化。脚本创建并清理独立测试用户范围，显式禁用对象存储，不连接 MinIO。
 
 `pnpm --filter @zhishu/collaboration-consumer-example smoke:performance` 需先构建依赖、启动隔离 QA 后端，并显式设置 `PERFORMANCE_QA=true` 与 loopback `API_URL`（默认 `http://127.0.0.1:3100`）。测试 1000 块/约 1 MB、20 个真实会话、WebSocket 双向各 50ms 延迟下的远端 Y.Doc 到达和持久化回执，超出 P95 500ms/2s 目标退出失败；自行清理测试文档和连接。它不测试 MinIO，也不代表浏览器绘制或 20 个不同身份的完整基线。
 

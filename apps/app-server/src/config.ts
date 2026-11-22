@@ -223,8 +223,8 @@ export const DATABASE_POOL_MAX = 10;
 export const DATABASE_CONNECT_TIMEOUT_MS = 5_000;
 export const DATABASE_QUERY_TIMEOUT_MS = 5_000;
 
-export const TENANT_MAX_DOCUMENTS = 10_000;
-export const TENANT_MAX_ASSET_BYTES = 10_737_418_240; // 10 GiB per tenant.
+export const USER_MAX_DOCUMENTS = 10_000;
+export const USER_MAX_ASSET_BYTES = 10_737_418_240; // 10 GiB per user.
 
 export const COLLABORATION_SESSION_TTL_SECONDS = 300;
 export const COLLABORATION_MAX_UPDATE_BYTES = 1_048_576; // 1 MiB per update frame.

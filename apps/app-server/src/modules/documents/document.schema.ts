@@ -78,7 +78,7 @@ export const documentListQuerySchema = z
 export const documentSchema = z
   .object({
     id: documentIdSchema,
-    tenantId: z.string(),
+    userId: z.string(),
     title: z.string(),
     workspaceId: z.string(),
     catalogId: catalogIdSchema,

@@ -14,13 +14,13 @@ export const WORKSPACE_MEMBER_LIMIT = 499;
 /** Enforce the member ceiling before granting a NEW membership; callers skip it for existing members. */
 export async function assertWorkspaceMemberCapacity(
   db: Executor,
-  tenantId: string,
+  userId: string,
   workspaceId: string,
 ): Promise<void> {
   const [count] = await db
     .select({ value: sql<number>`count(*)::int` })
     .from(resourceAcl)
-    .where(and(eq(resourceAcl.tenantId, tenantId), eq(resourceAcl.workspaceId, workspaceId)));
+    .where(and(eq(resourceAcl.userId, userId), eq(resourceAcl.workspaceId, workspaceId)));
   if ((count?.value ?? 0) >= WORKSPACE_MEMBER_LIMIT)
     throw new DomainError("RESOURCE_LIMIT", "空间成员数量已达上限");
 }
@@ -41,13 +41,13 @@ export function workspaceRole(
 // Only an actual member or owner participates in workspace inheritance.
 export async function workspaceAccess(
   db: Executor,
-  principal: Pick<Principal, "tenantId" | "identityId">,
+  principal: Pick<Principal, "userId" | "identityId">,
   workspaceId: string,
 ) {
   const [workspace] = await db
     .select()
     .from(workspaces)
-    .where(and(eq(workspaces.tenantId, principal.tenantId), eq(workspaces.id, workspaceId)))
+    .where(and(eq(workspaces.userId, principal.userId), eq(workspaces.id, workspaceId)))
     .limit(1);
   if (!workspace) throw new DomainError("NOT_FOUND", "空间不存在或无权访问");
   const [profile] = await db
@@ -55,7 +55,7 @@ export async function workspaceAccess(
     .from(identityProfiles)
     .where(
       and(
-        eq(identityProfiles.tenantId, principal.tenantId),
+        eq(identityProfiles.userId, principal.userId),
         eq(identityProfiles.identityId, principal.identityId),
       ),
     )
@@ -66,7 +66,7 @@ export async function workspaceAccess(
     .from(resourceAcl)
     .where(
       and(
-        eq(resourceAcl.tenantId, principal.tenantId),
+        eq(resourceAcl.userId, principal.userId),
         eq(resourceAcl.workspaceId, workspaceId),
         eq(resourceAcl.identityId, principal.identityId),
       ),
@@ -82,9 +82,7 @@ export async function workspaceAccess(
     (workspace.kind === "personal"
       ? workspace.personalOwnerId === principal.identityId
       : workspace.ownerIdentityId === principal.identityId || member !== undefined);
-  const engine = await policyEnforcer(
-    await loadPolicyOverrides(db, principal.tenantId, workspaceId),
-  );
+  const engine = await policyEnforcer(await loadPolicyOverrides(db, principal.userId, workspaceId));
   return {
     workspace,
     role,
@@ -97,7 +95,7 @@ export async function workspaceAccess(
 
 export async function requireWorkspaceOrganizer(
   db: Executor,
-  principal: Pick<Principal, "tenantId" | "identityId">,
+  principal: Pick<Principal, "userId" | "identityId">,
   workspaceId: string,
 ) {
   const access = await workspaceAccess(db, principal, workspaceId);

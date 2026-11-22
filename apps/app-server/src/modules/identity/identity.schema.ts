@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const principalSchema = z.object({
   identityId: z.string(),
-  tenantId: z.string().min(1).max(128),
+  userId: z.string().min(1).max(128),
   username: z.string(),
   displayName: z.string(),
   email: z.string().email(),

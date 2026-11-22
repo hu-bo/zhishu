@@ -21,9 +21,9 @@ export const qaSites = pgTable(
   "qa_sites",
   {
     id: text("id").notNull(),
-    tenantId: text("tenant_id").notNull(),
+    userId: text("user_id").notNull(),
     ownerWorkspaceId: text("owner_workspace_id").notNull(),
-    // /ask/$slug carries no tenant header, so the slug must be globally unique, keeping disabled-site placeholders.
+    // /ask/$slug carries no user header, so the slug must be globally unique, keeping disabled-site placeholders.
     slug: text("slug").notNull(),
     name: text("name").notNull(),
     description: text("description").notNull().default(""),
@@ -49,14 +49,14 @@ export const qaSites = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.tenantId, t.id] }),
+    primaryKey({ columns: [t.userId, t.id] }),
     uniqueIndex("qa_sites_slug_uq").on(t.slug),
-    // Public entry routes carry no tenant: the site id itself must resolve one row.
+    // Public entry routes carry no user: the site id itself must resolve one row.
     uniqueIndex("qa_sites_id_uq").on(t.id),
     foreignKey({
       name: "qa_sites_owner_workspace_fk",
-      columns: [t.tenantId, t.ownerWorkspaceId],
-      foreignColumns: [workspaces.tenantId, workspaces.id],
+      columns: [t.userId, t.ownerWorkspaceId],
+      foreignColumns: [workspaces.userId, workspaces.id],
     }),
     check("qa_sites_access_mode_check", sql`${t.accessMode} in ('public','code')`),
     check(
@@ -68,7 +68,7 @@ export const qaSites = pgTable(
       sql`${t.status} in ('draft','pending','active','paused','disabled')`,
     ),
     check("qa_sites_revision_check", sql`${t.revision} >= 1 and ${t.accessRevision} >= 1`),
-    index("qa_sites_tenant_idx").on(t.tenantId, t.ownerWorkspaceId, t.createdAt),
+    index("qa_sites_user_idx").on(t.userId, t.ownerWorkspaceId, t.createdAt),
   ],
 );
 
@@ -77,7 +77,7 @@ export const qaSiteSources = pgTable(
   "qa_site_sources",
   {
     id: text("id").notNull(),
-    tenantId: text("tenant_id").notNull(),
+    userId: text("user_id").notNull(),
     siteId: text("site_id").notNull(),
     workspaceId: text("workspace_id").notNull(),
     publicLabel: text("public_label").notNull(),
@@ -86,21 +86,21 @@ export const qaSiteSources = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.tenantId, t.id] }),
-    uniqueIndex("qa_site_sources_site_workspace_uq").on(t.tenantId, t.siteId, t.workspaceId),
+    primaryKey({ columns: [t.userId, t.id] }),
+    uniqueIndex("qa_site_sources_site_workspace_uq").on(t.userId, t.siteId, t.workspaceId),
     // Supports the per-document composite FK that proves document-to-source workspace binding.
-    uniqueIndex("qa_site_sources_tenant_id_workspace_uq").on(t.tenantId, t.id, t.workspaceId),
+    uniqueIndex("qa_site_sources_user_id_workspace_uq").on(t.userId, t.id, t.workspaceId),
     foreignKey({
       name: "qa_site_sources_site_fk",
-      columns: [t.tenantId, t.siteId],
-      foreignColumns: [qaSites.tenantId, qaSites.id],
+      columns: [t.userId, t.siteId],
+      foreignColumns: [qaSites.userId, qaSites.id],
     }).onDelete("cascade"),
     foreignKey({
       name: "qa_site_sources_workspace_fk",
-      columns: [t.tenantId, t.workspaceId],
-      foreignColumns: [workspaces.tenantId, workspaces.id],
+      columns: [t.userId, t.workspaceId],
+      foreignColumns: [workspaces.userId, workspaces.id],
     }),
-    index("qa_site_sources_workspace_idx").on(t.tenantId, t.workspaceId),
+    index("qa_site_sources_workspace_idx").on(t.userId, t.workspaceId),
   ],
 );
 
@@ -109,7 +109,7 @@ export const qaSiteDocuments = pgTable(
   "qa_site_documents",
   {
     id: text("id").notNull(),
-    tenantId: text("tenant_id").notNull(),
+    userId: text("user_id").notNull(),
     sourceId: text("source_id").notNull(),
     // Denormalized so the composite FK can prove the document really lives in the source workspace.
     workspaceId: text("workspace_id").notNull(),
@@ -121,24 +121,24 @@ export const qaSiteDocuments = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.tenantId, t.id] }),
-    uniqueIndex("qa_site_documents_source_document_uq").on(t.tenantId, t.sourceId, t.documentId),
+    primaryKey({ columns: [t.userId, t.id] }),
+    uniqueIndex("qa_site_documents_source_document_uq").on(t.userId, t.sourceId, t.documentId),
     foreignKey({
       name: "qa_site_documents_source_fk",
-      columns: [t.tenantId, t.sourceId, t.workspaceId],
-      foreignColumns: [qaSiteSources.tenantId, qaSiteSources.id, qaSiteSources.workspaceId],
+      columns: [t.userId, t.sourceId, t.workspaceId],
+      foreignColumns: [qaSiteSources.userId, qaSiteSources.id, qaSiteSources.workspaceId],
     }).onDelete("cascade"),
     foreignKey({
       name: "qa_site_documents_document_fk",
-      columns: [t.tenantId, t.workspaceId, t.documentId],
-      foreignColumns: [documents.tenantId, documents.workspaceId, documents.id],
+      columns: [t.userId, t.workspaceId, t.documentId],
+      foreignColumns: [documents.userId, documents.workspaceId, documents.id],
     }),
     check("qa_site_documents_state_check", sql`${t.state} in ('active','suspended')`),
     check(
       "qa_site_documents_suspension_check",
       sql`${t.state} <> 'suspended' or ${t.suspensionReason} is not null`,
     ),
-    index("qa_site_documents_document_idx").on(t.tenantId, t.documentId),
-    index("qa_site_documents_workspace_idx").on(t.tenantId, t.workspaceId, t.state),
+    index("qa_site_documents_document_idx").on(t.userId, t.documentId),
+    index("qa_site_documents_workspace_idx").on(t.userId, t.workspaceId, t.state),
   ],
 );

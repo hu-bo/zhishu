@@ -77,18 +77,14 @@ try {
   await app.ready();
   const principal: Principal = {
     identityId: "mock-user-001",
-    tenantId: "local",
+    userId: "local",
     username: "mock-user",
     displayName: "Mock User",
     email: "mock@example.invalid",
     globalRoles: ["user"],
     active: true,
   };
-  const created = await repository.create(
-    principal.tenantId,
-    principal.identityId,
-    "Repair fixture",
-  );
+  const created = await repository.create(principal.userId, principal.identityId, "Repair fixture");
   documentId = created.id;
   const duplicatedContent: DocumentContent = {
     type: "doc",
@@ -111,7 +107,7 @@ try {
   const receipt = await repository.persistUpdate({
     documentId: created.id,
     generationId: created.generationId,
-    tenantId: created.tenantId,
+    userId: created.userId,
     subjectId: principal.identityId,
     updateHash: sourceHash,
     updateBytes: sourceUpdate,
@@ -124,7 +120,7 @@ try {
   assert.deepEqual(preview, { status: "repairable", duplicateCount: 1 });
   const beforeApply = await repository.findActiveForAction(
     created.id,
-    principal.tenantId,
+    principal.userId,
     principal.identityId,
     "write",
   );
@@ -139,7 +135,7 @@ try {
 
   const active = await repository.findActiveForAction(
     created.id,
-    principal.tenantId,
+    principal.userId,
     principal.identityId,
     "write",
   );

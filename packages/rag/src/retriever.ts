@@ -13,7 +13,7 @@ export interface KnowledgeRetriever<Scope> {
   }): Promise<EvidenceBundle>;
 }
 const fields = [
-  "tenantId",
+  "userId",
   "workspaceId",
   "documentId",
   "indexVersion",
@@ -29,7 +29,7 @@ const fields = [
 type Candidate = {
   pointId: string | number;
   score: number;
-  tenantId: string;
+  userId: string;
   workspaceId: string;
   documentId: string;
   indexVersion: string;
@@ -57,7 +57,7 @@ export function createKnowledgeRetriever<Scope>(options: {
     scope: Scope,
     signal: AbortSignal,
   ): Promise<{
-    tenantId: string;
+    userId: string;
     workspaceIds: readonly string[];
     documentIds?: readonly string[];
     readAclKeys: readonly string[];
@@ -107,7 +107,7 @@ export function createKnowledgeRetriever<Scope>(options: {
         throw new Error("INVALID_QUERY");
       const scope = await options.resolveScope(input.scope, signal);
       if (
-        !scope.tenantId ||
+        !scope.userId ||
         !scope.workspaceIds.length ||
         !scope.readAclKeys.length ||
         input.contextTokenBudget === 0 ||
@@ -149,7 +149,7 @@ export function createKnowledgeRetriever<Scope>(options: {
           if (++queryCalls > (options.maxQueryCalls ?? 128))
             throw new Error("RETRIEVAL_BUDGET_EXCEEDED");
           const must: Schemas["Condition"][] = [
-            { key: "metadata.tenantId", match: { value: scope.tenantId } },
+            { key: "metadata.userId", match: { value: scope.userId } },
             { key: "metadata.workspaceId", match: { any: [...scope.workspaceIds] } },
             { key: "metadata.readAclKeys", match: { any: keys } },
             { key: "metadata.configFingerprint", match: { value: fingerprint } },
@@ -173,7 +173,7 @@ export function createKnowledgeRetriever<Scope>(options: {
               !m ||
               !fields.every((key) => typeof m[key] === "string") ||
               !Number.isFinite(point.score) ||
-              m.tenantId !== scope.tenantId ||
+              m.userId !== scope.userId ||
               !scope.workspaceIds.includes(String(m.workspaceId)) ||
               (scope.documentIds && !scope.documentIds.includes(String(m.documentId))) ||
               m.configFingerprint !== fingerprint ||

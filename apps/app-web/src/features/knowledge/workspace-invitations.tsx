@@ -60,7 +60,7 @@ export function WorkspaceInvitations({ workspaceId }: { workspaceId: string }) {
     <section aria-label="链接邀请" className="space-y-3 rounded-xl border p-4">
       <h3 className="text-sm font-semibold">邀请加入空间</h3>
       <p className="text-xs leading-5 text-muted-foreground">
-        每条链接限一位同租户成员使用，7 天内有效；对方登录后接受邀请即可加入。
+        每条链接限一位同一用户下的成员使用，7 天内有效；对方登录后接受邀请即可加入。
       </p>
       <div className="flex flex-wrap gap-2">
         <select

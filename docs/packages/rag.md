@@ -12,7 +12,7 @@
 
 状态：2026-10-19 已按用户编码指令实现 `@zhishu/rag`，目录 `packages/rag`；[返回文档地图](../README.md)。本包只适配知书内容与成熟检索组件；应用索引调度和授权模式迁移仍由 app-server 负责。
 
-消费说明见 [包 README](../../packages/rag/README.md)。已验证真实 LangChain 分块、Qdrant 1.17.1 的 insert_only、nested 条件 payload 更新、LangChain QdrantVectorStore 兼容读取、候选投影、授权后读取正文、租户隔离与过期构建候选扩查。Embedding 使用 LangChain 确定性测试实现，真实语义召回质量和 RG-LOAD 尚未验收。
+消费说明见 [包 README](../../packages/rag/README.md)。已验证真实 LangChain 分块、Qdrant 1.17.1 的 insert_only、nested 条件 payload 更新、LangChain QdrantVectorStore 兼容读取、候选投影、授权后读取正文、用户隔离与过期构建候选扩查。Embedding 使用 LangChain 确定性测试实现，真实语义召回质量和 RG-LOAD 尚未验收。
 
 实现增加官方客户端的显式初始化/写入/策略更新函数；写入返回前复核不可变正文与 Embedding 输入摘要。SDK 的空分隔符会拆开 UTF-16 代理对，因此只适配这个分隔动作以按 Unicode 码点切分，分块与合并仍交给 LangChain。默认以 UTF-8 字节数作保守 token 上界，可注入与模型匹配的 tokenizer 并更新 chunkerVersion。超出 document-contracts 安全整数范围的 durableSeq 明确拒绝，已接受序列号按十进制字符串存储。
 
@@ -37,18 +37,18 @@ aclRevision 使用十进制字符串；当前策略更新 API 按 previousRevisi
 
 | 存储/字段                       | 内容                                                                                                                                 |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| PostgreSQL `workspace_members`  | 复用 tenant/workspace/identity/role，维护真实团队成员关系                                                                            |
-| PostgreSQL `document_acl`       | 复用 tenant/document/identity/action，维护独立文档分享和动作授权                                                                     |
+| PostgreSQL `workspace_members`  | 复用 user/workspace/identity/role，维护真实团队成员关系                                                                              |
+| PostgreSQL `document_acl`       | 复用 user/document/identity/action，维护独立文档分享和动作授权                                                                       |
 | 现有表新增业务列                | workspaces.kind=personal/team；documents.accessMode=space/restricted；documents.aclRevision 仅表示索引访问策略修订                   |
-| PostgreSQL `document_indexes`   | 每租户/文档一行，保存正文/策略目标与已同步版本、active/buildingIndexVersion、状态、片段数/摘要、租约和重试；不存主体名单、切片或向量 |
-| Qdrant，例如 `zhishu_chunks_v1` | 每个 point 保存一个版本中的切片、向量、来源定位和少量 readAclKeys，所有租户共享 collection 并强制租户过滤                            |
+| PostgreSQL `document_indexes`   | 每用户/文档一行，保存正文/策略目标与已同步版本、active/buildingIndexVersion、状态、片段数/摘要、租约和重试；不存主体名单、切片或向量 |
+| Qdrant，例如 `zhishu_chunks_v1` | 每个 point 保存一个版本中的切片、向量、来源定位和少量 readAclKeys，所有用户共享 collection 并强制用户过滤                            |
 | `IndexOptions`                  | collection、模型/维度/距离、分块版本与预算，派生配置指纹；不新增配置表                                                               |
 
 普通成员增删修改已有关系表，改变的是服务端查询授权键，不改变文档的稳定键，不推进该文档的索引目标。accessMode、个人空间归属主体、文档所在空间等使键本身变化时，才在业务事务中递增 aclRevision 并推进 document_indexes。该修订不再随每次成员操作递增；成员读取与撤权不能仅依赖它。
 
 这些是待审的新业务语义。当前代码尚无 kind/accessMode，空间角色仅管组织，不能把新规则标记为已经生效。字段属于应用元数据，不是 DocumentContent 的节点属性，不新增权限、来源、profile 或主体展开表。
 
-document_indexes 主键为 tenantId/documentId，每篇文档一个目标配置。正文构建分配新 indexVersion，point ID 根据 tenant/document/indexVersion/chunkOrdinal 生成确定 UUID；已发布正文和向量不可变。仅稳定授权键变化时沿用 activeIndexVersion，受策略修订保护更新 payload。
+document_indexes 主键为 userId/documentId，每篇文档一个目标配置。正文构建分配新 indexVersion，point ID 根据 user/document/indexVersion/chunkOrdinal 生成确定 UUID；已发布正文和向量不可变。仅稳定授权键变化时沿用 activeIndexVersion，受策略修订保护更新 payload。
 
 ### 用户、空间与文档分别授权
 
@@ -68,7 +68,7 @@ document 键只是“已获权读取这篇文档”的资源标识，不是一�
 
 ### 服务端计算查询键
 
-每次查询先按当前租户、身份和选定知识范围读取主库或有撤权一致性保证的关系，得到：
+每次查询先按当前用户、身份和选定知识范围读取主库或有撤权一致性保证的关系，得到：
 
 - 自身个人主体键，例如 `user:u1`，不允许由分享关系推导出其他人的 user 键。
 - 当前确实是成员且该角色允许读取的团队空间键，例如 `space:s1`。
@@ -76,23 +76,23 @@ document 键只是“已获权读取这篇文档”的资源标识，不是一�
 
 已有 workspaceAccess 对非成员返回 viewer，用于目录浏览；这个回退角色不是成员证明，绝不能直接据此签发 space 键。必须检查空间 owner 或真实 workspace_members 记录，不能让“知道 spaceId”变成正文授权。匿名分享不开放知识库检索，服务端生成键，客户端/模型均不能自报授权键。
 
-检索条件为 tenant、选定 workspace/document 范围、正文配置/状态和“readAclKeys 与服务端可用键至少一个相交”共同成立。不同资源键之间用 OR，整体仍与租户/范围做 AND，使用 Qdrant [match any](https://qdrant.tech/documentation/search/filtering/#match-any)，不依赖 Prompt。
+检索条件为 user、选定 workspace/document 范围、正文配置/状态和“readAclKeys 与服务端可用键至少一个相交”共同成立。不同资源键之间用 OR，整体仍与用户/范围做 AND，使用 Qdrant [match any](https://qdrant.tech/documentation/search/filtering/#match-any)，不依赖 Prompt。
 
-查询键过多时按 token 数/请求字节有界拆批、固定相同租户/范围条件，合并分数并按 point ID 去重，再统一权限复核；不得改成无授权过滤，也不能静默截掉部分文档而声称完整结果。个人/受限文档很多时，document 键解析和筛选成本仍须压测，不宣称所有读取 O(1)。
+查询键过多时按 token 数/请求字节有界拆批、固定相同用户/范围条件，合并分数并按 point ID 去重，再统一权限复核；不得改成无授权过滤，也不能静默截掉部分文档而声称完整结果。个人/受限文档很多时，document 键解析和筛选成本仍须压测，不宣称所有读取 O(1)。
 
 ### Qdrant point 与 ACL payload
 
 沿用 LangChain 可配置的 content/metadata 载荷；过滤和 payload 索引使用 metadata. 前缀。具体 SDK 参数在锁定版本验证，不发布新的公共 Qdrant 类型。
 
-| point 字段           | 内容                                                                                                                                   |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| id / vector          | 构建内稳定 UUID，一个首期 dense 向量空间，维度/Cosine 由 collection 配置确定                                                           |
-| payload.content      | 切片原文，检索前缀与摘录区间分开                                                                                                       |
-| metadata 来源字段    | tenantId、workspaceId、documentId、indexVersion、snapshotId、chunkOrdinal、blockId、UTF-16 区间、原文/Embedding 输入摘要和有限标题路径 |
-| metadata 版本字段    | generationId、durableSeq、metadataRevision、aclRevision、configFingerprint、sourceState                                                |
-| metadata.readAclKeys | space/user/document 三类稳定键，首期每 point 通常一至两个；没有键默认拒绝                                                              |
+| point 字段           | 内容                                                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| id / vector          | 构建内稳定 UUID，一个首期 dense 向量空间，维度/Cosine 由 collection 配置确定                                                         |
+| payload.content      | 切片原文，检索前缀与摘录区间分开                                                                                                     |
+| metadata 来源字段    | userId、workspaceId、documentId、indexVersion、snapshotId、chunkOrdinal、blockId、UTF-16 区间、原文/Embedding 输入摘要和有限标题路径 |
+| metadata 版本字段    | generationId、durableSeq、metadataRevision、aclRevision、configFingerprint、sourceState                                              |
+| metadata.readAclKeys | space/user/document 三类稳定键，首期每 point 通常一至两个；没有键默认拒绝                                                            |
 
-collection 创建时先建立 tenantId、workspaceId、documentId、indexVersion、readAclKeys、configFingerprint、sourceState 的 keyword 索引；策略修订使用与序列化一致的类型，durableSeq 使用无损十进制字符串。不再保存 readIdentityIds 或切片级用户 action 名单。旧载荷必须重建/显式迁移，不把空键或旧 viewer 角色回退成全空间可读。
+collection 创建时先建立 userId、workspaceId、documentId、indexVersion、readAclKeys、configFingerprint、sourceState 的 keyword 索引；策略修订使用与序列化一致的类型，durableSeq 使用无损十进制字符串。不再保存 readIdentityIds 或切片级用户 action 名单。旧载荷必须重建/显式迁移，不把空键或旧 viewer 角色回退成全空间可读。
 
 ### 对象也保持精简
 
@@ -171,7 +171,7 @@ Worker 用 SELECT FOR UPDATE SKIP LOCKED 和租约领取同一索引行。正文
 正文/metadata/模型配置不变而仅策略键变化时，沿用 activeIndexVersion：
 
 1. 固定 activeIndexVersion 和最新策略修订 r，从当前业务规则编译少量 readAclKeys，不枚举空间/文档全部成员。
-2. 通过官方 [set payload](https://api.qdrant.tech/api-reference/points/set-payload)，以 tenant/document/indexVersion 及 metadata.aclRevision < r 限定，向 metadata 子路径一并写 readAclKeys/aclRevision。不覆盖正文、向量、其他来源字段或整个 metadata。
+2. 通过官方 [set payload](https://api.qdrant.tech/api-reference/points/set-payload)，以 user/document/indexVersion 及 metadata.aclRevision < r 限定，向 metadata 子路径一并写 readAclKeys/aclRevision。不覆盖正文、向量、其他来源字段或整个 metadata。
 3. 等待完成并核对预期 points 的目标修订/键摘要；超时和部分完成同目标幂等重试，旧修订不覆盖新修订。
 4. PostgreSQL 以 leaseToken、活动版本和目标条件提交已同步策略；来源/配置变化时不能标记完成，改走新构建或继续同步最新目标。
 
@@ -189,7 +189,7 @@ Worker 用 SELECT FOR UPDATE SKIP LOCKED 和租约领取同一索引行。正文
 
 应用只交付当前 activeIndexVersion 且 generation/durableSeq/metadataRevision/配置与业务头部一致的正文。Qdrant 资源键是召回过滤投影，不是权限权威库；知道 space/user/document ID 不授予访问。
 
-最小流程：认证/选定范围 → 从当前关系解析可用键 → query Embedding → Qdrant 按 tenant/范围/稳定键检索 → 候选 ID/分数/最小版本字段 → PostgreSQL 批量复核当前模式、成员/直接授权及正文发布版本 → 按精确 point ID 取 Qdrant 文本 → 定位/摘要/预算 → EvidenceBundle。首轮 with_payload 不取正文、标题或授权名单，原始候选不对外展示；先授权再送 reranker/LLM。
+最小流程：认证/选定范围 → 从当前关系解析可用键 → query Embedding → Qdrant 按 user/范围/稳定键检索 → 候选 ID/分数/最小版本字段 → PostgreSQL 批量复核当前模式、成员/直接授权及正文发布版本 → 按精确 point ID 取 Qdrant 文本 → 定位/摘要/预算 → EvidenceBundle。首轮 with_payload 不取正文、标题或授权名单，原始候选不对外展示；先授权再送 reranker/LLM。
 
 不能用浏览器传入的 spaceId 列表或长效 JWT 的旧成员声明直接生成键。第一阶段按请求读取当前关系；若以后缓存，必须处理可靠失效与撤权一致性，最终复核仍走主库或能证明已追上变更的一致性读，不使用固定 TTL 的旧允许缓存。批量复核避免每个切片单独查询 SQL。
 
@@ -197,7 +197,7 @@ Worker 用 SELECT FOR UPDATE SKIP LOCKED 和租约领取同一索引行。正文
 
 策略 aclRevision 跟踪投影同步和乱序保护，不是成员版本或对所有用户停搜的开关。切片策略修订可落后但不得异常超前；当前用户始终按实际最新规则授权，模式变化不能绕过该检查。
 
-旧构建/候选可能占 Top-K，允许有界扩大候选、排除已处理 ID；达到时间/数量上限返回不足，禁止放宽 tenant、范围或资源键。关键词、混合召回与重排遵守相同授权。删除/移动/新 generation 先由当前业务状态排除，后异步清理。全文/历史回看走原文档能力，不承诺保留任意旧来源独立快照。
+旧构建/候选可能占 Top-K，允许有界扩大候选、排除已处理 ID；达到时间/数量上限返回不足，禁止放宽 user、范围或资源键。关键词、混合召回与重排遵守相同授权。删除/移动/新 generation 先由当前业务状态排除，后异步清理。全文/历史回看走原文档能力，不承诺保留任意旧来源独立快照。
 
 Qdrant 是私有服务依赖，不向浏览器或模型工具暴露密钥/直连接口。首期不缓存带正文的完整答案，不增加检索权限事实表或单独 ACL collection。
 
@@ -219,7 +219,7 @@ RG-01：真实 LangChain 分块/Embedding、Qdrant point 和 Block 定位，覆�
 
 RG-02：一张索引表和一个 collection 验证租约/条件发布、部分写入、旧 Worker 晚到、insert_only、策略键更新、Top-K 挤占、tombstone、清理竞争和恢复后的重核。
 
-RG-ACL：验证团队继承、个人单篇分享、restricted 文档、不同空间的不同角色、同租户直接分享、跨租户同名 ID、非成员 viewer 回退、空查询键、客户端伪造键、模式切换与移动、在途撤权/缓存来源恢复。禁止把个人单篇分享变成 owner 的整个个人空间权限，旧文档回填不能扩大访问。
+RG-ACL：验证团队继承、个人单篇分享、restricted 文档、不同空间的不同角色、同一用户直接分享、跨用户同名 ID、非成员 viewer 回退、空查询键、客户端伪造键、模式切换与移动、在途撤权/缓存来源恢复。禁止把个人单篇分享变成 owner 的整个个人空间权限，旧文档回填不能扩大访问。
 
 RG-LOAD：测试 4.3 的负载矩阵；普通加人/踢人/角色变更不触发 Qdrant 写入或 Embedding，热点 SQL 有界，定向失效不反复踢无关用户。大量 restricted 文档的键解析/拆批和资源模式变更需单独测量。
 

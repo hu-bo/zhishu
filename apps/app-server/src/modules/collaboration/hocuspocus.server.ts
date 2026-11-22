@@ -459,7 +459,7 @@ export function createCollaborationServer(
       try {
         active = await repository.findActiveForAction(
           key.documentId,
-          session.tenantId,
+          session.userId,
           session.subject,
           "read",
         );
@@ -475,7 +475,7 @@ export function createCollaborationServer(
       if (
         !active ||
         active.generationId !== key.generationId ||
-        active.tenantId !== session.tenantId ||
+        active.userId !== session.userId ||
         active.schemaVersion !== session.schemaVersion ||
         !sameExtensions(active.extensions, session.extensions)
       ) {
@@ -506,7 +506,7 @@ export function createCollaborationServer(
         session.documentId !== key.documentId ||
         session.generationId !== key.generationId ||
         !currentSession ||
-        session.tenantId !== currentSession.tenantId ||
+        session.userId !== currentSession.userId ||
         session.subject !== currentSession.subject
       ) {
         throw closeError("invalid-collaboration-session");
@@ -515,7 +515,7 @@ export function createCollaborationServer(
       try {
         active = await repository.findActiveForAction(
           key.documentId,
-          session.tenantId,
+          session.userId,
           session.subject,
           session.readOnly ? "read" : "write",
         );
@@ -531,7 +531,7 @@ export function createCollaborationServer(
       if (
         !active ||
         active.generationId !== key.generationId ||
-        active.tenantId !== session.tenantId ||
+        active.userId !== session.userId ||
         active.schemaVersion !== session.schemaVersion ||
         !sameExtensions(active.extensions, session.extensions)
       ) {
@@ -556,7 +556,7 @@ export function createCollaborationServer(
       try {
         active = await repository.findActiveForAction(
           key.documentId,
-          session.tenantId,
+          session.userId,
           session.subject,
           "read",
         );
@@ -572,7 +572,7 @@ export function createCollaborationServer(
       if (
         !active ||
         active.generationId !== key.generationId ||
-        active.tenantId !== session.tenantId ||
+        active.userId !== session.userId ||
         active.schemaVersion !== session.schemaVersion ||
         !sameExtensions(active.extensions, session.extensions)
       ) {
@@ -622,7 +622,7 @@ export function createCollaborationServer(
       try {
         active = await repository.findActiveForAction(
           key.documentId,
-          session.tenantId,
+          session.userId,
           session.subject,
           connection.readOnly ? "read" : "write",
         );
@@ -638,7 +638,7 @@ export function createCollaborationServer(
       if (
         !active ||
         active.generationId !== key.generationId ||
-        active.tenantId !== session.tenantId ||
+        active.userId !== session.userId ||
         active.schemaVersion !== session.schemaVersion ||
         !sameExtensions(active.extensions, session.extensions)
       ) {
@@ -677,7 +677,7 @@ export function createCollaborationServer(
           const receipt = await repository.persistUpdate({
             documentId: key.documentId,
             generationId: key.generationId,
-            tenantId: session.tenantId,
+            userId: session.userId,
             subjectId: session.subject,
             updateHash: persistedUpdateHash,
             sourceUpdateHash,
@@ -769,14 +769,14 @@ export function createCollaborationServer(
           }
           const active = await repository.findActiveForAction(
             key.documentId,
-            session.tenantId,
+            session.userId,
             session.subject,
             "write",
           );
           if (
             !active ||
             active.generationId !== key.generationId ||
-            active.tenantId !== session.tenantId ||
+            active.userId !== session.userId ||
             active.schemaVersion !== session.schemaVersion ||
             !sameExtensions(active.extensions, session.extensions)
           ) {
@@ -928,7 +928,7 @@ export function createCollaborationServer(
             const persisted = await repository.persistUpdate({
               documentId: key.documentId,
               generationId: key.generationId,
-              tenantId: session.tenantId,
+              userId: session.userId,
               subjectId: session.subject,
               updateHash: hash,
               updateBytes,
@@ -1024,14 +1024,14 @@ export function createCollaborationServer(
         }
         const current = await repository.findActiveForAction(
           key.documentId,
-          session.tenantId,
+          session.userId,
           session.subject,
           "write",
         );
         if (
           !current ||
           current.generationId !== key.generationId ||
-          current.tenantId !== session.tenantId ||
+          current.userId !== session.userId ||
           current.schemaVersion !== session.schemaVersion ||
           !sameExtensions(current.extensions, session.extensions)
         ) {
@@ -1151,14 +1151,14 @@ export function createCollaborationServer(
     if (!ownerLeaseClient) throw new DomainError("SERVICE_UNAVAILABLE", "协同服务尚未就绪");
     const active = await repository.findActiveForAction(
       documentId,
-      principal.tenantId,
+      principal.userId,
       principal.identityId,
       "read",
     );
     if (!active) throw new DomainError("NOT_FOUND", "文档不存在或无权访问");
     const { claims } = createSessionTicket(
       {
-        tenantId: principal.tenantId,
+        userId: principal.userId,
         documentId,
         generationId: active.generationId,
         schemaVersion: active.schemaVersion,
@@ -1190,7 +1190,7 @@ export function createCollaborationServer(
             async () => {
               const active = await repository.findActiveForAction(
                 documentId,
-                principal.tenantId,
+                principal.userId,
                 principal.identityId,
                 "read",
               );
@@ -1288,7 +1288,7 @@ export function createCollaborationServer(
           const persisted = await repository.persistUpdate({
             documentId: batch.documentId,
             generationId: batch.generationId,
-            tenantId: principal.tenantId,
+            userId: principal.userId,
             subjectId: principal.identityId,
             updateHash: updateHash(updateBytes),
             sourceUpdateHash: receiptKey,

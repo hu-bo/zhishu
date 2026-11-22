@@ -106,7 +106,7 @@ export interface DraftDocumentPort {
   createDraftInTx(
     tx: DocumentWriteTransaction,
     input: {
-      tenantId: string;
+      userId: string;
       identityId: string;
       title: string;
       workspaceId: string;
@@ -122,7 +122,7 @@ export type AssistantAudience =
   | { kind: "internal"; principal: Principal }
   | {
       kind: "site";
-      tenantId: string;
+      userId: string;
       siteId: string;
       visitorId: string;
       approved: readonly { documentId: string; workspaceId: string; publicLabel: string }[];
@@ -297,27 +297,27 @@ export class AssistantService {
     if (audience.kind === "internal")
       return {
         kind: "identity",
-        tenantId: audience.principal.tenantId,
+        userId: audience.principal.userId,
         identityId: audience.principal.identityId,
       };
     if (audience.internal)
       return {
         kind: "identity",
-        tenantId: audience.tenantId,
+        userId: audience.userId,
         identityId: audience.internal.identityId,
         siteId: audience.siteId,
       };
     return {
       kind: "visitor",
-      tenantId: audience.tenantId,
+      userId: audience.userId,
       visitorId: audience.visitorId,
       siteId: audience.siteId,
     };
   }
 
   private requireOwned(conversation: ConversationRow, audience: AssistantAudience): void {
-    const tenantId = audienceTenant(audience);
-    if (conversation.tenantId !== tenantId) throw new DomainError("NOT_FOUND", "会话不存在");
+    const userId = audienceUserId(audience);
+    if (conversation.userId !== userId) throw new DomainError("NOT_FOUND", "会话不存在");
     if (audience.kind === "internal") {
       if (
         conversation.identityId !== audience.principal.identityId ||
@@ -344,12 +344,12 @@ export class AssistantService {
         throw new DomainError("AI_ACCESS_REVOKED", "所选资料不在本站点公开范围内");
       return {
         kind: "site",
-        tenantId: audience.tenantId,
+        userId: audience.userId,
         approved: audience.approved,
         documentIds: selection.documentIds,
       };
     }
-    return { kind: "site", tenantId: audience.tenantId, approved: audience.approved };
+    return { kind: "site", userId: audience.userId, approved: audience.approved };
   }
 
   // ------------------------------------------------------------- conversations
@@ -391,7 +391,7 @@ export class AssistantService {
     page?: { before?: string; limit?: number },
   ): Promise<ConversationSnapshot> {
     const conversation = await this.deps.store.getConversation(
-      audienceTenant(audience),
+      audienceUserId(audience),
       conversationId,
     );
     this.requireOwned(conversation, audience);
@@ -410,7 +410,7 @@ export class AssistantService {
       if (message.role === "assistant") {
         let allowed = runAllowed.get(message.runId);
         if (allowed === undefined) {
-          allowed = await this.publicRunAllowed(audience.tenantId, message.runId, approved);
+          allowed = await this.publicRunAllowed(audience.userId, message.runId, approved);
           runAllowed.set(message.runId, allowed);
         }
         if (!allowed) continue;
@@ -430,18 +430,18 @@ export class AssistantService {
 
   /** A public answer stays visible only while every evidence source handed to the model is approved. */
   private async publicRunAllowed(
-    tenantId: string,
+    userId: string,
     runId: string,
     approved: ReadonlySet<string>,
     artifactCache?: Map<string, boolean>,
   ): Promise<boolean> {
-    const run = await this.deps.store.readRun(tenantId, runId);
+    const run = await this.deps.store.readRun(userId, runId);
     if (!run) return false;
     for (const ref of run.execution?.evidenceRefs ?? []) {
       let sourceAllowed = artifactCache?.get(ref.evidenceArtifactId);
       if (sourceAllowed === undefined) {
         sourceAllowed = await this.evidenceArtifactApproved(
-          tenantId,
+          userId,
           ref.evidenceArtifactId,
           approved,
         );
@@ -453,11 +453,11 @@ export class AssistantService {
   }
 
   private async evidenceArtifactApproved(
-    tenantId: string,
+    userId: string,
     artifactId: string,
     approved: ReadonlySet<string>,
   ): Promise<boolean> {
-    const artifact = await this.deps.store.findArtifact(tenantId, artifactId);
+    const artifact = await this.deps.store.findArtifact(userId, artifactId);
     if (!artifact || artifact.state !== "committed") return false;
     const bundle = artifact.payload as EvidenceBundle;
     return bundle.sources.every(
@@ -474,7 +474,7 @@ export class AssistantService {
   ): Promise<{ runId: string }> {
     this.requireEnabled();
     const store = this.deps.store;
-    const conversation = await store.getConversation(audienceTenant(audience), conversationId);
+    const conversation = await store.getConversation(audienceUserId(audience), conversationId);
     this.requireOwned(conversation, audience);
     if (conversation.configurationId && conversation.configurationId !== this.configurationId())
       throw new DomainError("CONFLICT", "模型配置已更新，请在新上下文继续");
@@ -554,11 +554,11 @@ export class AssistantService {
         context,
       },
       {
-        tenantRunningMax: this.deps.config.AI_MAX_CONCURRENT,
+        userRunningMax: this.deps.config.AI_MAX_CONCURRENT,
         ownerHourlyMax: DEFAULT_OWNER_HOURLY_MAX,
         siteHourlyMax:
           audience.kind === "site"
-            ? await this.siteQuota(conversation.tenantId, audience.siteId)
+            ? await this.siteQuota(conversation.userId, audience.siteId)
             : undefined,
       },
     );
@@ -612,7 +612,7 @@ export class AssistantService {
   }> {
     this.requireEnabled();
     const store = this.deps.store;
-    const conversation = await store.getConversation(principal.tenantId, conversationId);
+    const conversation = await store.getConversation(principal.userId, conversationId);
     this.requireOwned(conversation, { kind: "internal", principal });
     if (conversation.siteId) throw new DomainError("FORBIDDEN", "公开会话不能创建草稿");
     if (conversation.targetDocumentId)
@@ -623,7 +623,7 @@ export class AssistantService {
         status: "already-bound",
       };
     // In-flight create-draft runs are returned even under a different idempotency key.
-    const active = await store.listActiveRuns(conversation.tenantId, conversation.id);
+    const active = await store.listActiveRuns(conversation.userId, conversation.id);
     const inflight = active.find((run) => run.context.command === "create-draft");
     if (inflight) return { runId: inflight.id, replayed: true, status: "in-progress" };
     await requireWorkspaceOrganizer(this.deps.db, principal, body.workspaceId);
@@ -654,7 +654,7 @@ export class AssistantService {
           context,
         },
         {
-          tenantRunningMax: this.deps.config.AI_MAX_CONCURRENT,
+          userRunningMax: this.deps.config.AI_MAX_CONCURRENT,
           ownerHourlyMax: DEFAULT_OWNER_HOURLY_MAX,
         },
       );
@@ -663,7 +663,7 @@ export class AssistantService {
     } catch (error) {
       // A concurrent create-draft won the admission race: return it instead of a second draft.
       if (error instanceof DomainError && error.code === "RESOURCE_LIMIT") {
-        const racing = (await store.listActiveRuns(conversation.tenantId, conversation.id)).find(
+        const racing = (await store.listActiveRuns(conversation.userId, conversation.id)).find(
           (run) => run.context.command === "create-draft",
         );
         if (racing) return { runId: racing.id, replayed: true, status: "in-progress" };
@@ -679,7 +679,7 @@ export class AssistantService {
     body: { targetDocumentId: string; expectedContextRevision: number },
   ): Promise<{ contextRevision: number; targetDocumentId: string; cancelledRunIds: string[] }> {
     const store = this.deps.store;
-    const conversation = await store.getConversation(principal.tenantId, conversationId);
+    const conversation = await store.getConversation(principal.userId, conversationId);
     this.requireOwned(conversation, { kind: "internal", principal });
     await this.assertDocumentAccess(principal, body.targetDocumentId, ["ai", "write"]);
     const result = await store.bindTarget(
@@ -702,7 +702,7 @@ export class AssistantService {
     artifactIds: string[],
   ): Promise<void> {
     for (const artifactId of artifactIds) {
-      const artifact = await this.deps.store.findArtifact(conversation.tenantId, artifactId);
+      const artifact = await this.deps.store.findArtifact(conversation.userId, artifactId);
       if (!artifact || artifact.conversationId !== conversation.id || artifact.kind !== "evidence")
         throw new DomainError("VALIDATION_ERROR", "所选资料不可用");
       const bundle = artifact.payload as EvidenceBundle;
@@ -728,7 +728,7 @@ export class AssistantService {
     scope: ScopeSelection,
   ) {
     const conversation = await this.deps.store.getConversation(
-      audienceTenant(audience),
+      audienceUserId(audience),
       conversationId,
     );
     this.requireOwned(conversation, audience);
@@ -749,28 +749,28 @@ export class AssistantService {
     runId: string,
   ): Promise<Run> {
     const conversation = await this.deps.store.getConversation(
-      audienceTenant(audience),
+      audienceUserId(audience),
       conversationId,
     );
     this.requireOwned(conversation, audience);
-    const run = await this.deps.store.readRun(conversation.tenantId, runId);
+    const run = await this.deps.store.readRun(conversation.userId, runId);
     if (!run || run.conversationId !== conversation.id)
       throw new DomainError("NOT_FOUND", "任务不存在");
-    const result = await this.deps.store.cancelRun(conversation.tenantId, runId);
+    const result = await this.deps.store.cancelRun(conversation.userId, runId);
     this.activeRuns.get(runId)?.abort(new Error("CANCELLED"));
     return runDto(result);
   }
 
   async retryRun(audience: AssistantAudience, conversationId: string, runId: string) {
     const conversation = await this.deps.store.getConversation(
-      audienceTenant(audience),
+      audienceUserId(audience),
       conversationId,
     );
     this.requireOwned(conversation, audience);
-    const run = await this.deps.store.readRun(conversation.tenantId, runId);
+    const run = await this.deps.store.readRun(conversation.userId, runId);
     if (!run || run.conversationId !== conversation.id)
       throw new DomainError("NOT_FOUND", "任务不存在");
-    const result = await this.deps.store.retryRun(conversation.tenantId, runId);
+    const result = await this.deps.store.retryRun(conversation.userId, runId);
     this.kick();
     return { kind: result.kind, run: runDto(result.run) };
   }
@@ -782,11 +782,11 @@ export class AssistantService {
     body: { decisionId: string; decision: "allow-once" | "reject" },
   ) {
     const conversation = await this.deps.store.getConversation(
-      audienceTenant(audience),
+      audienceUserId(audience),
       conversationId,
     );
     this.requireOwned(conversation, audience);
-    const runs = await this.deps.store.listActiveRuns(conversation.tenantId, conversation.id);
+    const runs = await this.deps.store.listActiveRuns(conversation.userId, conversation.id);
     const run = runs.find((candidate) => candidate.execution?.approval?.id === approvalId);
     const approval = run?.execution?.approval;
     if (!run || !approval || approval.id !== approvalId)
@@ -807,16 +807,16 @@ export class AssistantService {
 
   async listImages(audience: AssistantAudience, conversationId: string) {
     const conversation = await this.deps.store.getConversation(
-      audienceTenant(audience),
+      audienceUserId(audience),
       conversationId,
     );
     this.requireOwned(conversation, audience);
-    return this.deps.images.list(conversation.tenantId, conversation.id);
+    return this.deps.images.list(conversation.userId, conversation.id);
   }
 
   async refreshImage(audience: AssistantAudience, conversationId: string, jobKey: string) {
     const conversation = await this.deps.store.getConversation(
-      audienceTenant(audience),
+      audienceUserId(audience),
       conversationId,
     );
     this.requireOwned(conversation, audience);
@@ -826,7 +826,7 @@ export class AssistantService {
 
   async imageAccess(audience: AssistantAudience, conversationId: string, assetId: string) {
     const conversation = await this.deps.store.getConversation(
-      audienceTenant(audience),
+      audienceUserId(audience),
       conversationId,
     );
     this.requireOwned(conversation, audience);
@@ -844,7 +844,7 @@ export class AssistantService {
     signal: AbortSignal,
   ): Promise<void> {
     const conversation = await this.deps.store.getConversation(
-      audienceTenant(audience),
+      audienceUserId(audience),
       conversationId,
     );
     this.requireOwned(conversation, audience);
@@ -892,7 +892,7 @@ export class AssistantService {
         if (event.type !== "message.created" || event.payload.message.role !== "assistant")
           return true;
         return this.publicRunAllowed(
-          audience.tenantId,
+          audience.userId,
           event.payload.message.runId,
           approved,
           artifactCache,
@@ -960,11 +960,11 @@ export class AssistantService {
     artifactId: string,
   ): Promise<ArtifactRow> {
     const conversation = await this.deps.store.getConversation(
-      audienceTenant(audience),
+      audienceUserId(audience),
       conversationId,
     );
     this.requireOwned(conversation, audience);
-    const artifact = await this.deps.store.findArtifact(conversation.tenantId, artifactId);
+    const artifact = await this.deps.store.findArtifact(conversation.userId, artifactId);
     if (!artifact || artifact.conversationId !== conversation.id)
       throw new DomainError("NOT_FOUND", "产物不存在");
     return artifact;
@@ -1401,7 +1401,7 @@ export class AssistantService {
   private async verifyTurnAccess(state: TurnToolState, signal: AbortSignal): Promise<void> {
     signal.throwIfAborted();
     const conversation = await this.deps.store.getConversation(
-      state.conversation.tenantId,
+      state.conversation.userId,
       state.conversation.id,
     );
     if (conversation.contextRevision !== state.run.context.contextRevision)
@@ -1575,7 +1575,7 @@ export class AssistantService {
             : undefined,
       };
       this.turnStates.set(conversation.id, state);
-      const userMessage = await store.userMessageForRun(run.tenantId, run.id, run.conversationId);
+      const userMessage = await store.userMessageForRun(run.userId, run.id, run.conversationId);
       const inputText = userMessage?.parts.find((part) => part.kind === "text");
       if (!inputText || inputText.kind !== "text") throw new DshRuntimeError("INVALID_INPUT");
       // The accepted create-draft command is a server fact the model cannot infer from the
@@ -1589,7 +1589,7 @@ export class AssistantService {
 
       // A create-draft retry reuses the immutable compiled draft; no second generation.
       if (context.command === "create-draft" && run.execution?.draftArtifactId) {
-        const draft = await store.findArtifact(run.tenantId, run.execution.draftArtifactId);
+        const draft = await store.findArtifact(run.userId, run.execution.draftArtifactId);
         if (draft && draft.kind === "draft" && draft.state === "committed") {
           state.draftArtifactId = draft.id;
           await this.bindDraftDocument(state, draft.payload as WritingDraftPayload);
@@ -1663,7 +1663,7 @@ export class AssistantService {
     const references = state.context.referenceArtifactIds;
     if (!references?.length) return;
     for (const artifactId of references) {
-      const artifact = await this.deps.store.findArtifact(state.conversation.tenantId, artifactId);
+      const artifact = await this.deps.store.findArtifact(state.conversation.userId, artifactId);
       if (!artifact || artifact.kind !== "evidence") throw new DshRuntimeError("ACCESS_REVOKED");
       const bundle = artifact.payload as EvidenceBundle;
       const docIds = documentIdsOf(bundle);
@@ -1690,7 +1690,7 @@ export class AssistantService {
     return {
       authorize: async () => {
         await this.verifyTurnAccess(state, new AbortController().signal);
-        const fresh = await store.readRun(state.run.tenantId, state.run.id);
+        const fresh = await store.readRun(state.run.userId, state.run.id);
         if (fresh?.cancelRequested) throw new DshRuntimeError("CANCELLED");
       },
       reserveModelCall: async () => {
@@ -1789,7 +1789,7 @@ export class AssistantService {
     // create-draft: the document is created only here, atomically with the target binding.
     if (state.context.command === "create-draft") {
       if (result.status === "completed" && state.draftArtifactId) {
-        const draft = await store.findArtifact(state.run.tenantId, state.draftArtifactId);
+        const draft = await store.findArtifact(state.run.userId, state.draftArtifactId);
         if (draft && draft.kind === "draft") {
           await this.bindDraftDocument(state, draft.payload as WritingDraftPayload);
           return;
@@ -1803,7 +1803,7 @@ export class AssistantService {
     if (answer) parts.push(...answerParts(answer));
     else if (result.resultText) parts.push({ kind: "text", text: result.resultText });
     for (const artifactId of state.proposalArtifactIds) {
-      const artifact = await store.findArtifact(state.run.tenantId, artifactId);
+      const artifact = await store.findArtifact(state.run.userId, artifactId);
       if (artifact && artifact.kind === "proposal")
         parts.push({
           kind: "artifact",
@@ -1815,7 +1815,7 @@ export class AssistantService {
     let status = result.status;
     let errorCode = result.errorCode;
     if (status === "failed") {
-      const fresh = await store.readRun(state.run.tenantId, state.run.id);
+      const fresh = await store.readRun(state.run.userId, state.run.id);
       if (fresh?.cancelRequested) {
         status = "cancelled";
         errorCode = undefined;
@@ -1844,7 +1844,7 @@ export class AssistantService {
     let errorCode =
       result.errorCode ?? (result.status === "completed" ? "OUTPUT_REQUIRED" : undefined);
     if (status === "failed") {
-      const fresh = await this.deps.store.readRun(state.run.tenantId, state.run.id);
+      const fresh = await this.deps.store.readRun(state.run.userId, state.run.id);
       if (fresh?.cancelRequested) {
         status = "cancelled";
         errorCode = undefined;
@@ -1880,18 +1880,18 @@ export class AssistantService {
     const repo = store.repository;
     // Source links persist into the body (deterministic); distributability is re-checked under lock.
     const content = await this.decorateDraftContent(
-      principal.tenantId,
+      principal.userId,
       draft,
       `${state.conversation.id}:${state.run.id}`,
     );
     await this.deps.db.transaction(async (tx) => {
       // Fixed lock order: admission key, conversation row, then document creation locks.
       await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`ai-admit:${state.conversation.tenantId}:${state.conversation.id}`},719202))`,
+        sql`select pg_advisory_xact_lock(hashtextextended(${`ai-admit:${state.conversation.userId}:${state.conversation.id}`},719202))`,
       );
       const conversation = await repo.lockConversation(
         tx,
-        state.conversation.tenantId,
+        state.conversation.userId,
         state.conversation.id,
       );
       if (!conversation) throw new DomainError("NOT_FOUND", "会话不存在");
@@ -1901,7 +1901,7 @@ export class AssistantService {
         throw new DomainError("CONFLICT", "上下文已更新，草稿不能绑定");
       if (conversation.status !== "active")
         throw new DomainError("AI_ACCESS_REVOKED", "会话不可继续");
-      const run = await repo.lockRun(tx, state.run.tenantId, state.run.id);
+      const run = await repo.lockRun(tx, state.run.userId, state.run.id);
       if (
         !run ||
         run.leaseOwner !== state.leaseOwner ||
@@ -1913,7 +1913,7 @@ export class AssistantService {
       await requireWorkspaceOrganizer(tx, principal, draftInput.workspaceId);
       await this.assertDraftSourcesDistributable(tx, principal, draft);
       const created = await this.deps.drafts.createDraftInTx(tx, {
-        tenantId: principal.tenantId,
+        userId: principal.userId,
         identityId: principal.identityId,
         title: draft.title,
         workspaceId: draftInput.workspaceId,
@@ -1942,13 +1942,13 @@ export class AssistantService {
       ];
       const staged = await repo.upsertStagedAssistant(tx, {
         id: `amsg_${run.id}`,
-        tenantId: run.tenantId,
+        userId: run.userId,
         conversationId: run.conversationId,
         runId: run.id,
         parts,
         generationAttempt: run.attempt,
       });
-      const committed = await repo.commitMessage(tx, run.tenantId, staged.id);
+      const committed = await repo.commitMessage(tx, run.userId, staged.id);
       const settled = await repo.patchRunFenced(tx, run, state.leaseOwner, {
         status: "completed",
         execution: this.executionPatch(state, {
@@ -2000,7 +2000,7 @@ export class AssistantService {
     for (const citation of draft.citations) {
       const artifact = await this.deps.store.repository.findArtifact(
         tx,
-        principal.tenantId,
+        principal.userId,
         citation.evidenceArtifactId,
       );
       const bundle = artifact?.payload as EvidenceBundle | undefined;
@@ -2013,7 +2013,7 @@ export class AssistantService {
         .from(documents)
         .where(
           and(
-            eq(documents.tenantId, principal.tenantId),
+            eq(documents.userId, principal.userId),
             eq(documents.id, docId),
             eq(documents.status, "active"),
             documentActionSql(principal, "read"),
@@ -2033,7 +2033,7 @@ export class AssistantService {
     const store = this.deps.store;
     const code = assistantFailureCode(error, aborted);
     if (code === "PERSISTENCE_FAILED") {
-      const fresh = await store.readRun(state.run.tenantId, state.run.id);
+      const fresh = await store.readRun(state.run.userId, state.run.id);
       if (
         !fresh ||
         fresh.leaseOwner !== store.instanceId ||
@@ -2073,9 +2073,9 @@ export class AssistantService {
     },
   ): Promise<{ applicationState: ProposalApplicationState; receipt?: StructureReceipt }> {
     const store = this.deps.store;
-    const artifact = await store.findArtifact(principal.tenantId, artifactId);
+    const artifact = await store.findArtifact(principal.userId, artifactId);
     if (!artifact || artifact.kind !== "proposal") throw new DomainError("NOT_FOUND", "提案不存在");
-    const conversation = await store.getConversation(principal.tenantId, artifact.conversationId);
+    const conversation = await store.getConversation(principal.userId, artifact.conversationId);
     this.requireOwned(conversation, { kind: "internal", principal });
     if (artifact.state !== "committed") throw new DomainError("CONFLICT", "提案尚未就绪");
     const payload = artifact.payload as WritingProposalPayload;
@@ -2111,7 +2111,7 @@ export class AssistantService {
         receipts: { ...(artifact.review?.receipts ?? {}), [body.decisionId]: fingerprint },
       };
       await store.recordProposalReview({
-        tenantId: principal.tenantId,
+        userId: principal.userId,
         artifactId,
         expectedRevision: body.revision,
         decisionId: body.decisionId,
@@ -2127,7 +2127,7 @@ export class AssistantService {
     if (!selectedIds.length) throw new DomainError("VALIDATION_ERROR", "所选段落均已有决定");
     const current = await this.deps.owner.snapshot(principal, documentId);
     const batch = this.acceptedBatch(payload, selectedIds);
-    const decorated = await this.decorateCitations(principal.tenantId, payload, batch);
+    const decorated = await this.decorateCitations(principal.userId, payload, batch);
     const operationId = `op_${body.decisionId.replaceAll(/[-_]/g, "").slice(0, 48)}`;
     const finalBatch: OperationBatch = {
       ...decorated,
@@ -2147,7 +2147,7 @@ export class AssistantService {
         expectedDurableSeq: current.snapshot.durableSeq,
         baseStructureRevision: current.structureRevision,
         guard: async (tx) => {
-          const locked = await store.repository.lockArtifact(tx, principal.tenantId, artifactId);
+          const locked = await store.repository.lockArtifact(tx, principal.userId, artifactId);
           if (!locked) throw new DomainError("NOT_FOUND", "提案不存在");
           // A receipt no longer means terminal: review is incremental. Revision fencing keeps
           // concurrent decisions from double-writing the body before the optimistic lock lands.
@@ -2171,7 +2171,7 @@ export class AssistantService {
           if (!written) throw new DomainError("CONFLICT", "提案状态已更新，请刷新后重试");
           const conv = await store.repository.lockConversation(
             tx,
-            principal.tenantId,
+            principal.userId,
             conversation.id,
           );
           if (conv)
@@ -2191,7 +2191,7 @@ export class AssistantService {
       })
       .catch(async (error: unknown) => {
         if (error instanceof DomainError && error.code === "CONFLICT") {
-          const fresh = await store.findArtifact(principal.tenantId, artifactId);
+          const fresh = await store.findArtifact(principal.userId, artifactId);
           const stillOpen =
             !!fresh &&
             allBlockIds.some(
@@ -2200,7 +2200,7 @@ export class AssistantService {
           if (stillOpen) {
             await store
               .recordProposalReview({
-                tenantId: principal.tenantId,
+                userId: principal.userId,
                 artifactId,
                 expectedRevision: fresh.reviewRevision ?? 0,
                 decisionId: body.decisionId,
@@ -2262,12 +2262,12 @@ export class AssistantService {
 
   /** Resolve citations to trusted source links (document deep links or canonical web URLs). */
   private async buildCitationLinks(
-    tenantId: string,
+    userId: string,
     citations: readonly Citation[],
   ): Promise<Map<string, { href: string; title: string }>> {
     const links = new Map<string, { href: string; title: string }>();
     for (const citation of citations) {
-      const artifact = await this.deps.store.findArtifact(tenantId, citation.evidenceArtifactId);
+      const artifact = await this.deps.store.findArtifact(userId, citation.evidenceArtifactId);
       if (!artifact || artifact.kind !== "evidence") continue;
       const bundle = artifact.payload as EvidenceBundle;
       const item = bundle.items.find((candidate) => candidate.evidenceId === citation.evidenceId);
@@ -2349,12 +2349,12 @@ export class AssistantService {
   }
 
   private async decorateCitations(
-    tenantId: string,
+    userId: string,
     payload: WritingProposalPayload,
     batch: OperationBatch,
   ): Promise<OperationBatch> {
     if (!payload.citations.length) return batch;
-    const links = await this.buildCitationLinks(tenantId, payload.citations);
+    const links = await this.buildCitationLinks(userId, payload.citations);
     const used: { href: string; title: string }[] = [];
     const operations = batch.operations.map((operation) => {
       if (operation.type !== "insert-block" && operation.type !== "replace-block") return operation;
@@ -2400,12 +2400,12 @@ export class AssistantService {
    * itself stays immutable; decoration is deterministic so a retry binds identical content.
    */
   private async decorateDraftContent(
-    tenantId: string,
+    userId: string,
     draft: WritingDraftPayload,
     referenceSeed: string,
   ): Promise<DocumentContent> {
     if (!draft.citations.length) return draft.content;
-    const links = await this.buildCitationLinks(tenantId, draft.citations);
+    const links = await this.buildCitationLinks(userId, draft.citations);
     const used: { href: string; title: string }[] = [];
     const blocks = draft.content.content.map((block): DocumentBlock => {
       if (block.type !== "paragraph" && block.type !== "heading") return block;
@@ -2431,7 +2431,7 @@ export class AssistantService {
       .from(documents)
       .where(
         and(
-          eq(documents.tenantId, principal.tenantId),
+          eq(documents.userId, principal.userId),
           eq(documents.id, documentId),
           eq(documents.status, "active"),
           documentActionSql(principal, "write"),
@@ -2451,7 +2451,7 @@ export class AssistantService {
     for (const citation of payload.citations) {
       const artifact = await this.deps.store.repository.findArtifact(
         tx,
-        principal.tenantId,
+        principal.userId,
         citation.evidenceArtifactId,
       );
       const bundle = artifact?.payload as EvidenceBundle | undefined;
@@ -2465,7 +2465,7 @@ export class AssistantService {
         .from(documents)
         .where(
           and(
-            eq(documents.tenantId, principal.tenantId),
+            eq(documents.userId, principal.userId),
             eq(documents.id, docId),
             eq(documents.status, "active"),
             documentActionSql(principal, "read"),
@@ -2490,7 +2490,7 @@ export class AssistantService {
         .from(documents)
         .where(
           and(
-            eq(documents.tenantId, principal.tenantId),
+            eq(documents.userId, principal.userId),
             eq(documents.id, documentId),
             eq(documents.status, "active"),
             documentActionSql(principal, action),
@@ -2501,7 +2501,7 @@ export class AssistantService {
     }
   }
 
-  private async principalFor(tenantId: string, identityId: string): Promise<Principal> {
+  private async principalFor(userId: string, identityId: string): Promise<Principal> {
     const rows = await this.deps.db
       .select({
         displayName: identityProfiles.displayName,
@@ -2509,14 +2509,12 @@ export class AssistantService {
         active: identityProfiles.active,
       })
       .from(identityProfiles)
-      .where(
-        and(eq(identityProfiles.tenantId, tenantId), eq(identityProfiles.identityId, identityId)),
-      )
+      .where(and(eq(identityProfiles.userId, userId), eq(identityProfiles.identityId, identityId)))
       .limit(1);
     const row = rows[0];
     if (!row?.active) throw new DomainError("AI_ACCESS_REVOKED", "身份已停用");
     return {
-      tenantId,
+      userId,
       identityId,
       username: identityId,
       displayName: row.displayName,
@@ -2528,7 +2526,7 @@ export class AssistantService {
 
   private async audienceFor(conversation: ConversationRow): Promise<AssistantAudience> {
     if (conversation.identityId && !conversation.siteId) {
-      const principal = await this.principalFor(conversation.tenantId, conversation.identityId);
+      const principal = await this.principalFor(conversation.userId, conversation.identityId);
       return { kind: "internal", principal };
     }
     if (!conversation.siteId || !conversation.visitorId)
@@ -2536,7 +2534,7 @@ export class AssistantService {
     const approved = await this.siteApproved(conversation);
     return {
       kind: "site",
-      tenantId: conversation.tenantId,
+      userId: conversation.userId,
       siteId: conversation.siteId,
       visitorId: conversation.visitorId,
       approved,
@@ -2550,7 +2548,7 @@ export class AssistantService {
     run: RunRow,
   ): Promise<{ role: "user" | "assistant"; content: string }[]> {
     const store = this.deps.store;
-    const messages = await store.listCommittedMessages(conversation.tenantId, conversation.id, 40);
+    const messages = await store.listCommittedMessages(conversation.userId, conversation.id, 40);
     const beforeRun = messages.filter((m) => m.createdAt < run.createdAt && m.runId !== run.id);
     const turns: { role: "user" | "assistant"; content: string }[] = [];
     let bytes = 0;
@@ -2569,7 +2567,7 @@ export class AssistantService {
         ];
         let allowed = true;
         for (const artifactId of artifactIds) {
-          const artifact = await store.findArtifact(conversation.tenantId, artifactId);
+          const artifact = await store.findArtifact(conversation.userId, artifactId);
           if (!artifact || artifact.state !== "committed") {
             allowed = false;
             break;
@@ -2597,7 +2595,7 @@ export class AssistantService {
   }
 
   /** qa-sites installs the per-site quota lookup; default keeps public traffic bounded. */
-  siteQuota: (tenantId: string, siteId: string) => Promise<number> = async () => 120;
+  siteQuota: (userId: string, siteId: string) => Promise<number> = async () => 120;
 
   siteApproved: (
     conversation: ConversationRow,
@@ -2626,8 +2624,8 @@ function assistantFailureCode(error: unknown, aborted: boolean): string {
   return "MODEL_FAILED";
 }
 
-function audienceTenant(audience: AssistantAudience): string {
-  return audience.kind === "internal" ? audience.principal.tenantId : audience.tenantId;
+function audienceUserId(audience: AssistantAudience): string {
+  return audience.kind === "internal" ? audience.principal.userId : audience.userId;
 }
 
 function documentIdsOf(bundle: EvidenceBundle): string[] {

@@ -4,11 +4,11 @@
 
 ## 资源、主体与来源
 
-`resource_acl` 统一保存空间、目录和文档角色绑定，三个资源外键必须且只能设置一个，并用租户复合外键约束。`role_permissions` 保存空间内角色策略覆盖。默认角色为 admin/editor/viewer；旧 read/write/comment/share/export/ai/manage 授权保守保留，单独 write 不隐含 AI。
+`resource_acl` 统一保存空间、目录和文档角色绑定，三个资源外键必须且只能设置一个，并用用户复合外键约束。`role_permissions` 保存空间内角色策略覆盖。默认角色为 admin/editor/viewer；旧 read/write/comment/share/export/ai/manage 授权保守保留，单独 write 不隐含 AI。
 
 团队空间使用独立 ownerIdentityId；个人空间仍以 personalOwnerId 为准。文档 createdBy 仅供审计，不能绕过当前成员关系。团队继承文档接受空间和可继承祖先目录授权；restricted 目录截断上级，文档 restricted/personal 不继承。直接文档授权按来源并集，移出空间不删除独立授权。
 
-身份提供方输出可信 Principal，HTTP guard 在拒绝 active=false 前同步身份投影。可信后台同步也可调用 rememberIdentities，不能将客户端传入的 active 当成权威。状态变更与租户授权锁、版本及事件同步，已建立协同会话会被关闭，SQL/Casbin 也拒绝已停用主体。外部停用通知到达应用前的时延由身份适配器负责，应用没有另造账号禁用角色或接口。
+身份提供方输出可信 Principal，HTTP guard 在拒绝 active=false 前同步身份投影。可信后台同步也可调用 rememberIdentities，不能将客户端传入的 active 当成权威。状态变更与用户授权锁、版本及事件同步，已建立协同会话会被关闭，SQL/Casbin 也拒绝已停用主体。外部停用通知到达应用前的时延由身份适配器负责，应用没有另造账号禁用角色或接口。
 
 空间发现要求空间 read。单独文档授权不会带出空间名称、描述、成员或根目录；列表/搜索/定位显示“与我共享”，逐祖先检查目录 read。不可读父级不会阻止合法共享子文档访问。前端独立共享视图保留文档能力，隐藏空间设置、成员和目录入口。
 
@@ -37,7 +37,7 @@ ACL、成员、角色策略、访问模式和目录/文档移动删除校验结�
 
 ## 事务、会话与离线
 
-授权关系变更持 knowledge-tree 租户排他事务锁；正文持久化、标题、版本、附件与评论写入先持同键共享锁，再获取文档行锁。业务事务内重新判权，拒绝落盘不发 durable ack。分享授权、计数、通知及审计一并提交，失败回滚。
+授权关系变更持 knowledge-tree 用户排他事务锁；正文持久化、标题、版本、附件与评论写入先持同键共享锁，再获取文档行锁。业务事务内重新判权，拒绝落盘不发 durable ack。分享授权、计数、通知及审计一并提交，失败回滚。
 
 授权触发器在原事务内增加空间 authorizationRevision 并写 authorization_events（actor、资源、操作、前后状态）；分配事件 ID 前持全局短事务锁，保证消费者不会越过尚未提交的低 ID。每个 API/协同 owner 独立读取有序 outbox，成功后前移本地游标，失败不跳过。实例启动没有旧房间，游标从当前最大值开始；事件关闭本地相关会话，新会话必须重新授权。访问链接到期扫描同样关闭连接，不依赖后续业务写入。每次写入授权检查始终是最终防线。
 
@@ -63,4 +63,4 @@ pnpm --filter @react-fastify-template/app-server test:authorization:postgres
 pnpm check
 ```
 
-真实 PostgreSQL 使用独立回环临时实例，验证多连接 revoke/join、成员移除/写入排队、两个独立 outbox 消费者、真实 Hocuspocus WebSocket 合法编辑落盘/确认，以及撤权/只读伪造拒绝。默认 PGlite 覆盖 SQL/Casbin 等价、租户边界、迁移兼容、所有者转移、治理恢复、来源撤权/自然到期及故障回滚，不将其称为多连接证明。浏览器夹具用于界面和 IndexedDB 检查，正文协同真实性由真实 WebSocket 用例验证。最终结果记录在审查文档顶部。
+真实 PostgreSQL 使用独立回环临时实例，验证多连接 revoke/join、成员移除/写入排队、两个独立 outbox 消费者、真实 Hocuspocus WebSocket 合法编辑落盘/确认，以及撤权/只读伪造拒绝。默认 PGlite 覆盖 SQL/Casbin 等价、用户边界、迁移兼容、所有者转移、治理恢复、来源撤权/自然到期及故障回滚，不将其称为多连接证明。浏览器夹具用于界面和 IndexedDB 检查，正文协同真实性由真实 WebSocket 用例验证。最终结果记录在审查文档顶部。

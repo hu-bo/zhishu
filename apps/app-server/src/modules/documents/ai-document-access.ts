@@ -35,7 +35,7 @@ export class AiDocumentAccess {
       )
       .where(
         and(
-          eq(documents.tenantId, principal.tenantId),
+          eq(documents.userId, principal.userId),
           eq(documents.status, "active"),
           workspaceId ? eq(documents.workspaceId, workspaceId) : undefined,
           ids ? inArray(documents.id, [...ids]) : undefined,
@@ -65,7 +65,7 @@ export class AiDocumentAccess {
       .from(documents)
       .innerJoin(
         workspaces,
-        and(eq(workspaces.tenantId, documents.tenantId), eq(workspaces.id, documents.workspaceId)),
+        and(eq(workspaces.userId, documents.userId), eq(workspaces.id, documents.workspaceId)),
       )
       .innerJoin(
         documentGenerations,
@@ -76,7 +76,7 @@ export class AiDocumentAccess {
       )
       .where(
         and(
-          eq(documents.tenantId, principal.tenantId),
+          eq(documents.userId, principal.userId),
           eq(documents.id, id),
           eq(documents.status, "active"),
         ),

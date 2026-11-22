@@ -31,7 +31,7 @@ async function ensureMockMembership(app: FastifyInstance, user: MockPrincipal): 
     .from(identityProfiles)
     .where(
       and(
-        eq(identityProfiles.tenantId, user.tenantId),
+        eq(identityProfiles.userId, user.userId),
         eq(identityProfiles.identityId, user.identityId),
       ),
     )
@@ -40,7 +40,7 @@ async function ensureMockMembership(app: FastifyInstance, user: MockPrincipal): 
   await app.db
     .insert(workspaces)
     .values({
-      tenantId: user.tenantId,
+      userId: user.userId,
       id: "ws_default",
       name: "团队知识库",
       kind: "team",
@@ -50,7 +50,7 @@ async function ensureMockMembership(app: FastifyInstance, user: MockPrincipal): 
   await app.db
     .insert(resourceAcl)
     .values({
-      tenantId: user.tenantId,
+      userId: user.userId,
       workspaceId: "ws_default",
       identityId: user.identityId,
       createdBy: user.identityId,

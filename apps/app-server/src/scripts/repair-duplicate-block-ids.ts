@@ -68,7 +68,7 @@ async function main(): Promise<void> {
     for (const target of selected) {
       const principal: Principal = {
         identityId: target.createdBy,
-        tenantId: target.tenantId,
+        userId: target.userId,
         username: target.createdBy,
         displayName: "Integrity repair",
         email: "",

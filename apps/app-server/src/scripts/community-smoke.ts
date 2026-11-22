@@ -84,13 +84,13 @@ try {
 } finally {
   await pool.end();
 }
-const tenantId = `community-smoke-${randomUUID()}`;
+const userId = `community-smoke-${randomUUID()}`;
 const identities = new Map<string, Principal>(
   ["owner", "admin", "editor", "viewer", "guest", "guest2", "other"].map((id) => [
     id,
     {
       identityId: id,
-      tenantId: id === "other" ? `${tenantId}-other` : tenantId,
+      userId: id === "other" ? `${userId}-other` : userId,
       username: id,
       displayName: id === "viewer" ? "林小知" : id,
       email: `${id}@example.test`,
@@ -208,7 +208,7 @@ try {
     objectKey: `test/${randomUUID()}`,
     file: { fileName: "image.png", mediaType: "image/png", size: 1024 },
     maxBytes: 2048,
-    maxTenantBytes: 10_000_000,
+    maxUserBytes: 10_000_000,
     expiresAt: new Date(Date.now() + 3600000),
   });
   assert.ok(asset, "Inherited editors can upload document assets");
@@ -351,7 +351,7 @@ try {
   const repository = new DocumentRepository(app.db);
   const projections = new DocumentProjectionRepository(app.db);
   await repository.persistUpdate({
-    tenantId,
+    userId,
     documentId: doc.id,
     generationId: doc.generationId,
     subjectId: "editor",
@@ -369,7 +369,7 @@ try {
     const bytes = createCollaborationStateFromContent(body);
     const hash = createHash("sha256").update(bytes).digest("hex");
     const input = {
-      tenantId,
+      userId,
       documentId: doc.id,
       generationId: doc.generationId,
       subjectId: "editor",
@@ -432,7 +432,7 @@ try {
     attrs: { blockId: "block_hidden_mentions" },
     content: [
       { type: "mention", attrs: { identityId: "guest", label: "无权限" } },
-      { type: "mention", attrs: { identityId: "other", label: "其他租户" } },
+      { type: "mention", attrs: { identityId: "other", label: "其他用户" } },
       { type: "mention", attrs: { identityId: "editor", label: "自己" } },
     ],
   });
@@ -504,7 +504,7 @@ try {
   );
   await assert.rejects(() =>
     repository.persistUpdate({
-      tenantId,
+      userId,
       documentId: doc.id,
       generationId: doc.generationId,
       subjectId: "editor",
@@ -608,7 +608,7 @@ try {
   const legacyId = `doc_${randomUUID()}`;
   await app.db.insert(documents).values({
     id: legacyId,
-    tenantId,
+    userId,
     createdBy: "owner",
     title: "旧文档",
     workspaceId: team.id,
@@ -617,30 +617,30 @@ try {
   const [legacy] = await app.db
     .select({ mode: documents.accessMode })
     .from(documents)
-    .where(and(eq(documents.tenantId, tenantId), eq(documents.id, legacyId)));
+    .where(and(eq(documents.userId, userId), eq(documents.id, legacyId)));
   assert.equal(legacy?.mode, "restricted");
   console.log(
     `Community smoke passed: ${checks} HTTP checks plus inheritance, persistence, invitation races, notification isolation, and migration assertions.`,
   );
 } finally {
-  await app.db.delete(assets).where(eq(assets.tenantId, tenantId));
+  await app.db.delete(assets).where(eq(assets.userId, userId));
   await app.db.execute(
-    sql`delete from documents where tenant_id in (${tenantId}, ${tenantId + "-other"})`,
+    sql`delete from documents where user_id in (${userId}, ${userId + "-other"})`,
   );
   await app.db.execute(
-    sql`delete from catalogs where tenant_id in (${tenantId}, ${tenantId + "-other"})`,
+    sql`delete from catalogs where user_id in (${userId}, ${userId + "-other"})`,
   );
   await app.db.execute(
-    sql`delete from workspaces where tenant_id in (${tenantId}, ${tenantId + "-other"})`,
+    sql`delete from workspaces where user_id in (${userId}, ${userId + "-other"})`,
   );
   await app.db.execute(
-    sql`delete from notifications where tenant_id in (${tenantId}, ${tenantId + "-other"})`,
+    sql`delete from notifications where user_id in (${userId}, ${userId + "-other"})`,
   );
   await app.db.execute(
-    sql`delete from identity_profiles where tenant_id in (${tenantId}, ${tenantId + "-other"})`,
+    sql`delete from identity_profiles where user_id in (${userId}, ${userId + "-other"})`,
   );
   await app.db.execute(
-    sql`delete from api_idempotency_records where tenant_id in (${tenantId}, ${tenantId + "-other"})`,
+    sql`delete from api_idempotency_records where user_id in (${userId}, ${userId + "-other"})`,
   );
   await app.close();
 }

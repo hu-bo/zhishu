@@ -45,7 +45,7 @@ zhishu-master/zhishu-master/packages/{dsh-agent,ai-runtime,ai-plugins}
 
 四、数据与权限
 
-复用当前 37 张业务表，本轮不新增表。按主文档删除 purpose 分叉并重建必要的租户/会话复合外键，writing_sessions/image_jobs 重命名为 ai_sessions/ai_image_jobs。仅追加向前 migration，不改 0042–0045。
+复用当前 37 张业务表，本轮不新增表。按主文档删除 purpose 分叉并重建必要的用户/会话复合外键，writing_sessions/image_jobs 重命名为 ai_sessions/ai_image_jobs。仅追加向前 migration，不改 0042–0045。
 
 旧完成记录按原 conversationId 保留，不能猜测合并两个独立会话。旧未完成任务明确中断；新重试只使用当前 runtime。现有跨用途交接的必要审计导出后退出新运行路径。
 

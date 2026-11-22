@@ -71,7 +71,7 @@ try {
   const source = created.json() as {
     id: string;
     generationId: string;
-    tenantId: string;
+    userId: string;
     durableSeq: number;
   };
   sourceId = source.id;
@@ -109,7 +109,7 @@ try {
   const sourceReceipt = await repository.persistUpdate({
     documentId: source.id,
     generationId: source.generationId,
-    tenantId: source.tenantId,
+    userId: source.userId,
     subjectId: "mock-user-001",
     updateHash: sourceHash,
     updateBytes: sourceUpdate,

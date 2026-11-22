@@ -127,7 +127,7 @@ M1 最小操作集为 `insert-block`、`delete-block`、`replace-block`、`move-
 
 ## 6. 事件与流合约
 
-文档持久化事件包含 eventId、documentId、generationId、durableSeq/snapshotRevision、发生时间与快照引用。租户和空间等路由信息由服务端事件信封补充；消费者不能仅凭事件内容跳过权限规则。事件可能重复/乱序，消费者据事件标识和版本去重并拒绝旧版本覆盖。
+文档持久化事件包含 eventId、documentId、generationId、durableSeq/snapshotRevision、发生时间与快照引用。用户和空间等路由信息由服务端事件信封补充；消费者不能仅凭事件内容跳过权限规则。事件可能重复/乱序，消费者据事件标识和版本去重并拒绝旧版本覆盖。
 
 投影事件的语义载荷示例：
 
@@ -191,4 +191,4 @@ M1 完成 DC-01—06 的规范与最小消费例；M2 补齐代次、资产和�
 
 ## 正文成员提及（2026-10-31）
 
-内容版本 v6 新增行内原子节点 `mention`，属性仅 `identityId`（稳定主体标识）和 `label`（显示名称，1–80 字符）。`MentionSchema`、`DocumentMention` 与 `collectDocumentMentions` 从公开入口导出；后者按包含块的稳定 blockId 与成员标识去重，不从文字中的 @ 解析身份。v1–v5 不接受此节点，v5 → v6 迁移保留原文。节点不携带通知、租户、权限、头像 URL 等业务数据，出现已离开成员的历史提及不影响内容读取。JSON/HTML 保留关联；Markdown/纯文本显式降级为 @姓名。
+内容版本 v6 新增行内原子节点 `mention`，属性仅 `identityId`（稳定主体标识）和 `label`（显示名称，1–80 字符）。`MentionSchema`、`DocumentMention` 与 `collectDocumentMentions` 从公开入口导出；后者按包含块的稳定 blockId 与成员标识去重，不从文字中的 @ 解析身份。v1–v5 不接受此节点，v5 → v6 迁移保留原文。节点不携带通知、用户、权限、头像 URL 等业务数据，出现已离开成员的历史提及不影响内容读取。JSON/HTML 保留关联；Markdown/纯文本显式降级为 @姓名。

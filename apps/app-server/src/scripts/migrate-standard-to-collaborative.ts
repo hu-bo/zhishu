@@ -36,7 +36,7 @@ const pool = createPool({ connectionString: databaseUrl, max: 2 });
 const db = createDatabase(pool);
 
 type StandardDocumentRow = {
-  tenantId: string;
+  userId: string;
   documentId: string;
   createdBy: string;
   generationId: string;
@@ -48,7 +48,7 @@ type StandardDocumentRow = {
 async function listStandardDocuments(): Promise<StandardDocumentRow[]> {
   const rows = await pool.query<Omit<StandardDocumentRow, "extensions"> & { extensions: unknown }>(
     `select
-       d.tenant_id as "tenantId",
+       d.user_id as "userId",
        d.id as "documentId",
        d.created_by as "createdBy",
        g.id as "generationId",
@@ -59,11 +59,11 @@ async function listStandardDocuments(): Promise<StandardDocumentRow[]> {
      join document_generations g
        on g.document_id = d.id and g.status = 'active' and g.durable_seq = 0
      join document_json_snapshots s
-       on s.tenant_id = d.tenant_id and s.document_id = d.id
+       on s.user_id = d.user_id and s.document_id = d.id
      where d.mode = 'standard'`,
   );
   return rows.rows.map((row) => ({
-    tenantId: row.tenantId,
+    userId: row.userId,
     documentId: row.documentId,
     createdBy: row.createdBy,
     generationId: row.generationId,
@@ -75,12 +75,12 @@ async function listStandardDocuments(): Promise<StandardDocumentRow[]> {
 
 async function listStandardSourceVersionIds(
   executor: Pick<Database, "execute">,
-  tenantId: string,
+  userId: string,
   documentId: string,
 ): Promise<string[]> {
   const result = await executor.execute(sql`
     select v.id from document_versions v
-    where v.tenant_id = ${tenantId}
+    where v.user_id = ${userId}
       and v.document_id = ${documentId}
       and exists (select 1 from document_json_version_snapshots j where j.version_id = v.id)
   `);
@@ -134,7 +134,7 @@ try {
         await tx
           .insert(documentProjectionSnapshots)
           .values({
-            tenantId: row.tenantId,
+            userId: row.userId,
             documentId: row.documentId,
             generationId: nextGenerationId,
             durableSeq: 1,
@@ -145,7 +145,7 @@ try {
           })
           .onConflictDoUpdate({
             target: [
-              documentProjectionSnapshots.tenantId,
+              documentProjectionSnapshots.userId,
               documentProjectionSnapshots.documentId,
               documentProjectionSnapshots.generationId,
             ],
@@ -163,7 +163,7 @@ try {
           await tx
             .insert(assetReferences)
             .values({
-              tenantId: row.tenantId,
+              userId: row.userId,
               documentId: row.documentId,
               generationId: nextGenerationId,
               durableSeq: 1,
@@ -174,7 +174,7 @@ try {
         }
         // Standard-era versions cannot be replayed once their snapshot tables
         // are dropped; remove them (the json version tables cascade via FK).
-        const versionIds = await listStandardSourceVersionIds(tx, row.tenantId, row.documentId);
+        const versionIds = await listStandardSourceVersionIds(tx, row.userId, row.documentId);
         if (versionIds.length > 0) {
           const versionParams = sql.join(
             versionIds.map((id: string) => sql`${id}`),
@@ -192,16 +192,16 @@ try {
         // The standard content tables are consumed; their definitions are
         // dropped by the subsequent db:migrate.
         await tx.execute(
-          sql`delete from document_json_asset_references where tenant_id = ${row.tenantId} and document_id = ${row.documentId}`,
+          sql`delete from document_json_asset_references where user_id = ${row.userId} and document_id = ${row.documentId}`,
         );
         await tx.execute(
-          sql`delete from document_json_snapshots where tenant_id = ${row.tenantId} and document_id = ${row.documentId}`,
+          sql`delete from document_json_snapshots where user_id = ${row.userId} and document_id = ${row.documentId}`,
         );
         await tx.execute(
-          sql`update documents set mode = 'collaborative' where tenant_id = ${row.tenantId} and id = ${row.documentId}`,
+          sql`update documents set mode = 'collaborative' where user_id = ${row.userId} and id = ${row.documentId}`,
         );
         await tx.insert(documentAuditEvents).values({
-          tenantId: row.tenantId,
+          userId: row.userId,
           actorIdentityId: row.createdBy,
           action: "document.collaboration-enabled",
           resourceId: row.documentId,

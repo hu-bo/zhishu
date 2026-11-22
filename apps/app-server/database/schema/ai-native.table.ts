@@ -23,7 +23,7 @@ export const aiSessions = pgTable(
   "ai_sessions",
   {
     id: text("id").primaryKey(),
-    tenantId: text("tenant_id").notNull(),
+    userId: text("user_id").notNull(),
     conversationId: text("conversation_id").notNull(),
     contextRevision: integer("context_revision").notNull(),
     header: jsonb("header").notNull(),
@@ -35,14 +35,14 @@ export const aiSessions = pgTable(
   },
   (t) => [
     uniqueIndex("ai_sessions_conversation_revision_uq").on(
-      t.tenantId,
+      t.userId,
       t.conversationId,
       t.contextRevision,
     ),
     foreignKey({
       name: "ai_sessions_conversation_fk",
-      columns: [t.tenantId, t.conversationId],
-      foreignColumns: [aiConversations.tenantId, aiConversations.id],
+      columns: [t.userId, t.conversationId],
+      foreignColumns: [aiConversations.userId, aiConversations.id],
     }),
     check("ai_sessions_revision_check", sql`${t.contextRevision} >= 1`),
   ],
@@ -58,7 +58,7 @@ export const aiImageJobs = pgTable(
   {
     /** Server key `${runId}:${toolCallId}`; the provider job id lives inside providerResult. */
     id: text("id").primaryKey(),
-    tenantId: text("tenant_id").notNull(),
+    userId: text("user_id").notNull(),
     conversationId: text("conversation_id").notNull(),
     runId: text("run_id").notNull(),
     toolCallId: text("tool_call_id").notNull(),
@@ -70,14 +70,14 @@ export const aiImageJobs = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("ai_image_jobs_run_tool_uq").on(t.tenantId, t.runId, t.toolCallId),
+    uniqueIndex("ai_image_jobs_run_tool_uq").on(t.userId, t.runId, t.toolCallId),
     foreignKey({
       name: "ai_image_jobs_run_fk",
-      columns: [t.tenantId, t.conversationId, t.runId],
-      foreignColumns: [aiRuns.tenantId, aiRuns.conversationId, aiRuns.id],
+      columns: [t.userId, t.conversationId, t.runId],
+      foreignColumns: [aiRuns.userId, aiRuns.conversationId, aiRuns.id],
     }),
     check("ai_image_jobs_status_check", sql`${t.status} in ('pending','unknown','ready','failed')`),
     check("ai_image_jobs_ready_check", sql`${t.status} <> 'ready' or ${t.assetId} is not null`),
-    index("ai_image_jobs_conversation_idx").on(t.tenantId, t.conversationId, t.status),
+    index("ai_image_jobs_conversation_idx").on(t.userId, t.conversationId, t.status),
   ],
 );

@@ -29,28 +29,24 @@ type Tx = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
 export class AiRepository {
   constructor(
     readonly db: Database,
-    private readonly onEventsAppended?: (tenantId: string, conversationId: string) => void,
+    private readonly onEventsAppended?: (userId: string, conversationId: string) => void,
   ) {}
 
-  async lockConversation(
-    tx: Tx,
-    tenantId: string,
-    id: string,
-  ): Promise<ConversationRow | undefined> {
+  async lockConversation(tx: Tx, userId: string, id: string): Promise<ConversationRow | undefined> {
     const [row] = await tx
       .select()
       .from(aiConversations)
-      .where(and(eq(aiConversations.tenantId, tenantId), eq(aiConversations.id, id)))
+      .where(and(eq(aiConversations.userId, userId), eq(aiConversations.id, id)))
       .for("update")
       .limit(1);
     return row as ConversationRow | undefined;
   }
 
-  async findConversation(tx: Tx, tenantId: string, id: string) {
+  async findConversation(tx: Tx, userId: string, id: string) {
     const [row] = await tx
       .select()
       .from(aiConversations)
-      .where(and(eq(aiConversations.tenantId, tenantId), eq(aiConversations.id, id)))
+      .where(and(eq(aiConversations.userId, userId), eq(aiConversations.id, id)))
       .limit(1);
     return row as ConversationRow | undefined;
   }
@@ -59,7 +55,7 @@ export class AiRepository {
     tx: Tx,
     values: {
       id: string;
-      tenantId: string;
+      userId: string;
       identityId?: string | null;
       visitorId?: string | null;
       siteId?: string | null;
@@ -99,13 +95,13 @@ export class AiRepository {
     await tx
       .update(aiConversations)
       .set({ ...patch, updatedAt: new Date() })
-      .where(and(eq(aiConversations.tenantId, row.tenantId), eq(aiConversations.id, row.id)));
+      .where(and(eq(aiConversations.userId, row.userId), eq(aiConversations.id, row.id)));
   }
 
   async listConversations(
     tx: Tx,
     filter: {
-      tenantId: string;
+      userId: string;
       identityId?: string;
       visitorId?: string;
       siteId?: string;
@@ -118,7 +114,7 @@ export class AiRepository {
       .from(aiConversations)
       .where(
         and(
-          eq(aiConversations.tenantId, filter.tenantId),
+          eq(aiConversations.userId, filter.userId),
           filter.identityId ? eq(aiConversations.identityId, filter.identityId) : undefined,
           filter.visitorId ? eq(aiConversations.visitorId, filter.visitorId) : undefined,
           filter.siteId ? eq(aiConversations.siteId, filter.siteId) : undefined,
@@ -134,7 +130,7 @@ export class AiRepository {
   async findConversationByCreationKey(
     tx: Tx,
     filter: {
-      tenantId: string;
+      userId: string;
       creationKey: string;
       identityId?: string;
       visitorId?: string;
@@ -146,7 +142,7 @@ export class AiRepository {
       .from(aiConversations)
       .where(
         and(
-          eq(aiConversations.tenantId, filter.tenantId),
+          eq(aiConversations.userId, filter.userId),
           eq(aiConversations.creationKey, filter.creationKey),
           filter.identityId ? eq(aiConversations.identityId, filter.identityId) : undefined,
           filter.visitorId ? eq(aiConversations.visitorId, filter.visitorId) : undefined,
@@ -161,17 +157,13 @@ export class AiRepository {
     return row as ConversationRow | undefined;
   }
 
-  async conversationTitle(
-    tx: Tx,
-    conversationId: string,
-    tenantId: string,
-  ): Promise<string | null> {
+  async conversationTitle(tx: Tx, conversationId: string, userId: string): Promise<string | null> {
     const [row] = await tx
       .select({ part: aiMessages.parts })
       .from(aiMessages)
       .where(
         and(
-          eq(aiMessages.tenantId, tenantId),
+          eq(aiMessages.userId, userId),
           eq(aiMessages.conversationId, conversationId),
           eq(aiMessages.role, "user"),
         ),
@@ -186,7 +178,7 @@ export class AiRepository {
     tx: Tx,
     values: {
       id: string;
-      tenantId: string;
+      userId: string;
       conversationId: string;
       idempotencyKey: string;
       inputHash: string;
@@ -202,20 +194,20 @@ export class AiRepository {
     return row as RunRow;
   }
 
-  async findRun(tx: Tx, tenantId: string, runId: string) {
+  async findRun(tx: Tx, userId: string, runId: string) {
     const [row] = await tx
       .select()
       .from(aiRuns)
-      .where(and(eq(aiRuns.tenantId, tenantId), eq(aiRuns.id, runId)))
+      .where(and(eq(aiRuns.userId, userId), eq(aiRuns.id, runId)))
       .limit(1);
     return row as RunRow | undefined;
   }
 
-  async lockRun(tx: Tx, tenantId: string, runId: string) {
+  async lockRun(tx: Tx, userId: string, runId: string) {
     const [row] = await tx
       .select()
       .from(aiRuns)
-      .where(and(eq(aiRuns.tenantId, tenantId), eq(aiRuns.id, runId)))
+      .where(and(eq(aiRuns.userId, userId), eq(aiRuns.id, runId)))
       .for("update")
       .limit(1);
     return row as RunRow | undefined;
@@ -223,7 +215,7 @@ export class AiRepository {
 
   async findRunByIdempotency(
     tx: Tx,
-    tenantId: string,
+    userId: string,
     conversationId: string,
     idempotencyKey: string,
   ) {
@@ -232,7 +224,7 @@ export class AiRepository {
       .from(aiRuns)
       .where(
         and(
-          eq(aiRuns.tenantId, tenantId),
+          eq(aiRuns.userId, userId),
           eq(aiRuns.conversationId, conversationId),
           eq(aiRuns.idempotencyKey, idempotencyKey),
         ),
@@ -256,7 +248,7 @@ export class AiRepository {
       .from(aiRuns)
       .where(
         and(
-          eq(aiRuns.tenantId, conversation.tenantId),
+          eq(aiRuns.userId, conversation.userId),
           eq(aiRuns.conversationId, conversation.id),
           inArray(aiRuns.status, ["running", "waiting-approval"]),
         ),
@@ -268,7 +260,7 @@ export class AiRepository {
       .from(aiRuns)
       .where(
         and(
-          eq(aiRuns.tenantId, conversation.tenantId),
+          eq(aiRuns.userId, conversation.userId),
           eq(aiRuns.conversationId, conversation.id),
           eq(aiRuns.status, "queued"),
         ),
@@ -285,7 +277,7 @@ export class AiRepository {
         fencingToken: fencing,
         updatedAt: new Date(),
       })
-      .where(and(eq(aiRuns.tenantId, conversation.tenantId), eq(aiRuns.id, queued.id)))
+      .where(and(eq(aiRuns.userId, conversation.userId), eq(aiRuns.id, queued.id)))
       .returning();
     return row as RunRow | undefined;
   }
@@ -311,7 +303,7 @@ export class AiRepository {
       })
       .where(
         and(
-          eq(aiRuns.tenantId, run.tenantId),
+          eq(aiRuns.userId, run.userId),
           eq(aiRuns.id, run.id),
           eq(aiRuns.attempt, run.attempt),
           eq(aiRuns.leaseOwner, owner),
@@ -325,7 +317,7 @@ export class AiRepository {
 
   async setRunStatusUnleased(
     tx: Tx,
-    tenantId: string,
+    userId: string,
     runId: string,
     status: RunStatus,
     errorCode?: string,
@@ -340,7 +332,7 @@ export class AiRepository {
       })
       .where(
         and(
-          eq(aiRuns.tenantId, tenantId),
+          eq(aiRuns.userId, userId),
           eq(aiRuns.id, runId),
           inArray(aiRuns.status, ["queued", "running", "waiting-approval", "interrupted"]),
         ),
@@ -349,13 +341,13 @@ export class AiRepository {
     return row as RunRow | undefined;
   }
 
-  async markCancelRequested(tx: Tx, tenantId: string, runId: string) {
+  async markCancelRequested(tx: Tx, userId: string, runId: string) {
     const [row] = await tx
       .update(aiRuns)
       .set({ cancelRequested: true, updatedAt: new Date() })
       .where(
         and(
-          eq(aiRuns.tenantId, tenantId),
+          eq(aiRuns.userId, userId),
           eq(aiRuns.id, runId),
           inArray(aiRuns.status, ["queued", "running", "waiting-approval"]),
         ),
@@ -366,7 +358,7 @@ export class AiRepository {
 
   async bumpRunAttempt(
     tx: Tx,
-    tenantId: string,
+    userId: string,
     runId: string,
     statusFilter: RunStatus[],
   ): Promise<RunRow | undefined> {
@@ -381,11 +373,7 @@ export class AiRepository {
         updatedAt: new Date(),
       })
       .where(
-        and(
-          eq(aiRuns.tenantId, tenantId),
-          eq(aiRuns.id, runId),
-          inArray(aiRuns.status, statusFilter),
-        ),
+        and(eq(aiRuns.userId, userId), eq(aiRuns.id, runId), inArray(aiRuns.status, statusFilter)),
       )
       .returning();
     return row as RunRow | undefined;
@@ -394,7 +382,7 @@ export class AiRepository {
   async countRuns(
     tx: Tx,
     filter: {
-      tenantId: string;
+      userId: string;
       statuses: readonly RunStatus[];
       identityId?: string;
       siteId?: string;
@@ -403,26 +391,26 @@ export class AiRepository {
   ) {
     const rows = (await tx.execute(
       sql`select count(*)::text as count from ai_runs where
-        tenant_id = ${filter.tenantId}
+        user_id = ${filter.userId}
         and status in (${sql.join(
           filter.statuses.map((s) => sql`${s}`),
           sql`,`,
         )})
         and created_at >= ${filter.since}
-        ${filter.identityId ? sql`and exists (select 1 from ai_conversations c where c.tenant_id = ai_runs.tenant_id and c.id = ai_runs.conversation_id and c.identity_id = ${filter.identityId})` : sql``}
-        ${filter.siteId ? sql`and exists (select 1 from ai_conversations c where c.tenant_id = ai_runs.tenant_id and c.id = ai_runs.conversation_id and c.site_id = ${filter.siteId})` : sql``}`,
+        ${filter.identityId ? sql`and exists (select 1 from ai_conversations c where c.user_id = ai_runs.user_id and c.id = ai_runs.conversation_id and c.identity_id = ${filter.identityId})` : sql``}
+        ${filter.siteId ? sql`and exists (select 1 from ai_conversations c where c.user_id = ai_runs.user_id and c.id = ai_runs.conversation_id and c.site_id = ${filter.siteId})` : sql``}`,
     )) as unknown as { count: string }[];
     return Number(rows[0]?.count ?? 0);
   }
 
   async countActiveByOwner(
     tx: Tx,
-    filter: { tenantId: string; identityId?: string; visitorId?: string; siteId?: string },
+    filter: { userId: string; identityId?: string; visitorId?: string; siteId?: string },
   ) {
     const rows = (await tx.execute(
       sql`select count(*)::text as count from ai_runs r
-        join ai_conversations c on c.tenant_id = r.tenant_id and c.id = r.conversation_id
-        where r.tenant_id = ${filter.tenantId} and r.status in ('running','waiting-approval')
+        join ai_conversations c on c.user_id = r.user_id and c.id = r.conversation_id
+        where r.user_id = ${filter.userId} and r.status in ('running','waiting-approval')
         ${filter.identityId ? sql`and c.identity_id = ${filter.identityId}` : sql``}
         ${filter.visitorId ? sql`and c.visitor_id = ${filter.visitorId}` : sql``}
         ${filter.siteId ? sql`and c.site_id = ${filter.siteId}` : sql``}`,
@@ -430,13 +418,13 @@ export class AiRepository {
     return Number(rows[0]?.count ?? 0);
   }
 
-  async listActiveRuns(tx: Tx, tenantId: string, conversationId: string): Promise<RunRow[]> {
+  async listActiveRuns(tx: Tx, userId: string, conversationId: string): Promise<RunRow[]> {
     return (await tx
       .select()
       .from(aiRuns)
       .where(
         and(
-          eq(aiRuns.tenantId, tenantId),
+          eq(aiRuns.userId, userId),
           eq(aiRuns.conversationId, conversationId),
           inArray(aiRuns.status, ["queued", "running", "waiting-approval", "interrupted"]),
         ),
@@ -448,7 +436,7 @@ export class AiRepository {
     tx: Tx,
     values: {
       id: string;
-      tenantId: string;
+      userId: string;
       conversationId: string;
       runId: string;
       role: "user" | "assistant";
@@ -473,7 +461,7 @@ export class AiRepository {
 
   async findMessageByClientId(
     tx: Tx,
-    tenantId: string,
+    userId: string,
     conversationId: string,
     clientMessageId: string,
   ) {
@@ -482,7 +470,7 @@ export class AiRepository {
       .from(aiMessages)
       .where(
         and(
-          eq(aiMessages.tenantId, tenantId),
+          eq(aiMessages.userId, userId),
           eq(aiMessages.conversationId, conversationId),
           eq(aiMessages.clientMessageId, clientMessageId),
         ),
@@ -491,22 +479,22 @@ export class AiRepository {
     return row as MessageRow | undefined;
   }
 
-  async findMessage(tx: Tx, tenantId: string, id: string) {
+  async findMessage(tx: Tx, userId: string, id: string) {
     const [row] = await tx
       .select()
       .from(aiMessages)
-      .where(and(eq(aiMessages.tenantId, tenantId), eq(aiMessages.id, id)))
+      .where(and(eq(aiMessages.userId, userId), eq(aiMessages.id, id)))
       .limit(1);
     return row as MessageRow | undefined;
   }
 
-  async assistantMessage(tx: Tx, tenantId: string, runId: string) {
+  async assistantMessage(tx: Tx, userId: string, runId: string) {
     const [row] = await tx
       .select()
       .from(aiMessages)
       .where(
         and(
-          eq(aiMessages.tenantId, tenantId),
+          eq(aiMessages.userId, userId),
           eq(aiMessages.runId, runId),
           eq(aiMessages.role, "assistant"),
         ),
@@ -516,13 +504,13 @@ export class AiRepository {
   }
 
   /** Direct hit on ai_messages_run_user_uq; never scan conversation pages for a Run input. */
-  async userMessage(tx: Tx, tenantId: string, conversationId: string, runId: string) {
+  async userMessage(tx: Tx, userId: string, conversationId: string, runId: string) {
     const [row] = await tx
       .select()
       .from(aiMessages)
       .where(
         and(
-          eq(aiMessages.tenantId, tenantId),
+          eq(aiMessages.userId, userId),
           eq(aiMessages.conversationId, conversationId),
           eq(aiMessages.runId, runId),
           eq(aiMessages.role, "user"),
@@ -536,7 +524,7 @@ export class AiRepository {
     tx: Tx,
     values: {
       id: string;
-      tenantId: string;
+      userId: string;
       conversationId: string;
       runId: string;
       parts: MessageRow["parts"];
@@ -547,7 +535,7 @@ export class AiRepository {
       .insert(aiMessages)
       .values({ ...values, role: "assistant", state: "staged" })
       .onConflictDoUpdate({
-        target: [aiMessages.tenantId, aiMessages.conversationId, aiMessages.runId],
+        target: [aiMessages.userId, aiMessages.conversationId, aiMessages.runId],
         targetWhere: sql`${aiMessages.role} = 'assistant'`,
         set: {
           parts: values.parts,
@@ -560,13 +548,13 @@ export class AiRepository {
     return row as MessageRow;
   }
 
-  async commitMessage(tx: Tx, tenantId: string, messageId: string) {
+  async commitMessage(tx: Tx, userId: string, messageId: string) {
     const [row] = await tx
       .update(aiMessages)
       .set({ state: "committed", committedAt: new Date() })
       .where(
         and(
-          eq(aiMessages.tenantId, tenantId),
+          eq(aiMessages.userId, userId),
           eq(aiMessages.id, messageId),
           eq(aiMessages.state, "staged"),
         ),
@@ -575,13 +563,13 @@ export class AiRepository {
     return row as MessageRow | undefined;
   }
 
-  async withdrawMessages(tx: Tx, tenantId: string, conversationId: string) {
+  async withdrawMessages(tx: Tx, userId: string, conversationId: string) {
     await tx
       .update(aiMessages)
       .set({ state: "withdrawn" })
       .where(
         and(
-          eq(aiMessages.tenantId, tenantId),
+          eq(aiMessages.userId, userId),
           eq(aiMessages.conversationId, conversationId),
           eq(aiMessages.state, "staged"),
         ),
@@ -590,20 +578,20 @@ export class AiRepository {
 
   async listMessages(
     tx: Tx,
-    filter: { tenantId: string; conversationId: string; limit: number; before?: string },
+    filter: { userId: string; conversationId: string; limit: number; before?: string },
   ) {
     return (await tx
       .select()
       .from(aiMessages)
       .where(
         and(
-          eq(aiMessages.tenantId, filter.tenantId),
+          eq(aiMessages.userId, filter.userId),
           eq(aiMessages.conversationId, filter.conversationId),
           eq(aiMessages.state, "committed"),
           filter.before
             ? sql`(${aiMessages.createdAt}, ${aiMessages.id}) < (
                 select m.created_at, m.id from ai_messages m
-                where m.tenant_id = ${filter.tenantId} and m.id = ${filter.before}
+                where m.user_id = ${filter.userId} and m.id = ${filter.before}
               )`
             : undefined,
         ),
@@ -612,22 +600,22 @@ export class AiRepository {
       .limit(filter.limit)) as MessageRow[];
   }
 
-  async listRecentRuns(tx: Tx, tenantId: string, conversationId: string, limit: number) {
+  async listRecentRuns(tx: Tx, userId: string, conversationId: string, limit: number) {
     return (await tx
       .select()
       .from(aiRuns)
-      .where(and(eq(aiRuns.tenantId, tenantId), eq(aiRuns.conversationId, conversationId)))
+      .where(and(eq(aiRuns.userId, userId), eq(aiRuns.conversationId, conversationId)))
       .orderBy(desc(aiRuns.createdAt))
       .limit(limit)) as RunRow[];
   }
 
-  async listArtifacts(tx: Tx, tenantId: string, conversationId: string, limit: number) {
+  async listArtifacts(tx: Tx, userId: string, conversationId: string, limit: number) {
     return (await tx
       .select()
       .from(aiArtifacts)
       .where(
         and(
-          eq(aiArtifacts.tenantId, tenantId),
+          eq(aiArtifacts.userId, userId),
           eq(aiArtifacts.conversationId, conversationId),
           inArray(aiArtifacts.state, ["committed"]),
         ),
@@ -636,20 +624,20 @@ export class AiRepository {
       .limit(limit)) as ArtifactRow[];
   }
 
-  async findArtifact(tx: Tx, tenantId: string, id: string) {
+  async findArtifact(tx: Tx, userId: string, id: string) {
     const [row] = await tx
       .select()
       .from(aiArtifacts)
-      .where(and(eq(aiArtifacts.tenantId, tenantId), eq(aiArtifacts.id, id)))
+      .where(and(eq(aiArtifacts.userId, userId), eq(aiArtifacts.id, id)))
       .limit(1);
     return row as ArtifactRow | undefined;
   }
 
-  async lockArtifact(tx: Tx, tenantId: string, id: string) {
+  async lockArtifact(tx: Tx, userId: string, id: string) {
     const [row] = await tx
       .select()
       .from(aiArtifacts)
-      .where(and(eq(aiArtifacts.tenantId, tenantId), eq(aiArtifacts.id, id)))
+      .where(and(eq(aiArtifacts.userId, userId), eq(aiArtifacts.id, id)))
       .for("update")
       .limit(1);
     return row as ArtifactRow | undefined;
@@ -660,7 +648,7 @@ export class AiRepository {
     tx: Tx,
     values: {
       id: string;
-      tenantId: string;
+      userId: string;
       conversationId: string;
       runId: string;
       producerCallId: string;
@@ -687,7 +675,7 @@ export class AiRepository {
       .from(aiArtifacts)
       .where(
         and(
-          eq(aiArtifacts.tenantId, values.tenantId),
+          eq(aiArtifacts.userId, values.userId),
           eq(aiArtifacts.runId, values.runId),
           eq(aiArtifacts.producerCallId, values.producerCallId),
           eq(aiArtifacts.resultIndex, values.resultIndex),
@@ -697,13 +685,13 @@ export class AiRepository {
     return { artifact: existing as ArtifactRow, created: false };
   }
 
-  async commitArtifact(tx: Tx, tenantId: string, id: string) {
+  async commitArtifact(tx: Tx, userId: string, id: string) {
     const [row] = await tx
       .update(aiArtifacts)
       .set({ state: "committed" })
       .where(
         and(
-          eq(aiArtifacts.tenantId, tenantId),
+          eq(aiArtifacts.userId, userId),
           eq(aiArtifacts.id, id),
           eq(aiArtifacts.state, "staged"),
         ),
@@ -714,7 +702,7 @@ export class AiRepository {
 
   async setArtifactPayload(
     tx: Tx,
-    tenantId: string,
+    userId: string,
     id: string,
     patch: {
       payload?: unknown;
@@ -725,7 +713,7 @@ export class AiRepository {
     const [row] = await tx
       .update(aiArtifacts)
       .set(patch)
-      .where(and(eq(aiArtifacts.tenantId, tenantId), eq(aiArtifacts.id, id)))
+      .where(and(eq(aiArtifacts.userId, userId), eq(aiArtifacts.id, id)))
       .returning();
     return row as ArtifactRow | undefined;
   }
@@ -750,7 +738,7 @@ export class AiRepository {
       })
       .where(
         and(
-          eq(aiArtifacts.tenantId, row.tenantId),
+          eq(aiArtifacts.userId, row.userId),
           eq(aiArtifacts.id, row.id),
           sql`coalesce(${aiArtifacts.reviewRevision}, 0) = ${row.reviewRevision ?? 0}`,
         ),
@@ -776,12 +764,12 @@ export class AiRepository {
       .set({ eventSequence: sequence, updatedAt: event.createdAt })
       .where(
         and(
-          eq(aiConversations.tenantId, conversation.tenantId),
+          eq(aiConversations.userId, conversation.userId),
           eq(aiConversations.id, conversation.id),
         ),
       );
     await tx.insert(aiEvents).values({
-      tenantId: conversation.tenantId,
+      userId: conversation.userId,
       conversationId: conversation.id,
       sequence,
       type: event.type,
@@ -790,30 +778,24 @@ export class AiRepository {
       createdAt: event.createdAt,
     });
     conversation.eventSequence = sequence;
-    this.onEventsAppended?.(conversation.tenantId, conversation.id);
+    this.onEventsAppended?.(conversation.userId, conversation.id);
     return sequence;
   }
 
-  async eventsAfter(
-    tx: Tx,
-    tenantId: string,
-    conversationId: string,
-    cursor: string,
-    limit: number,
-  ) {
+  async eventsAfter(tx: Tx, userId: string, conversationId: string, cursor: string, limit: number) {
     return (await tx
       .select()
       .from(aiEvents)
       .where(
         and(
-          eq(aiEvents.tenantId, tenantId),
+          eq(aiEvents.userId, userId),
           eq(aiEvents.conversationId, conversationId),
           sql`${aiEvents.sequence} > ${cursor}`,
         ),
       )
       .orderBy(aiEvents.sequence)
       .limit(limit)) as {
-      tenantId: string;
+      userId: string;
       conversationId: string;
       sequence: bigint;
       type: import("@zhishu/chat-contracts").AiEvent["type"];
@@ -857,16 +839,12 @@ export class AiRepository {
       .limit(limit)) as ConversationRow[];
   }
 
-  async listConversationsByIds(
-    tx: Tx,
-    tenantId: string,
-    ids: string[],
-  ): Promise<ConversationRow[]> {
+  async listConversationsByIds(tx: Tx, userId: string, ids: string[]): Promise<ConversationRow[]> {
     return (await tx
       .select()
       .from(aiConversations)
       .where(
-        and(eq(aiConversations.tenantId, tenantId), inArray(aiConversations.id, ids)),
+        and(eq(aiConversations.userId, userId), inArray(aiConversations.id, ids)),
       )) as ConversationRow[];
   }
 
@@ -875,8 +853,8 @@ export class AiRepository {
    * proposal applications) blocks deletion instead of cascading; the caller retries later.
    * Returns false when the conversation was retained.
    */
-  async deleteConversationRows(tx: Tx, tenantId: string, conversationId: string): Promise<boolean> {
-    const scope = and(eq(aiRuns.tenantId, tenantId), eq(aiRuns.conversationId, conversationId));
+  async deleteConversationRows(tx: Tx, userId: string, conversationId: string): Promise<boolean> {
+    const scope = and(eq(aiRuns.userId, userId), eq(aiRuns.conversationId, conversationId));
     const activeRuns = await tx
       .select({ id: aiRuns.id })
       .from(aiRuns)
@@ -893,7 +871,7 @@ export class AiRepository {
       .from(aiImageJobs)
       .where(
         and(
-          eq(aiImageJobs.tenantId, tenantId),
+          eq(aiImageJobs.userId, userId),
           eq(aiImageJobs.conversationId, conversationId),
           eq(aiImageJobs.status, "unknown"),
         ),
@@ -905,7 +883,7 @@ export class AiRepository {
       .from(aiArtifacts)
       .where(
         and(
-          eq(aiArtifacts.tenantId, tenantId),
+          eq(aiArtifacts.userId, userId),
           eq(aiArtifacts.conversationId, conversationId),
           inArray(aiArtifacts.applicationState, ["pending", "partial", "unknown"]),
         ),
@@ -915,27 +893,23 @@ export class AiRepository {
     // Native sessions and image jobs reference Runs/conversations: release them before parents.
     await tx
       .delete(aiImageJobs)
-      .where(
-        and(eq(aiImageJobs.tenantId, tenantId), eq(aiImageJobs.conversationId, conversationId)),
-      );
+      .where(and(eq(aiImageJobs.userId, userId), eq(aiImageJobs.conversationId, conversationId)));
     await tx
       .delete(aiSessions)
-      .where(and(eq(aiSessions.tenantId, tenantId), eq(aiSessions.conversationId, conversationId)));
+      .where(and(eq(aiSessions.userId, userId), eq(aiSessions.conversationId, conversationId)));
     await tx
       .delete(aiArtifacts)
-      .where(
-        and(eq(aiArtifacts.tenantId, tenantId), eq(aiArtifacts.conversationId, conversationId)),
-      );
+      .where(and(eq(aiArtifacts.userId, userId), eq(aiArtifacts.conversationId, conversationId)));
     await tx
       .delete(aiMessages)
-      .where(and(eq(aiMessages.tenantId, tenantId), eq(aiMessages.conversationId, conversationId)));
+      .where(and(eq(aiMessages.userId, userId), eq(aiMessages.conversationId, conversationId)));
     await tx
       .delete(aiEvents)
-      .where(and(eq(aiEvents.tenantId, tenantId), eq(aiEvents.conversationId, conversationId)));
+      .where(and(eq(aiEvents.userId, userId), eq(aiEvents.conversationId, conversationId)));
     await tx.delete(aiRuns).where(scope);
     await tx
       .delete(aiConversations)
-      .where(and(eq(aiConversations.tenantId, tenantId), eq(aiConversations.id, conversationId)));
+      .where(and(eq(aiConversations.userId, userId), eq(aiConversations.id, conversationId)));
     return true;
   }
 }

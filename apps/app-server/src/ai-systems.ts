@@ -78,8 +78,8 @@ export function assembleAiSystems(
       ? new AssetObjectStorage(config)
       : null;
   const publicLinkage: DocumentPublicLinkage = {
-    detachDocuments: async (tx, tenantId, documentIds) => {
-      for (const documentId of documentIds) await detachDocumentFromSites(tx, tenantId, documentId);
+    detachDocuments: async (tx, userId, documentIds) => {
+      for (const documentId of documentIds) await detachDocumentFromSites(tx, userId, documentId);
     },
   };
   // The draft binding port is the documents module's own transaction-scoped creation; the
@@ -99,12 +99,12 @@ export function assembleAiSystems(
   });
   if (options.assistantAdapter) assistant.adapter = options.assistantAdapter;
   const sites = createQaSiteService({ db: app.db, store: infra.service, config, log });
-  assistant.siteQuota = async (tenantId, siteId) => sites.messagesPerHourFor(tenantId, siteId);
+  assistant.siteQuota = async (userId, siteId) => sites.messagesPerHourFor(userId, siteId);
   // qa-sites resolves live public audiences; the assistant never imports it directly.
-  const liveSiteState = async (conversation: { tenantId: string; siteId: string | null }) => {
+  const liveSiteState = async (conversation: { userId: string; siteId: string | null }) => {
     if (!conversation.siteId) throw new DomainError("NOT_FOUND", "站点会话缺少站点");
     const site = await sites.findSiteById(conversation.siteId);
-    if (!site || site.tenantId !== conversation.tenantId)
+    if (!site || site.userId !== conversation.userId)
       throw new DomainError("AI_ACCESS_REVOKED", "站点不可用");
     if (site.status !== "active") throw new DomainError("AI_ACCESS_REVOKED", "站点当前不可访问");
     return { site, approved: await sites.approvedDocuments(site) };

@@ -69,7 +69,7 @@ export async function qaSitesRoutes(
     createdAt: z.string(),
     updatedAt: z.string(),
   });
-  // Explicit projection: QaSiteRow carries tenantId/accessCodeHash/expiresAt/createdBy,
+  // Explicit projection: QaSiteRow carries userId/accessCodeHash/expiresAt/createdBy,
   // which must never reach an API response.
   const toView = (row: QaSiteRow) => ({
     id: row.id,
@@ -703,7 +703,7 @@ async function siteAudience(
   if (internal)
     return {
       kind: "site",
-      tenantId: site.tenantId,
+      userId: site.userId,
       siteId: site.id,
       visitorId: `preview_${internal.identityId}`,
       approved,
@@ -712,7 +712,7 @@ async function siteAudience(
     };
   return {
     kind: "site",
-    tenantId: site.tenantId,
+    userId: site.userId,
     siteId: site.id,
     visitorId: visitorId ?? "anonymous",
     approved,

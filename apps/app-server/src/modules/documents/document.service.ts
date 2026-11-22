@@ -95,7 +95,7 @@ export type DuplicateBlockIdRepairResult =
 function presentDocument(document: ActiveDocument) {
   return {
     id: document.id,
-    tenantId: document.tenantId,
+    userId: document.userId,
     title: document.title,
     workspaceId: document.workspaceId ?? "ws_default",
     catalogId: document.catalogId ?? "",
@@ -180,7 +180,7 @@ export class DocumentService {
     private readonly collaboration: CollaborationOptions,
     private readonly sessionRevoker: CollaborationSessionRevoker,
     private readonly migration: DocumentMigrationOptions,
-    private readonly maxDocumentsPerTenant: number,
+    private readonly maxDocumentsPerUser: number,
   ) {}
 
   private async replayDocumentYDoc(
@@ -223,12 +223,12 @@ export class DocumentService {
         }
       : undefined;
     const document = await this.repository.create(
-      principal.tenantId,
+      principal.userId,
       principal.identityId,
       input.title,
       { schemaVersion: this.migration.targetSchemaVersion, extensions: [] },
       requestId,
-      this.maxDocumentsPerTenant,
+      this.maxDocumentsPerUser,
       undefined,
       idempotency,
       undefined,
@@ -256,7 +256,7 @@ export class DocumentService {
       : undefined;
     if (idempotency) {
       const replay = await this.repository.findDocumentIdempotencyReplay({
-        tenantId: principal.tenantId,
+        userId: principal.userId,
         subjectId: principal.identityId,
         idempotency,
       });
@@ -265,7 +265,7 @@ export class DocumentService {
 
     const template = await this.repository.findActiveForAction(
       templateId,
-      principal.tenantId,
+      principal.userId,
       principal.identityId,
       "export",
     );
@@ -321,7 +321,7 @@ export class DocumentService {
       }
 
       const result = await this.repository.copyTemplate({
-        tenantId: principal.tenantId,
+        userId: principal.userId,
         identityId: principal.identityId,
         templateId,
         expectedGenerationId: template.generationId,
@@ -330,7 +330,7 @@ export class DocumentService {
         schemaVersion: this.migration.targetSchemaVersion,
         extensions: template.extensions,
         requestId,
-        maxDocumentsPerTenant: this.maxDocumentsPerTenant,
+        maxDocumentsPerUser: this.maxDocumentsPerUser,
         ...(idempotency ? { idempotency } : {}),
         ...(initialUpdate ? { initialUpdate } : {}),
         ...(migrationArchive ? { migrationPersistence: migrationArchive } : {}),
@@ -342,8 +342,8 @@ export class DocumentService {
         throw new DomainError("CONFLICT", "The template changed while it was being copied");
       }
       if (result.status === "quota-exceeded") {
-        throw new DomainError("RESOURCE_LIMIT", "The tenant document limit has been reached", {
-          limit: this.maxDocumentsPerTenant,
+        throw new DomainError("RESOURCE_LIMIT", "The user document limit has been reached", {
+          limit: this.maxDocumentsPerUser,
         });
       }
       return this.get(principal, result.document.id);
@@ -365,7 +365,7 @@ export class DocumentService {
     },
   ) {
     const result = await this.repository.list({
-      tenantId: principal.tenantId,
+      userId: principal.userId,
       identityId: principal.identityId,
       ...input,
       query: input.q,
@@ -393,7 +393,7 @@ export class DocumentService {
         }
       : undefined;
     const result = await this.repository.updateTitle({
-      tenantId: principal.tenantId,
+      userId: principal.userId,
       documentId,
       identityId: principal.identityId,
       title: input.title,
@@ -411,7 +411,7 @@ export class DocumentService {
 
   async setFavorite(principal: Principal, documentId: string, favorite: boolean): Promise<void> {
     const found = await this.repository.setFavorite(
-      principal.tenantId,
+      principal.userId,
       documentId,
       principal.identityId,
       favorite,
@@ -436,7 +436,7 @@ export class DocumentService {
         }
       : undefined;
     const result = await this.repository.setLifecycle({
-      tenantId: principal.tenantId,
+      userId: principal.userId,
       documentId,
       ownerId: principal.identityId,
       operation,
@@ -456,7 +456,7 @@ export class DocumentService {
   async get(principal: Principal, documentId: string) {
     const document = await this.repository.findActiveForAction(
       documentId,
-      principal.tenantId,
+      principal.userId,
       principal.identityId,
       "read",
     );
@@ -468,7 +468,7 @@ export class DocumentService {
   async getContent(principal: Principal, documentId: string) {
     const document = await this.repository.findActiveForAction(
       documentId,
-      principal.tenantId,
+      principal.userId,
       principal.identityId,
       "read",
     );
@@ -476,12 +476,12 @@ export class DocumentService {
     const readOnly =
       (await this.repository.findActiveForAction(
         documentId,
-        principal.tenantId,
+        principal.userId,
         principal.identityId,
         "write",
       )) === null;
     const snapshot = await this.repository.findProjectionContentSnapshot(
-      principal.tenantId,
+      principal.userId,
       documentId,
       document.generationId,
     );
@@ -502,7 +502,7 @@ export class DocumentService {
   async exportJson(principal: Principal, documentId: string, requestId?: string) {
     const document = await this.repository.findActiveForAction(
       documentId,
-      principal.tenantId,
+      principal.userId,
       principal.identityId,
       "export",
     );
@@ -526,7 +526,7 @@ export class DocumentService {
       }
       const summary = inspectDocumentContent(validated.data);
       const recorded = await this.repository.recordExport({
-        tenantId: principal.tenantId,
+        userId: principal.userId,
         documentId: document.id,
         identityId: principal.identityId,
         generationId: document.generationId,
@@ -668,12 +668,12 @@ export class DocumentService {
         }
       : undefined;
     const document = await this.repository.create(
-      principal.tenantId,
+      principal.userId,
       principal.identityId,
       input.title,
       { schemaVersion: this.migration.targetSchemaVersion, extensions: input.extensions },
       requestId,
-      this.maxDocumentsPerTenant,
+      this.maxDocumentsPerUser,
       { updateHash, updateBytes, content: contentToImport },
       idempotency,
       migrationReport,
@@ -695,7 +695,7 @@ export class DocumentService {
   async createDraftInTx(
     tx: import("../collaboration/owner.js").DocumentWriteTransaction,
     input: {
-      tenantId: string;
+      userId: string;
       identityId: string;
       title: string;
       workspaceId: string;
@@ -714,12 +714,12 @@ export class DocumentService {
     const updateHash = createHash("sha256").update(updateBytes).digest("hex");
     const document = await this.repository.createInTx(
       tx,
-      input.tenantId,
+      input.userId,
       input.identityId,
       input.title,
       { schemaVersion: this.migration.targetSchemaVersion, extensions: [] },
       undefined,
-      this.maxDocumentsPerTenant,
+      this.maxDocumentsPerUser,
       { updateHash, updateBytes, content },
       {
         operationId: "documents.draft",
@@ -748,23 +748,23 @@ export class DocumentService {
   async listVersions(principal: Principal, documentId: string) {
     const document = await this.repository.findActiveForAction(
       documentId,
-      principal.tenantId,
+      principal.userId,
       principal.identityId,
       "read",
     );
     if (!document) throw new DomainError("NOT_FOUND", "Document not found");
-    return (await this.repository.listVersions(principal.tenantId, documentId)).map(presentVersion);
+    return (await this.repository.listVersions(principal.userId, documentId)).map(presentVersion);
   }
 
   async getVersion(principal: Principal, documentId: string, versionId: string) {
     const document = await this.repository.findActiveForAction(
       documentId,
-      principal.tenantId,
+      principal.userId,
       principal.identityId,
       "read",
     );
     if (!document) throw new DomainError("NOT_FOUND", "Document not found");
-    const version = await this.repository.findVersion(principal.tenantId, documentId, versionId);
+    const version = await this.repository.findVersion(principal.userId, documentId, versionId);
     if (!version) throw new DomainError("NOT_FOUND", "Document version not found");
     return presentVersion(version);
   }
@@ -772,12 +772,12 @@ export class DocumentService {
   async getVersionContent(principal: Principal, documentId: string, versionId: string) {
     const document = await this.repository.findActiveForAction(
       documentId,
-      principal.tenantId,
+      principal.userId,
       principal.identityId,
       "read",
     );
     if (!document) throw new DomainError("NOT_FOUND", "Document not found");
-    const version = await this.repository.findVersion(principal.tenantId, documentId, versionId);
+    const version = await this.repository.findVersion(principal.userId, documentId, versionId);
     if (!version) throw new DomainError("NOT_FOUND", "Document version not found");
     const schemaVersion = await this.repository.findGenerationSchemaVersion(
       documentId,
@@ -833,7 +833,7 @@ export class DocumentService {
         }
       : undefined;
     const result = await this.repository.createVersion({
-      tenantId: principal.tenantId,
+      userId: principal.userId,
       documentId,
       identityId: principal.identityId,
       name: input.name,
@@ -869,11 +869,11 @@ export class DocumentService {
         }
       : undefined;
     const restoredContent = await this.getVersionContent(principal, documentId, versionId);
-    const version = await this.repository.findVersion(principal.tenantId, documentId, versionId);
+    const version = await this.repository.findVersion(principal.userId, documentId, versionId);
     if (!version) throw new DomainError("NOT_FOUND", "Document or version not found");
     const stateBytes = await this.createVersionStateBytes(documentId, version);
     const result = await this.repository.restoreVersion({
-      tenantId: principal.tenantId,
+      userId: principal.userId,
       documentId,
       versionId,
       identityId: principal.identityId,
@@ -914,7 +914,7 @@ export class DocumentService {
 
   async listAcl(principal: Principal, documentId: string) {
     const entries = await this.repository.listAcl(
-      principal.tenantId,
+      principal.userId,
       documentId,
       principal.identityId,
     );
@@ -941,7 +941,7 @@ export class DocumentService {
         }
       : undefined;
     const result = await this.repository.setAcl(
-      principal.tenantId,
+      principal.userId,
       documentId,
       principal.identityId,
       identityId,
@@ -974,7 +974,7 @@ export class DocumentService {
         }
       : undefined;
     const result = await this.repository.removeAcl(
-      principal.tenantId,
+      principal.userId,
       documentId,
       principal.identityId,
       identityId,
@@ -994,7 +994,7 @@ export class DocumentService {
   ): Promise<DuplicateBlockIdRepairResult> {
     const source = await this.repository.findActiveForAction(
       documentId,
-      principal.tenantId,
+      principal.userId,
       principal.identityId,
       "write",
     );
@@ -1043,7 +1043,7 @@ export class DocumentService {
       const updateBytes = createCollaborationStateFromContent(migrated.content);
       const updateHash = createHash("sha256").update(updateBytes).digest("hex");
       const result = await this.repository.switchActiveGeneration({
-        tenantId: principal.tenantId,
+        userId: principal.userId,
         documentId: source.id,
         identityId: principal.identityId,
         expectedGenerationId: source.generationId,
@@ -1087,14 +1087,14 @@ export class DocumentService {
       throw new DomainError("VALIDATION_ERROR", "Each extension name may only be declared once");
     let document = await this.repository.findActiveForAction(
       documentId,
-      principal.tenantId,
+      principal.userId,
       principal.identityId,
       "read",
     );
     if (!document) throw new DomainError("NOT_FOUND", "Document not found");
     const writableDocument = await this.repository.findActiveForAction(
       documentId,
-      principal.tenantId,
+      principal.userId,
       principal.identityId,
       "write",
     );
@@ -1106,7 +1106,7 @@ export class DocumentService {
     const canWriteCurrentGeneration =
       (await this.repository.findActiveForAction(
         documentId,
-        principal.tenantId,
+        principal.userId,
         principal.identityId,
         "write",
       )) !== null;
@@ -1133,7 +1133,7 @@ export class DocumentService {
 
     const session = createSessionTicket(
       {
-        tenantId: document.tenantId,
+        userId: document.userId,
         documentId: document.id,
         generationId: document.generationId,
         schemaVersion: document.schemaVersion,
@@ -1193,7 +1193,7 @@ export class DocumentService {
       const updateBytes = createCollaborationStateFromContent(migrated.content);
       const updateHash = createHash("sha256").update(updateBytes).digest("hex");
       const result = await this.repository.switchActiveGeneration({
-        tenantId: principal.tenantId,
+        userId: principal.userId,
         documentId: source.id,
         identityId: principal.identityId,
         expectedGenerationId: source.generationId,

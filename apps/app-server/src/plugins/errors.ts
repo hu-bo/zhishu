@@ -35,7 +35,7 @@ export function registerErrorHandlers(app: FastifyInstance): void {
         request.log.info(
           {
             event: "authorization-denied",
-            tenantId: request.principal.tenantId,
+            userId: request.principal.userId,
             actorId: request.principal.identityId,
             operation: request.routeOptions.url,
             code: error.code,

@@ -330,7 +330,7 @@ test("CSV and uploaded image text reaches the same Qdrant indexing path with a t
     options: index,
     source: source("csv", `名称,图片\n图示,"![图](${dataUrl})"`),
     version: { generationId: "gen_import", durableSeq: "9007199254740993" },
-    tenantId: "tenant_a",
+    userId: "user_a",
     workspaceId: "space_a",
     documentTitle: "导入文档",
     indexVersion: "v_import",

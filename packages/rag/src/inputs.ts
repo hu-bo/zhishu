@@ -12,7 +12,7 @@ export type RagDocumentSource =
       hasHeader?: boolean;
     };
 
-/** Bind credentials, tenant boundaries, authorization and provider-specific calls in the application. */
+/** Bind credentials, user boundaries, authorization and provider-specific calls in the application. */
 export interface ImageStorage {
   uploadImage(input: {
     sourceId: string;

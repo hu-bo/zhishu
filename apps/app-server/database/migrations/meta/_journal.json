@@ -344,6 +344,13 @@
       "when": 1794844900000,
       "tag": "0048_schema_comments",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1795334400000,
+      "tag": "0049_rename_tenant_to_user",
+      "breakpoints": true
     }
   ]
 }

@@ -33,7 +33,7 @@ import { AiImages } from "./images.js";
  */
 
 const principal: Principal = {
-  tenantId: "t1",
+  userId: "t1",
   identityId: "id1",
   username: "id1",
   displayName: "作者",
@@ -52,13 +52,13 @@ async function setup(overrides: { owner?: CollaborationOwner } = {}) {
     await pg.exec(await readFile(`database/migrations/${tag}.sql`, "utf8"));
   const db = drizzle(pg, { schema }) as unknown as Database;
   await db.insert(identityProfiles).values({
-    tenantId: "t1",
+    userId: "t1",
     identityId: "id1",
     displayName: "作者",
     email: "a@example.test",
   });
   await db.insert(workspaces).values({
-    tenantId: "t1",
+    userId: "t1",
     id: "ws_personal",
     name: "个人空间",
     kind: "personal",
@@ -66,7 +66,7 @@ async function setup(overrides: { owner?: CollaborationOwner } = {}) {
     personalOwnerId: "id1",
   });
   await db.insert(catalogs).values({
-    tenantId: "t1",
+    userId: "t1",
     id: "cat_personal",
     workspaceId: "ws_personal",
     name: "根目录",
@@ -147,7 +147,7 @@ test("public audiences are limited to scope/rag and cannot request writing plugi
   try {
     const site: AssistantAudience = {
       kind: "site",
-      tenantId: "t1",
+      userId: "t1",
       siteId: "site1",
       visitorId: "v1",
       approved: [],
@@ -207,7 +207,7 @@ test("create-draft returns the bound target instead of creating a second documen
     const conversation = await assistant.createConversation(internal, {});
     await db.insert(documents).values({
       id: "doc_bound",
-      tenantId: "t1",
+      userId: "t1",
       title: "已绑定文档",
       createdBy: "id1",
       accessMode: "personal",
@@ -215,7 +215,7 @@ test("create-draft returns the bound target instead of creating a second documen
       catalogId: "cat_personal",
     });
     await db.insert(resourceAcl).values({
-      tenantId: "t1",
+      userId: "t1",
       documentId: "doc_bound",
       identityId: "id1",
       role: "admin",
@@ -245,7 +245,7 @@ test("binding an existing target bumps the context revision and isolates stale s
     const conversation = await assistant.createConversation(internal, {});
     await db.insert(documents).values({
       id: "doc_target",
-      tenantId: "t1",
+      userId: "t1",
       title: "目标文档",
       createdBy: "id1",
       accessMode: "personal",
@@ -253,7 +253,7 @@ test("binding an existing target bumps the context revision and isolates stale s
       catalogId: "cat_personal",
     });
     await db.insert(resourceAcl).values({
-      tenantId: "t1",
+      userId: "t1",
       documentId: "doc_target",
       identityId: "id1",
       role: "admin",
@@ -295,7 +295,7 @@ test("public projection drops answers whose evidence ledger is no longer approve
   const { pg, db, assistant } = await setup();
   try {
     await db.insert(qaSites).values({
-      tenantId: "t1",
+      userId: "t1",
       id: "site1",
       ownerWorkspaceId: "ws_personal",
       slug: "rev-site",
@@ -306,7 +306,7 @@ test("public projection drops answers whose evidence ledger is no longer approve
     const site = (approved: { documentId: string; workspaceId: string; publicLabel: string }[]) =>
       ({
         kind: "site",
-        tenantId: "t1",
+        userId: "t1",
         siteId: "site1",
         visitorId: "v1",
         approved,
@@ -340,7 +340,7 @@ test("public projection drops answers whose evidence ledger is no longer approve
     };
     await db.insert(aiRuns).values({
       id: "run_rev",
-      tenantId: "t1",
+      userId: "t1",
       conversationId: conversation.id,
       idempotencyKey: "ik",
       inputHash: `sha256:${"a".repeat(64)}`,
@@ -365,7 +365,7 @@ test("public projection drops answers whose evidence ledger is no longer approve
     });
     await db.insert(aiArtifacts).values({
       id: "art_rev",
-      tenantId: "t1",
+      userId: "t1",
       conversationId: conversation.id,
       runId: "run_rev",
       producerCallId: "step:retrieve:1",
@@ -378,7 +378,7 @@ test("public projection drops answers whose evidence ledger is no longer approve
     });
     await db.insert(aiMessages).values({
       id: "msg_rev",
-      tenantId: "t1",
+      userId: "t1",
       conversationId: conversation.id,
       runId: "run_rev",
       role: "assistant",
@@ -453,6 +453,10 @@ test("proposal review is incremental: per-block decisions keep the proposal open
   const owner: CollaborationOwner = {
     snapshot: async () => ({
       snapshot: {
+        documentId: "doc_review",
+        schemaVersion: 1,
+        extensions: [],
+        snapshotRevision: 1,
         content: {
           type: "doc",
           content: [
@@ -502,7 +506,7 @@ test("proposal review is incremental: per-block decisions keep the proposal open
     const conversation = await assistant.createConversation(internal, {});
     await db.insert(documents).values({
       id: "doc_review",
-      tenantId: "t1",
+      userId: "t1",
       title: "审阅目标",
       createdBy: "id1",
       accessMode: "personal",
@@ -510,7 +514,7 @@ test("proposal review is incremental: per-block decisions keep the proposal open
       catalogId: "cat_personal",
     });
     await db.insert(resourceAcl).values({
-      tenantId: "t1",
+      userId: "t1",
       documentId: "doc_review",
       identityId: "id1",
       role: "admin",
@@ -518,7 +522,7 @@ test("proposal review is incremental: per-block decisions keep the proposal open
     });
     await db.insert(aiRuns).values({
       id: "run_review",
-      tenantId: "t1",
+      userId: "t1",
       conversationId: conversation.id,
       idempotencyKey: "ik-review",
       inputHash: `sha256:${"b".repeat(64)}`,
@@ -544,7 +548,7 @@ test("proposal review is incremental: per-block decisions keep the proposal open
     for (const id of ["art_review", "art_all"])
       await db.insert(aiArtifacts).values({
         id,
-        tenantId: "t1",
+        userId: "t1",
         conversationId: conversation.id,
         runId: "run_review",
         producerCallId: `tool:${id}`,

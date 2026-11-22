@@ -14,7 +14,7 @@ import {
 
 const accountSchema = z.object({
   identityId: z.string(),
-  tenantId: z.string(),
+  userId: z.string(),
   username: z.string(),
   displayName: z.string(),
   email: z.string(),
@@ -24,7 +24,7 @@ const accountSchema = z.object({
 const accountNamespace = `account:${import.meta.env.VITE_API_BASE_URL ?? ''}`;
 const accountMarker = `zhishu.offline-account:${import.meta.env.VITE_API_BASE_URL ?? ''}`;
 export const cacheIdentity = (user: MockLogin200User) =>
-  JSON.stringify([import.meta.env.VITE_API_BASE_URL ?? '', user.tenantId, user.identityId]);
+  JSON.stringify([import.meta.env.VITE_API_BASE_URL ?? '', user.userId, user.identityId]);
 let state = {
   identity: null as string | null,
   verified: false,
