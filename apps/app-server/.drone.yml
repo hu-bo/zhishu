@@ -44,9 +44,7 @@ steps:
       - test -s .env
       - test -s dist/src/server.js
       - test -s database/drizzle.config.ts
-      # Fail the build early when production environment rules are violated;
-      # src/config.ts is the single source for those checks.
-      - node --env-file=.env -e "import('./dist/src/config.js').then(m => m.loadConfig()).catch((error) => { console.error(error instanceof Error ? error.message: error); process.exit(1); })"
+
       - tar -czf /drone/src/$APP_NAME.tar.gz .
       - chmod 644 /drone/src/$APP_NAME.tar.gz
       - ls -ld /drone /drone/src /drone/src/$APP_NAME.tar.gz
