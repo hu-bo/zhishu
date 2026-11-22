@@ -18,6 +18,18 @@ volumes:
       path: /var/lib/drone-cache/pnpm/zhishu-app-web
 
 steps:
+  # Restore the pnpm store into /cache/pnpm-store before install (drone-volume-cache
+  # manages the cache under the pnpm-cache host volume; the bare mount alone does not).
+  - name: restore-pnpm-cache
+    image: drillster/drone-volume-cache
+    volumes:
+      - name: pnpm-cache
+        path: /cache
+    settings:
+      restore: true
+      mount:
+        - /cache/pnpm-store
+
   - name: build and package
     image: node:22-alpine
     volumes:
@@ -38,6 +50,17 @@ steps:
       # app-web's build runs typecheck, regenerates API clients and routes, then bundles with Vite.
       # VITE_API_BASE_URL stays unset: the bundle calls /api on its own origin.
       - tar -czf /drone/src/$APP_NAME.tar.gz -C apps/$APP_NAME dist
+
+  # Persist the refreshed pnpm store after the build.
+  - name: rebuild-pnpm-cache
+    image: drillster/drone-volume-cache
+    volumes:
+      - name: pnpm-cache
+        path: /cache
+    settings:
+      rebuild: true
+      mount:
+        - /cache/pnpm-store
 
   - name: scp
     image: appleboy/drone-scp

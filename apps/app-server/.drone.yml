@@ -18,6 +18,18 @@ volumes:
       path: /var/lib/drone-cache/pnpm/zhishu-app-server
 
 steps:
+  # Restore the pnpm store into /cache/pnpm-store before install (drone-volume-cache
+  # manages the cache under the pnpm-cache host volume; the bare mount alone does not).
+  - name: restore-pnpm-cache
+    image: drillster/drone-volume-cache
+    volumes:
+      - name: pnpm-cache
+        path: /cache
+    settings:
+      restore: true
+      mount:
+        - /cache/pnpm-store
+
   - name: build and package
     image: node:22-alpine
     volumes:
@@ -36,18 +48,32 @@ steps:
       - pnpm config set registry https://registry.npmmirror.com/
       - pnpm --fail-if-no-match --filter "$APP_PACKAGE..." install --frozen-lockfile
       - pnpm -r --fail-if-no-match --filter "$APP_PACKAGE..." run build
-      # Keep dev dependencies for the versioned Drizzle migration CLI.
-      - pnpm --fail-if-no-match --filter "$APP_PACKAGE" deploy --node-linker=hoisted --prod=false "$APP_DEPLOY_DIR"
+      # Runtime dependencies only. pnpm deploy resolves drizzle-orm's peer variant
+      # recorded in the lockfile (dev pglite/@types), so prune the driver packages
+      # the server never imports; the drizzle-orm migrator covers deployments.
+      - pnpm --fail-if-no-match --filter "$APP_PACKAGE" deploy --node-linker=hoisted --prod "$APP_DEPLOY_DIR"
       - cd "$APP_DEPLOY_DIR"
+      - rm -rf node_modules/@electric-sql node_modules/gel node_modules/@types
       # Register zhishu-app-server on the config service if the name is new there.
       - 'wget -q --header="Authorization: Bearer $API_CONFIG_TOKEN_SECRET" "http://config.8and1.cn/api/pull/zhishu-app-server/env" -O .env'
       - test -s .env
       - test -s dist/src/server.js
-      - test -s database/drizzle.config.ts
+      - test -s dist/src/scripts/run-migrations.js
 
       - tar -czf /drone/src/$APP_NAME.tar.gz .
       - chmod 644 /drone/src/$APP_NAME.tar.gz
       - ls -ld /drone /drone/src /drone/src/$APP_NAME.tar.gz
+
+  # Persist the refreshed pnpm store after the build.
+  - name: rebuild-pnpm-cache
+    image: drillster/drone-volume-cache
+    volumes:
+      - name: pnpm-cache
+        path: /cache
+    settings:
+      rebuild: true
+      mount:
+        - /cache/pnpm-store
 
   - name: scp
     image: appleboy/drone-scp
@@ -88,7 +114,7 @@ steps:
         - test -s dist/src/server.js
         # Validate the environment and run migrations before stopping the current service.
         - docker compose -p zhishu-app-server config --quiet
-        - docker compose -p zhishu-app-server run --rm --no-deps -T app-server node node_modules/drizzle-kit/bin.cjs migrate --config=database/drizzle.config.ts
+        - docker compose -p zhishu-app-server run --rm --no-deps -T app-server node dist/src/scripts/run-migrations.js
         - |
           if docker container inspect zhishu-app-server >/dev/null 2>&1; then
             docker stop --time 30 zhishu-app-server
