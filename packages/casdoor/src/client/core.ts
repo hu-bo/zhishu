@@ -8,15 +8,16 @@ type TokenExchangeResult = {
   user: CasdoorUser;
 };
 
-const callbackExchangeInFlight = new Map<string, Promise<TokenExchangeResult>>();
-const callbackExchangeConsumed = new Set<string>();
-
 export class CasdoorClient {
   private config: ClientConfig;
   private storage: TokenStorage;
   private listeners: Set<AuthStateListener> = new Set();
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private loginRedirectInProgress = false;
+  private callbackInFlight: Promise<boolean> | null = null;
+  private refreshInFlight: Promise<boolean> | null = null;
+  private sessionVersion = 0;
+  private destroyed = false;
   private apiBase: string;
   private state: AuthState = {
     isAuthenticated: false,
@@ -59,9 +60,6 @@ export class CasdoorClient {
         accessToken: token,
         error: null,
       });
-      if (this.config.silentRefresh) {
-        this.setupRefreshTimer();
-      }
       return;
     }
 
@@ -72,6 +70,19 @@ export class CasdoorClient {
       accessToken: null,
       error: null,
     });
+  }
+
+  /** Start background work from a framework effect, keeping construction side-effect free. */
+  start(): void {
+    this.destroyed = false;
+    if (!this.config.silentRefresh) return;
+    if (
+      this.storage.getRefreshToken() &&
+      this.storage.isTokenExpiringSoon(this.config.refreshBeforeExpiry ?? 60)
+    ) {
+      if (!this.state.isAuthenticated) this.updateState({ isLoading: true });
+      void this.refreshToken();
+    } else if (this.state.isAuthenticated) this.setupRefreshTimer();
   }
 
   private updateState(newState: Partial<AuthState>): void {
@@ -91,13 +102,7 @@ export class CasdoorClient {
 
   private generateState(): string {
     const array = new Uint8Array(16);
-    if (typeof crypto !== "undefined") {
-      crypto.getRandomValues(array);
-    } else {
-      for (let i = 0; i < 16; i += 1) {
-        array[i] = Math.floor(Math.random() * 256);
-      }
-    }
+    crypto.getRandomValues(array);
     return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join("");
   }
 
@@ -107,10 +112,6 @@ export class CasdoorClient {
 
   private getOAuthLoginPendingStorageKey(): string {
     return `casdoor_oauth_login_pending_${this.config.appName}`;
-  }
-
-  private getCallbackExchangeKey(code: string, state: string): string {
-    return `${this.config.appName}:${state}:${code}`;
   }
 
   private clearCallbackQueryParams(): void {
@@ -132,7 +133,7 @@ export class CasdoorClient {
 
     const search = url.searchParams.toString();
     window.history.replaceState(
-      {},
+      window.history.state,
       document.title,
       `${url.pathname}${search ? `?${search}` : ""}${url.hash}`,
     );
@@ -155,16 +156,10 @@ export class CasdoorClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) {
-      let message = `request failed: ${response.status}`;
-      try {
-        const data = (await response.json()) as { error?: string; message?: string };
-        message = data.message || data.error || message;
-      } catch {
-        // Keep the status-only fallback when the server did not return JSON.
-      }
-      throw new Error(message);
+      throw new Error(`Authentication request failed (${response.status})`);
     }
     return (await response.json()) as T;
   }
@@ -226,6 +221,8 @@ export class CasdoorClient {
   }
 
   logout(): void {
+    this.sessionVersion += 1;
+    this.loginRedirectInProgress = false;
     this.storage.clear();
     this.clearRefreshTimer();
     this.clearLoginRedirectPending();
@@ -246,13 +243,29 @@ export class CasdoorClient {
     }
   }
 
-  async handleCallback(
+  handleCallback(
     serverExchangeToken?: (
       code: string,
       state: string,
       appName: string,
     ) => Promise<TokenExchangeResult>,
   ): Promise<boolean> {
+    if (this.callbackInFlight) return this.callbackInFlight;
+    const pending = this.completeCallback(serverExchangeToken).finally(() => {
+      if (this.callbackInFlight === pending) this.callbackInFlight = null;
+    });
+    this.callbackInFlight = pending;
+    return pending;
+  }
+
+  private async completeCallback(
+    serverExchangeToken?: (
+      code: string,
+      state: string,
+      appName: string,
+    ) => Promise<TokenExchangeResult>,
+  ): Promise<boolean> {
+    const version = this.sessionVersion;
     this.updateState({ isLoading: true });
 
     try {
@@ -271,16 +284,16 @@ export class CasdoorClient {
         throw new Error("No state found");
       }
 
-      if (typeof sessionStorage !== "undefined") {
-        const savedState = sessionStorage.getItem(this.getOAuthStateStorageKey());
-        if (savedState && savedState !== state) {
-          throw new Error("Invalid state parameter");
-        }
-        sessionStorage.removeItem(this.getOAuthStateStorageKey());
+      const savedState =
+        typeof sessionStorage !== "undefined"
+          ? sessionStorage.getItem(this.getOAuthStateStorageKey())
+          : null;
+      if (!savedState || savedState !== state) {
+        throw new Error("Invalid or missing OAuth state");
       }
+      sessionStorage.removeItem(this.getOAuthStateStorageKey());
       this.clearLoginRedirectPending();
 
-      const exchangeKey = this.getCallbackExchangeKey(code, state);
       const exchange =
         serverExchangeToken ??
         (async (authCode: string, authState: string, appName: string) => {
@@ -293,19 +306,11 @@ export class CasdoorClient {
           );
         });
 
-      let exchangePromise = callbackExchangeInFlight.get(exchangeKey);
-      if (!exchangePromise) {
-        if (callbackExchangeConsumed.has(exchangeKey)) {
-          throw new Error("Authorization code has already been processed");
-        }
-        callbackExchangeConsumed.add(exchangeKey);
-        exchangePromise = exchange(code, state, this.config.appName).finally(() => {
-          callbackExchangeInFlight.delete(exchangeKey);
-        });
-        callbackExchangeInFlight.set(exchangeKey, exchangePromise);
-      }
-
-      const { token, user } = await exchangePromise;
+      const { token, user } = await exchange(code, state, this.config.appName);
+      if (this.destroyed || version !== this.sessionVersion) return false;
+      if (!token?.access_token || !user?.id || user.isDeleted || user.isForbidden)
+        throw new Error("Invalid authentication response");
+      this.storage.clear();
       this.storage.saveToken(token);
       this.storage.saveUser(user);
       this.updateState({
@@ -322,6 +327,11 @@ export class CasdoorClient {
       this.clearCallbackQueryParams();
       return true;
     } catch (err) {
+      if (this.destroyed || version !== this.sessionVersion) return false;
+      this.storage.clear();
+      this.clearRefreshTimer();
+      if (typeof sessionStorage !== "undefined")
+        sessionStorage.removeItem(this.getOAuthStateStorageKey());
       this.clearLoginRedirectPending();
       this.clearCallbackQueryParams();
       this.updateState({
@@ -329,17 +339,30 @@ export class CasdoorClient {
         isLoading: false,
         user: null,
         accessToken: null,
-        error: err instanceof Error ? err : new Error("Unknown error"),
+        error: err instanceof Error ? err : new Error("Authentication failed"),
       });
       return false;
     }
   }
 
-  async refreshToken(
+  refreshToken(
     serverRefreshToken?: (refreshToken: string, appName: string) => Promise<TokenResponse>,
   ): Promise<boolean> {
+    if (this.refreshInFlight) return this.refreshInFlight;
+    const pending = this.completeRefresh(serverRefreshToken).finally(() => {
+      if (this.refreshInFlight === pending) this.refreshInFlight = null;
+    });
+    this.refreshInFlight = pending;
+    return pending;
+  }
+
+  private async completeRefresh(
+    serverRefreshToken?: (refreshToken: string, appName: string) => Promise<TokenResponse>,
+  ): Promise<boolean> {
+    const version = this.sessionVersion;
     const refreshToken = this.storage.getRefreshToken();
     if (!refreshToken) {
+      this.logout();
       return false;
     }
 
@@ -349,15 +372,20 @@ export class CasdoorClient {
         (async (token: string, appName: string) => {
           return this.postJSON<TokenResponse>(
             `/apps/${encodeURIComponent(appName)}/oauth/token/refresh`,
-            { refresh_token: token },
+            {
+              refresh_token: token,
+            },
           );
         });
 
       const token = await refresh(refreshToken, this.config.appName);
+      if (this.destroyed || version !== this.sessionVersion) return false;
+      if (!token?.access_token) throw new Error("Invalid refresh response");
       this.storage.saveToken(token);
       this.updateState({
         isAuthenticated: true,
         isLoading: false,
+        user: this.storage.getUser(),
         accessToken: token.access_token,
         error: null,
       });
@@ -366,7 +394,7 @@ export class CasdoorClient {
       }
       return true;
     } catch {
-      this.logout();
+      if (!this.destroyed && version === this.sessionVersion) this.logout();
       return false;
     }
   }
@@ -374,20 +402,19 @@ export class CasdoorClient {
   private setupRefreshTimer(): void {
     this.clearRefreshTimer();
     const expiresAt = this.storage.getExpiresAt();
-    if (!expiresAt) return;
+    if (!expiresAt || this.destroyed) return;
 
     const refreshBeforeExpiry = (this.config.refreshBeforeExpiry ?? 60) * 1000;
     const timeout = expiresAt - Date.now() - refreshBeforeExpiry;
 
-    if (timeout > 0) {
-      this.refreshTimer = setTimeout(async () => {
-        this.updateState({ isLoading: true });
-        const refreshed = await this.refreshToken();
-        if (!refreshed) {
-          this.updateState({ isLoading: false });
-        }
-      }, timeout);
-    }
+    // Short-lived tokens still need a timer; avoid a tight loop when TTL < refresh window.
+    const delay = timeout > 0 ? timeout : Math.max(1000, (expiresAt - Date.now()) / 2);
+    this.refreshTimer = setTimeout(
+      () => {
+        void this.refreshToken();
+      },
+      Math.min(delay, 2_147_483_647),
+    );
   }
 
   private clearRefreshTimer(): void {
@@ -410,11 +437,14 @@ export class CasdoorClient {
   }
 
   destroy(): void {
+    this.destroyed = true;
     this.clearRefreshTimer();
     this.listeners.clear();
   }
 }
 
 export function createCasdoorClient(config: ClientConfig): CasdoorClient {
-  return new CasdoorClient(config);
+  const client = new CasdoorClient(config);
+  client.start();
+  return client;
 }

@@ -20,6 +20,7 @@ export interface CasdoorCallbackOptions {
  */
 export function initCasdoor(config: ClientConfig): CasdoorClient {
   globalClient = new CasdoorClient(config);
+  globalClient.start();
   return globalClient;
 }
 

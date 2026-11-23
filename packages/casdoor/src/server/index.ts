@@ -2,16 +2,12 @@ import { SDK as CasdoorSDK } from "casdoor-nodejs-sdk";
 import type { CasdoorConfig, CasdoorUser, AuthResult, JwtClaims, TokenResponse } from "../types.js";
 
 export * from "../types.js";
-
-/** Validate the SDK token shape at the boundary instead of trusting a blind double cast. */
-function toTokenResponse(value: unknown): TokenResponse {
-  if (typeof value !== "object" || value === null)
-    throw new Error("Casdoor SDK returned a malformed token response");
-  const accessToken = (value as { access_token?: unknown }).access_token;
-  if (typeof accessToken !== "string" || accessToken.length === 0)
-    throw new Error("Casdoor SDK token response is missing access_token");
-  return value as TokenResponse;
-}
+export { createAuthServiceClient, AuthServiceError } from "./auth-service.js";
+export type {
+  AuthServiceConfig,
+  AuthServiceIdentity,
+  AuthServiceErrorCode,
+} from "./auth-service.js";
 
 /**
  * Casdoor 服务端 SDK
@@ -62,7 +58,7 @@ export class CasdoorServer {
    */
   async getToken(code: string): Promise<TokenResponse> {
     const token = await this.sdk.getAuthToken(code);
-    return toTokenResponse(token);
+    return token as unknown as TokenResponse;
   }
 
   /**
@@ -71,7 +67,7 @@ export class CasdoorServer {
    */
   async refreshToken(refreshToken: string): Promise<TokenResponse> {
     const token = await this.sdk.refreshToken(refreshToken);
-    return toTokenResponse(token);
+    return token as unknown as TokenResponse;
   }
 
   /**
@@ -79,10 +75,7 @@ export class CasdoorServer {
    * @param token JWT Token
    */
   parseJwtToken(token: string): JwtClaims {
-    const claims = this.sdk.parseJwtToken(token);
-    if (typeof claims !== "object" || claims === null)
-      throw new Error("Casdoor SDK returned malformed JWT claims");
-    return claims as unknown as JwtClaims;
+    return this.sdk.parseJwtToken(token) as unknown as JwtClaims;
   }
 
   /**
@@ -129,7 +122,7 @@ export class CasdoorServer {
     // SDK 返回 AxiosResponse，需要从 data 中获取
     const user =
       (
-        response as unknown as {
+        response as any as {
           data?: {
             data: CasdoorUser;
           };

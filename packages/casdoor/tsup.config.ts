@@ -5,6 +5,7 @@ export default defineConfig({
     index: "src/index.ts",
     types: "src/types.ts",
     "server/index": "src/server/index.ts",
+    "server/auth-service": "src/server/auth-service.ts",
     "client/index": "src/client/index.ts",
     "client/core": "src/client/core.ts",
     "client/storage": "src/client/storage.ts",

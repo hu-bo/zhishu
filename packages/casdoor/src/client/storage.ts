@@ -76,9 +76,11 @@ export class TokenStorage {
       this.storage.setItem(this.getKey(this.refreshTokenKey), token.refresh_token);
     }
 
-    if (token.expires_in) {
+    if (typeof token.expires_in === "number" && Number.isFinite(token.expires_in)) {
       const expiresAt = Date.now() + token.expires_in * 1000;
       this.storage.setItem(this.getKey(this.expiresAtKey), expiresAt.toString());
+    } else {
+      this.storage.removeItem(this.getKey(this.expiresAtKey));
     }
   }
 

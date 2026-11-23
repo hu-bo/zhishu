@@ -57,6 +57,7 @@ export function CasdoorProvider({ config, children }: CasdoorProviderProps): Rea
   );
 
   useEffect(() => {
+    client.start();
     return () => client.destroy();
   }, [client]);
 
