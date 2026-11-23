@@ -51,12 +51,9 @@ export function principalFromVerifiedIdentity(identity: AuthServiceIdentity): Pr
 export class AuthServiceIdentityService implements PrincipalAuthenticator {
   constructor(private readonly verifier: VerifiedIdentityVerifier) {}
 
+  // AUTH_SERVICE_URL carries a schema default (http://auth.8and1.cn), so a typed
+  // config always provides a usable origin; no runtime guard needed here.
   static fromConfig(config: AuthServiceConfigFields): AuthServiceIdentityService {
-    if (!config.AUTH_SERVICE_URL) {
-      throw new Error(
-        "AUTH_MODE=external requires AUTH_SERVICE_URL (the platform Auth Service origin).",
-      );
-    }
     return new AuthServiceIdentityService(
       createAuthServiceClient({
         // The URL is the service origin; the SDK protocol lives under /api.

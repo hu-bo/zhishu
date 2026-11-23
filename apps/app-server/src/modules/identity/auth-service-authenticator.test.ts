@@ -108,11 +108,7 @@ const baseConfig: AuthServiceConfigFields = {
   AUTH_SERVICE_TIMEOUT_MS: 5000,
 };
 
-test("fromConfig requires AUTH_SERVICE_URL and normalizes the /api base", () => {
-  assert.throws(
-    () => AuthServiceIdentityService.fromConfig({ ...baseConfig, AUTH_SERVICE_URL: undefined }),
-    /AUTH_MODE=external requires AUTH_SERVICE_URL/,
-  );
+test("fromConfig normalizes the /api base", () => {
   // A valid construction proves the trailing slash folds into ${url}/api without doubling.
   assert.ok(AuthServiceIdentityService.fromConfig(baseConfig));
 });

@@ -78,6 +78,8 @@
 - `pnpm --dir apps/app-server db:generate` 生成 migration，`pnpm --dir apps/app-server db:migrate` 显式执行。已发布 migration 不回写，普通应用启动不自动迁移。
 - 从改动的 app/package 开始验证，先跑相关测试与类型检查，再按影响扩大。包名和脚本以各自 `package.json` 为准；部分包只提供 `build`，测试或消费编译产物前先按依赖顺序构建。
 - 服务端单文件测试用 `pnpm --filter @zhishu/app-server exec tsx --test <测试文件>`；包内 `.mjs` 测试用对应包的 `node --test`。行为变更优先补到现有测试，纯重构用已有测试或输入输出对照验证，不为低风险文案/样式调整增加镜像实现的测试。
+- 只为重点功能写新用例：准入范围是权限、并发、事务、数据正确性，复杂分支的纯逻辑（解析、映射、状态机），bug 回归（先复现再修复），以及对外契约（API schema、错误码映射、内容契约）。配置默认值、常量、装配或只转发的代码、文案样式，以及已被链路或 smoke 测试（如 `test:authorization`、`test:documents`）覆盖的行为，不新增用例；同一业务事实只在边界断言一次，不在多个分层重复。
+- 除风险域没有现成测试承载外不新建测试文件。用例按能力分组、断言外部可观察行为，标题写契约不写实现，重构不应弄碎用例；新增用例前先列出各自覆盖的风险域并对照准入范围判断，写不出真实故障会让它变红的断言就不写。源行为删除时同步删掉对应用例。
 - 涉及模块边界、权限、文档持久化时分别检查服务端 `test:architecture`、`test:authorization`、`test:documents`；AI/Chat/RAG 变更按范围运行 `pnpm test:ai` 与独立消费检查 `pnpm check:ai-packages`。数据库、WebSocket、对象存储或模型集成按对应脚本要求使用专用测试环境，先确认测试变量和清理范围，不将业务库当作测试库。
 - 格式化使用 Prettier；根目录 `pnpm format` 会全仓写入，局部任务优先只格式化本次文件。`pnpm check` 覆盖格式、lint、架构、类型、build、OpenAPI 和客户端生成漂移，按改动范围执行。
 - 涉及交互时检查桌面/移动端、亮暗主题、键盘焦点、输入法、长标题/长文档、重复标题、空态与异常恢复；修改公共包时验证相关 `examples/*` 的独立消费。收尾运行 `git diff --check`，总结实际通过、失败或跳过的检查。

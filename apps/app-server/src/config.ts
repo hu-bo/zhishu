@@ -7,7 +7,7 @@ const environmentSchema = z
     // Platform-wide Auth Service (nova casdoor deployment) used when AUTH_MODE=external.
     // Zhishu holds no Casdoor clientSecret or certificate; tokens are verified via the
     // Auth Service /api/me endpoint (@nova/casdoor/server/auth-service).
-    AUTH_SERVICE_URL: z.string().url().optional(),
+    AUTH_SERVICE_URL: z.string().url().default("http://auth.8and1.cn"),
     // The deployed Auth Service reads the token from the query string; switch to
     // "header" once it accepts Authorization, and keep query logs masked until then.
     AUTH_SERVICE_TOKEN_TRANSPORT: z.enum(["header", "query"]).default("query"),
@@ -143,15 +143,6 @@ const environmentSchema = z
         path: ["AUTH_MODE"],
         message: "Mock authentication is disabled in production; configure SSO before launch.",
       });
-    }
-    if (config.NODE_ENV === "production" && config.AUTH_MODE === "external") {
-      if (!config.AUTH_SERVICE_URL) {
-        context.addIssue({
-          code: "custom",
-          path: ["AUTH_SERVICE_URL"],
-          message: "AUTH_MODE=external requires the platform AUTH_SERVICE_URL in production.",
-        });
-      }
     }
     if (
       config.NODE_ENV === "production" &&
