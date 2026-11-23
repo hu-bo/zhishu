@@ -24,6 +24,10 @@ function rotatedFileName(base: string, time?: number | Date | null, index?: numb
   return `${base}-${stamp}${suffix}.log`;
 }
 
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function cleanupExpiredLogs(dir: string, prefix: string, retentionDays: number): void {
   if (retentionDays <= 0) return;
   const deadline = Date.now() - retentionDays * DAY_MS;
@@ -56,32 +60,52 @@ export default function rotatingFileTransport(options: RotatingFileTransportOpti
     retentionDays = 30,
     stdout = false,
   } = options;
-  fs.mkdirSync(dir, { recursive: true });
+
+  // Log files are not worth taking the service down for: this transport runs in a worker thread,
+  // so anything thrown here reaches the main thread as an unhandled ThreadStream "error" and exits
+  // the process. A directory that cannot be created (dangling symlink, path component that is a
+  // file, stale or read-only mount) therefore degrades to stdout-only logging.
+  let dirReady = false;
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    dirReady = true;
+  } catch (error) {
+    console.error(
+      `[logger-js] cannot use log directory ${dir}: ${describeError(error)}. ` +
+        "Logs go to stdout only; fix LOG_DIR to get the rotating file.",
+    );
+  }
 
   // immutable: every file keeps its creation timestamp name, so the active file never changes name.
-  const fileStream: RotatingFileStream = createStream(
-    (time, index) => rotatedFileName(filename, time, index),
-    { path: dir, interval, size, immutable: true },
-  );
-  let failed = false;
-  fileStream.on("error", (error: Error) => {
+  const fileStream: RotatingFileStream | null = dirReady
+    ? createStream((time, index) => rotatedFileName(filename, time, index), {
+        path: dir,
+        interval,
+        size,
+        immutable: true,
+      })
+    : null;
+  let failed = !dirReady;
+  fileStream?.on("error", (error: Error) => {
     // Logging must not crash the worker when the volume fails; pino forwards worker stderr to the main process.
     failed = true;
     console.error(`[logger-js] rotating file stream for ${dir} failed:`, error?.message ?? error);
   });
 
-  const cleanup = () => {
-    try {
-      cleanupExpiredLogs(dir, filename, retentionDays);
-    } catch (error) {
-      console.error(
-        `[logger-js] log retention cleanup for ${dir} failed:`,
-        (error as Error)?.message ?? error,
-      );
-    }
-  };
-  cleanup();
-  setInterval(cleanup, DAY_MS).unref();
+  if (dirReady) {
+    const cleanup = () => {
+      try {
+        cleanupExpiredLogs(dir, filename, retentionDays);
+      } catch (error) {
+        console.error(
+          `[logger-js] log retention cleanup for ${dir} failed:`,
+          describeError(error),
+        );
+      }
+    };
+    cleanup();
+    setInterval(cleanup, DAY_MS).unref();
+  }
 
   // Transport workers redirect process.stdout, so mirror straight to fd 1 like pino/file does.
   // One line per write stays inside pipe buffer sizes; stdout is best-effort next to the file.
@@ -96,10 +120,11 @@ export default function rotatingFileTransport(options: RotatingFileTransportOpti
   return build(
     async (source) => {
       for await (const line of source) {
-        if (stdout) writeStdoutLine(line);
-        if (!failed) fileStream.write(`${line}\n`);
+        // Without the file there is nothing else holding the line, so stdout covers both cases.
+        if (stdout || !fileStream || failed) writeStdoutLine(line);
+        if (fileStream && !failed) fileStream.write(`${line}\n`);
       }
-      if (!failed) {
+      if (fileStream && !failed) {
         await new Promise<void>((resolve, reject) => {
           fileStream.once("close", resolve);
           fileStream.once("error", reject);
