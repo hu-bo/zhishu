@@ -74,6 +74,7 @@ export LOG_DIR=/var/log/zhishu
 - 按 `1d` 或单文件 `20M` 滚动
 - 保留天数：`30`（按文件 mtime 清理）
 - 自动创建目录；进程退出时由 Pino transport 刷新并关闭
+- 目录不可用（悬空符号链接、路径被文件占用、挂载只读或已失效）时不中断启动：transport 打一条 `[logger-js] cannot use log directory ...` 到 stderr，日志改为只输出 stdout，修好 `LOG_DIR` 后滚动文件自动恢复
 
 ## 开发
 
