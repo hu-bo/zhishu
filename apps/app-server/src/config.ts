@@ -4,6 +4,14 @@ const environmentSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]),
     AUTH_MODE: z.enum(["mock", "external"]),
+    // Platform-wide Auth Service (nova casdoor deployment) used when AUTH_MODE=external.
+    // Zhishu holds no Casdoor clientSecret or certificate; tokens are verified via the
+    // Auth Service /api/me endpoint (@nova/casdoor/server/auth-service).
+    AUTH_SERVICE_URL: z.string().url().optional(),
+    // The deployed Auth Service reads the token from the query string; switch to
+    // "header" once it accepts Authorization, and keep query logs masked until then.
+    AUTH_SERVICE_TOKEN_TRANSPORT: z.enum(["header", "query"]).default("query"),
+    AUTH_SERVICE_TIMEOUT_MS: z.coerce.number().int().min(100).max(30000).default(5000),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     HOST: z.string().min(1).default("0.0.0.0"),
     LOG_LEVEL: z
@@ -135,6 +143,15 @@ const environmentSchema = z
         path: ["AUTH_MODE"],
         message: "Mock authentication is disabled in production; configure SSO before launch.",
       });
+    }
+    if (config.NODE_ENV === "production" && config.AUTH_MODE === "external") {
+      if (!config.AUTH_SERVICE_URL) {
+        context.addIssue({
+          code: "custom",
+          path: ["AUTH_SERVICE_URL"],
+          message: "AUTH_MODE=external requires the platform AUTH_SERVICE_URL in production.",
+        });
+      }
     }
     if (
       config.NODE_ENV === "production" &&

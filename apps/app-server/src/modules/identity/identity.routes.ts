@@ -149,6 +149,10 @@ export async function identityRoutes(
     );
   }
 
+  // No SSO proxy routes live here by design: the OAuth redirect, code exchange and
+  // token refresh run entirely against the platform Auth Service (see docs/apps/app-server.md);
+  // Zhishu only verifies bearer tokens via AuthServiceIdentityService.
+
   typed.get(
     "/me",
     {

@@ -5567,8 +5567,18 @@
                           "type": "string"
                         },
                         "email": {
-                          "type": "string",
-                          "format": "email"
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "email"
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                ""
+                              ]
+                            }
+                          ]
                         },
                         "globalRoles": {
                           "type": "array",
@@ -5714,8 +5724,18 @@
                       "type": "string"
                     },
                     "email": {
-                      "type": "string",
-                      "format": "email"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "email"
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            ""
+                          ]
+                        }
+                      ]
                     },
                     "globalRoles": {
                       "type": "array",

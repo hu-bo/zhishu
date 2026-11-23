@@ -5,7 +5,8 @@ export const principalSchema = z.object({
   userId: z.string().min(1).max(128),
   username: z.string(),
   displayName: z.string(),
-  email: z.string().email(),
+  // Casdoor profiles may have no email; the directory keys on displayName then.
+  email: z.union([z.string().email(), z.literal("")]),
   globalRoles: z.array(z.string()).readonly(),
   active: z.boolean(),
 });

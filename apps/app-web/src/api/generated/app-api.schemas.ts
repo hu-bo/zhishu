@@ -1504,7 +1504,7 @@ export type MockLogin200User = {
   userId: string;
   username: string;
   displayName: string;
-  email: string;
+  email: string | '';
   globalRoles: string[];
   active: boolean;
 };
@@ -1546,7 +1546,7 @@ export type GetCurrentUser200 = {
   userId: string;
   username: string;
   displayName: string;
-  email: string;
+  email: string | '';
   globalRoles: string[];
   active: boolean;
 };

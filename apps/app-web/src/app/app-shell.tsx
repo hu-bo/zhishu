@@ -20,6 +20,8 @@ import {
   X,
 } from 'lucide-react';
 import { getCurrentUser, mockLogin, mockLogout, useListMockUsers } from '@/api/generated/identity';
+import { useCasdoor } from '@nova/casdoor/client/react';
+import { casdoorAuthEnabled } from '@/features/auth/casdoor-config';
 import type { MockLogin200User } from '@/api/generated/app-api.schemas';
 import {
   Menu as MenuRoot,
@@ -383,8 +385,16 @@ export function AppShell() {
     },
   });
   const [user, setUser] = useState<MockLogin200User | null>(null);
+  // The Casdoor session lives in the SDK provider above the router; the shell reads
+  // it directly so the first frame already has the token (child effects run before
+  // the bridge subscribes).
+  const casdoor = useCasdoor();
   const [authInitializing, setAuthInitializing] = useState(
-    () => !!getAccessToken() || !navigator.onLine || import.meta.env.DEV,
+    () =>
+      !!getAccessToken() ||
+      (casdoorAuthEnabled && !!casdoor.accessToken) ||
+      !navigator.onLine ||
+      import.meta.env.DEV,
   );
   const [authError, setAuthError] = useState<string | null>(null);
   const [authFeedback, setAuthFeedback] = useState<string | null>(null);
@@ -429,6 +439,15 @@ export function AppShell() {
       // The workspace remains usable when browser storage is unavailable.
     }
   }, [sidebarExpanded]);
+
+  // Mirror the SDK's restored session into the transport before the mount effect
+  // below reads it (effects run in declaration order, and this component's effects
+  // run before the parent bridge subscribes).
+  useEffect(() => {
+    if (casdoorAuthEnabled && !getAccessToken() && casdoor.accessToken) {
+      setAccessToken(casdoor.accessToken);
+    }
+  }, [casdoor.accessToken]);
 
   useEffect(() => {
     const cleanup = initializeOfflineState();
@@ -499,6 +518,19 @@ export function AppShell() {
     }
   };
 
+  const signInWithSso = async () => {
+    setAuthBusyAction('login');
+    setAuthError(null);
+    setAuthFeedback(null);
+    try {
+      // The SDK builds the Auth Service authorize URL and redirects the browser.
+      await casdoor.login();
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : '无法发起统一登录，请稍后重试。');
+      setAuthBusyAction(null);
+    }
+  };
+
   const completeSignOut = async () => {
     setConfirmingSignOut(false);
     setAuthBusyAction('logout');
@@ -506,7 +538,13 @@ export function AppShell() {
     setAuthFeedback(null);
     let logoutFailed = false;
     try {
-      await mockLogout();
+      if (casdoorAuthEnabled) {
+        // Casdoor sessions are browser-local; the SDK clears storage and the bridge
+        // drops the bearer token. There is no Zhishu server logout route to call.
+        casdoor.logout();
+      } else {
+        await mockLogout();
+      }
     } catch {
       // Local credentials and cached documents must be cleared even if the API is unavailable.
       logoutFailed = true;
@@ -657,6 +695,15 @@ export function AppShell() {
                       </span>
                     </Button>
                   </>
+                ) : casdoorAuthEnabled && !authPending ? (
+                  <Button
+                    size="sm"
+                    onClick={() => void signInWithSso()}
+                    disabled={authBusyAction !== null}
+                  >
+                    <LogIn aria-hidden="true" />
+                    统一身份登录
+                  </Button>
                 ) : (
                   <span className="text-xs text-muted-foreground">
                     {authPending ? '正在确认登录状态…' : '请通过宿主完成身份认证'}

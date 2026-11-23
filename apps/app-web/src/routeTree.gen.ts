@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root';
 import { Route as AppRouteImport } from './routes/_app';
+import { Route as CallbackRouteImport } from './routes/callback';
 import { Route as AppIndexRouteImport } from './routes/_app/index';
 import { Route as AppAiRouteImport } from './routes/_app/ai';
 import { Route as AppInvitationsRouteImport } from './routes/_app/invitations';
@@ -24,6 +25,11 @@ import { Route as AppSpacesWorkspaceIdDocDocumentIdRouteImport } from './routes/
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any);
+const CallbackRoute = CallbackRouteImport.update({
+  id: '/callback',
+  path: '/callback',
   getParentRoute: () => rootRouteImport,
 } as any);
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -85,6 +91,7 @@ const AppSpacesWorkspaceIdDocDocumentIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute;
+  '/callback': typeof CallbackRoute;
   '/ai': typeof AppAiRoute;
   '/invitations': typeof AppInvitationsRoute;
   '/qa-sites': typeof AppQaSitesRoute;
@@ -97,6 +104,7 @@ export interface FileRoutesByFullPath {
   '/spaces/$workspaceId/doc/$documentId': typeof AppSpacesWorkspaceIdDocDocumentIdRoute;
 }
 export interface FileRoutesByTo {
+  '/callback': typeof CallbackRoute;
   '/ai': typeof AppAiRoute;
   '/invitations': typeof AppInvitationsRoute;
   '/qa-sites': typeof AppQaSitesRoute;
@@ -112,6 +120,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   '/_app': typeof AppRouteWithChildren;
+  '/callback': typeof CallbackRoute;
   '/_app/ai': typeof AppAiRoute;
   '/_app/invitations': typeof AppInvitationsRoute;
   '/_app/qa-sites': typeof AppQaSitesRoute;
@@ -128,6 +137,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
     | '/'
+    | '/callback'
     | '/ai'
     | '/invitations'
     | '/qa-sites'
@@ -140,6 +150,7 @@ export interface FileRouteTypes {
     | '/spaces/$workspaceId/doc/$documentId';
   fileRoutesByTo: FileRoutesByTo;
   to:
+    | '/callback'
     | '/ai'
     | '/invitations'
     | '/qa-sites'
@@ -154,6 +165,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_app'
+    | '/callback'
     | '/_app/ai'
     | '/_app/invitations'
     | '/_app/qa-sites'
@@ -169,6 +181,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren;
+  CallbackRoute: typeof CallbackRoute;
   AskSlugRoute: typeof AskSlugRoute;
   ShareShareIdRoute: typeof ShareShareIdRoute;
 }
@@ -180,6 +193,13 @@ declare module '@tanstack/react-router' {
       path: '';
       fullPath: '/';
       preLoaderRoute: typeof AppRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    '/callback': {
+      id: '/callback';
+      path: '/callback';
+      fullPath: '/callback';
+      preLoaderRoute: typeof CallbackRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     '/_app/': {
@@ -300,6 +320,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren);
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
+  CallbackRoute: CallbackRoute,
   AskSlugRoute: AskSlugRoute,
   ShareShareIdRoute: ShareShareIdRoute,
 };

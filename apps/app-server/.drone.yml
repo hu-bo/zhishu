@@ -115,6 +115,9 @@ steps:
         # Validate the environment and run migrations before stopping the current service.
         - docker compose -p zhishu-app-server config --quiet
         - docker compose -p zhishu-app-server run --rm --no-deps -T app-server node dist/src/scripts/run-migrations.js
+        # Assemble the full app graph (trusted identity provider included) while the
+        # previous service still runs, so wiring failures never take production down.
+        - docker compose -p zhishu-app-server run --rm --no-deps -T app-server node dist/src/scripts/startup-probe.js
         - |
           if docker container inspect zhishu-app-server >/dev/null 2>&1; then
             docker stop --time 30 zhishu-app-server

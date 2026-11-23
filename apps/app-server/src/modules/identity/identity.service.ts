@@ -2,9 +2,10 @@ import { randomBytes } from "node:crypto";
 import { getMockUser, mockUser } from "./mock-user.js";
 import type { Principal } from "./identity.types.js";
 
-const bearerTokenPattern = /^Bearer ([A-Za-z0-9_-]+)$/i;
+// base64url segments plus the dots of a JWT (mock sessions are single-segment tokens).
+const bearerTokenPattern = /^Bearer ([A-Za-z0-9._-]+)$/i;
 
-function getBearerToken(authorization: string | undefined): string | undefined {
+export function getBearerToken(authorization: string | undefined): string | undefined {
   return authorization ? bearerTokenPattern.exec(authorization)?.[1] : undefined;
 }
 

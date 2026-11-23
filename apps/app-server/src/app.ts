@@ -13,6 +13,7 @@ import { OperationsMetrics } from "./modules/health/operations-metrics.js";
 import type { OperationsMetrics as OperationsMetricsType } from "./modules/health/operations-metrics.js";
 import { identityRoutes } from "./modules/identity/identity.routes.js";
 import { registerIdentityGuard } from "./modules/identity/index.js";
+import { AuthServiceIdentityService } from "./modules/identity/auth-service-authenticator.js";
 import { MockIdentityService } from "./modules/identity/identity.service.js";
 import {
   documentsModule,
@@ -51,7 +52,12 @@ export async function buildApp(
 ) {
   const mockIdentityService =
     config.AUTH_MODE === "mock" ? new MockIdentityService(MOCK_AUTH_TOKEN_TTL_SECONDS) : null;
-  const identityAuthenticator = options.identityAuthenticator ?? mockIdentityService;
+  // external mode assembles the trusted Auth Service provider from server config;
+  // hosts may still override it via options.identityAuthenticator (test seam).
+  const authServiceIdentityService =
+    config.AUTH_MODE === "external" ? AuthServiceIdentityService.fromConfig(config) : null;
+  const identityAuthenticator =
+    options.identityAuthenticator ?? mockIdentityService ?? authServiceIdentityService;
   if (!identityAuthenticator) {
     throw new Error("AUTH_MODE=external requires a trusted PrincipalAuthenticator.");
   }
