@@ -1,6 +1,6 @@
 import { SessionInvalidator } from "../authorization/permissions.js";
 import type { FastifyInstance } from "fastify";
-import { USER_MAX_DOCUMENTS } from "../../config.js";
+import { TENANT_MAX_DOCUMENTS } from "../../config.js";
 import type { CollaborationSessionRevoker } from "../collaboration/session-revoker.js";
 import { KnowledgeService } from "./knowledge.service.js";
 import { knowledgeRoutes } from "./knowledge.routes.js";
@@ -11,7 +11,7 @@ export async function knowledgeModule(
 ) {
   const service = new KnowledgeService(
     app.db,
-    USER_MAX_DOCUMENTS,
+    TENANT_MAX_DOCUMENTS,
     new SessionInvalidator(app.db, revoker),
     publicLinkage,
   );

@@ -6,7 +6,7 @@ export function rootCatalogId(workspaceId: string): string {
 /** Idempotent root provisioning; safe on every workspace materialization path. */
 export async function ensureRootCatalog(
   db: Pick<Database, "insert">,
-  userId: string,
+  tenantId: string,
   workspaceId: string,
   createdBy = "system",
 ): Promise<string> {
@@ -14,7 +14,7 @@ export async function ensureRootCatalog(
   await db
     .insert(catalogs)
     .values({
-      userId,
+      tenantId,
       id,
       workspaceId,
       parentId: null,

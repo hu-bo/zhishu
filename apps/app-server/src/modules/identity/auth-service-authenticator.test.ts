@@ -36,7 +36,7 @@ test("maps an Auth Service identity onto the baseline Zhishu principal", () => {
   const principal = principalFromVerifiedIdentity(verifiedIdentity());
   assert.deepEqual(principal, {
     identityId: "zhishu/alice",
-    userId: "zhishu",
+    tenantId: "zhishu",
     username: "alice",
     displayName: "Alice",
     email: "",
@@ -49,7 +49,7 @@ test("tolerates identity ids without an organization separator", () => {
   const principal = principalFromVerifiedIdentity(
     verifiedIdentity({ identityId: "solo", displayName: "" }),
   );
-  assert.equal(principal.userId, "solo");
+  assert.equal(principal.tenantId, "solo");
   assert.equal(principal.username, "solo");
   assert.equal(principal.displayName, "solo");
 });

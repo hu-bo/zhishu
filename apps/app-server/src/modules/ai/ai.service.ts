@@ -28,8 +28,8 @@ const RUN_KEEP_DAYS = 7;
 
 /** Conversation owner: one internal identity or one signed public visitor. */
 export type ConversationOwner =
-  | { kind: "identity"; userId: string; identityId: string; siteId?: string }
-  | { kind: "visitor"; userId: string; visitorId: string; siteId: string };
+  | { kind: "identity"; tenantId: string; identityId: string; siteId?: string }
+  | { kind: "visitor"; tenantId: string; visitorId: string; siteId: string };
 
 export interface CreateConversationCommand {
   owner: ConversationOwner;
@@ -55,7 +55,7 @@ export interface AdmitMessageCommand {
 export const DEFAULT_OWNER_HOURLY_MAX = 120;
 
 export interface AdmissionBudget {
-  userRunningMax: number;
+  tenantRunningMax: number;
   ownerHourlyMax: number;
   siteHourlyMax?: number;
 }
@@ -118,8 +118,8 @@ export class AiService {
     private readonly log: (event: string, meta: Record<string, unknown>) => void = () => {},
     wake?: (conversationKey: string) => void,
   ) {
-    this.repository = new AiRepository(db, (userId, conversationId) =>
-      wake?.(`${userId}:${conversationId}`),
+    this.repository = new AiRepository(db, (tenantId, conversationId) =>
+      wake?.(`${tenantId}:${conversationId}`),
     );
   }
 
@@ -134,7 +134,7 @@ export class AiService {
     return this.tx(async (tx) => {
       if (cmd.creationKey) {
         const existing = await this.repository.findConversationByCreationKey(tx, {
-          userId: cmd.owner.userId,
+          tenantId: cmd.owner.tenantId,
           creationKey: cmd.creationKey,
           identityId: cmd.owner.kind === "identity" ? cmd.owner.identityId : undefined,
           visitorId: cmd.owner.kind === "visitor" ? cmd.owner.visitorId : undefined,
@@ -144,7 +144,7 @@ export class AiService {
       }
       const conversation = await this.repository.insertConversation(tx, {
         id,
-        userId: cmd.owner.userId,
+        tenantId: cmd.owner.tenantId,
         identityId: cmd.owner.kind === "identity" ? cmd.owner.identityId : null,
         visitorId: cmd.owner.kind === "visitor" ? cmd.owner.visitorId : null,
         siteId: cmd.owner.kind === "visitor" ? cmd.owner.siteId : (cmd.owner.siteId ?? null),
@@ -158,15 +158,15 @@ export class AiService {
     });
   }
 
-  async getConversation(userId: string, conversationId: string): Promise<ConversationRow> {
-    const row = await this.repository.findConversation(this.db, userId, conversationId);
+  async getConversation(tenantId: string, conversationId: string): Promise<ConversationRow> {
+    const row = await this.repository.findConversation(this.db, tenantId, conversationId);
     if (!row) throw new DomainError("NOT_FOUND", "会话不存在");
     return row;
   }
 
   async refresh(conversation: ConversationRow): Promise<ConversationRow> {
     return (
-      (await this.repository.findConversation(this.db, conversation.userId, conversation.id)) ??
+      (await this.repository.findConversation(this.db, conversation.tenantId, conversation.id)) ??
       conversation
     );
   }
@@ -176,7 +176,7 @@ export class AiService {
     filter: { targetDocumentId?: string; limit?: number } = {},
   ): Promise<ConversationRow[]> {
     return this.repository.listConversations(this.db, {
-      userId: owner.userId,
+      tenantId: owner.tenantId,
       identityId: owner.kind === "identity" ? owner.identityId : undefined,
       visitorId: owner.kind === "visitor" ? owner.visitorId : undefined,
       siteId: owner.kind === "visitor" ? owner.siteId : undefined,
@@ -198,11 +198,11 @@ export class AiService {
     return this.tx(async (tx) => {
       // Fixed lock order: admission key, then conversation row.
       await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`ai-admit:${cmd.conversation.userId}:${cmd.conversation.id}`},719202))`,
+        sql`select pg_advisory_xact_lock(hashtextextended(${`ai-admit:${cmd.conversation.tenantId}:${cmd.conversation.id}`},719202))`,
       );
       const conversation = await this.repository.lockConversation(
         tx,
-        cmd.conversation.userId,
+        cmd.conversation.tenantId,
         cmd.conversation.id,
       );
       if (!conversation) throw new DomainError("NOT_FOUND", "会话不存在");
@@ -211,7 +211,7 @@ export class AiService {
         throw new DomainError("CONFLICT", "上下文已更新，请基于新上下文重新提交");
       const byKey = await this.repository.findRunByIdempotency(
         tx,
-        conversation.userId,
+        conversation.tenantId,
         conversation.id,
         cmd.idempotencyKey,
       );
@@ -223,27 +223,31 @@ export class AiService {
       }
       const byClient = await this.repository.findMessageByClientId(
         tx,
-        conversation.userId,
+        conversation.tenantId,
         conversation.id,
         cmd.clientMessageId,
       );
       if (byClient) {
-        const run = await this.repository.findRun(tx, conversation.userId, byClient.runId);
+        const run = await this.repository.findRun(tx, conversation.tenantId, byClient.runId);
         if (!run) throw new DomainError("CONFLICT", "消息缺少任务");
         if (run.inputHash !== inputHash)
           throw new DomainError("IDEMPOTENCY_KEY_REUSED", "同一消息标识不能用于不同输入");
         return { run, message: byClient, replayed: true };
       }
-      const active = await this.repository.listActiveRuns(tx, conversation.userId, conversation.id);
+      const active = await this.repository.listActiveRuns(
+        tx,
+        conversation.tenantId,
+        conversation.id,
+      );
       if (active.filter((r) => r.status === "queued").length >= QUEUED_CAP)
         throw new DomainError("RESOURCE_LIMIT", "等待队列已满");
-      const userRunning = await this.repository.countActiveByOwner(tx, {
-        userId: conversation.userId,
+      const tenantRunning = await this.repository.countActiveByOwner(tx, {
+        tenantId: conversation.tenantId,
       });
-      if (userRunning >= budget.userRunningMax)
-        throw new DomainError("RESOURCE_LIMIT", "用户并发生成已满，请稍后重试");
+      if (tenantRunning >= budget.tenantRunningMax)
+        throw new DomainError("RESOURCE_LIMIT", "租户并发生成已满，请稍后重试");
       const ownerActive = await this.repository.countActiveByOwner(tx, {
-        userId: conversation.userId,
+        tenantId: conversation.tenantId,
         identityId: conversation.identityId ?? undefined,
         visitorId: conversation.visitorId ?? undefined,
       });
@@ -251,7 +255,7 @@ export class AiService {
       const hourWindow = new Date(Date.now() - 3_600_000);
       if (conversation.identityId) {
         const ownerRecent = await this.repository.countRuns(tx, {
-          userId: conversation.userId,
+          tenantId: conversation.tenantId,
           statuses: ACTIVE_RUN,
           identityId: conversation.identityId,
           since: hourWindow,
@@ -261,7 +265,7 @@ export class AiService {
       }
       if (conversation.siteId && budget.siteHourlyMax !== undefined) {
         const siteRecent = await this.repository.countRuns(tx, {
-          userId: conversation.userId,
+          tenantId: conversation.tenantId,
           statuses: ACTIVE_RUN,
           siteId: conversation.siteId,
           since: hourWindow,
@@ -272,7 +276,7 @@ export class AiService {
       const runId = `run_${randomUUID().replaceAll("-", "")}`;
       const run = await this.repository.insertRun(tx, {
         id: runId,
-        userId: conversation.userId,
+        tenantId: conversation.tenantId,
         conversationId: conversation.id,
         idempotencyKey: cmd.idempotencyKey,
         inputHash,
@@ -282,7 +286,7 @@ export class AiService {
       });
       const message = await this.repository.insertMessage(tx, {
         id: `msg_${randomUUID().replaceAll("-", "")}`,
-        userId: conversation.userId,
+        tenantId: conversation.tenantId,
         conversationId: conversation.id,
         runId,
         role: "user",
@@ -316,7 +320,7 @@ export class AiService {
   ): Promise<MessageRow> {
     const found = await this.repository.userMessage(
       tx,
-      conversation.userId,
+      conversation.tenantId,
       conversation.id,
       run.id,
     );
@@ -329,7 +333,7 @@ export class AiService {
     return this.tx(async (tx) => {
       const locked = await this.repository.lockConversation(
         tx,
-        conversation.userId,
+        conversation.tenantId,
         conversation.id,
       );
       if (!locked) return;
@@ -354,7 +358,7 @@ export class AiService {
   /** Fenced execution/lease/usage write. Undefined means the lease was lost: stop all work. */
   async writeExecution(input: ExecutionWrite): Promise<RunRow | undefined> {
     return this.tx(async (tx) => {
-      const current = await this.repository.lockRun(tx, input.run.userId, input.run.id);
+      const current = await this.repository.lockRun(tx, input.run.tenantId, input.run.id);
       if (
         !current ||
         current.leaseOwner !== input.owner ||
@@ -385,7 +389,7 @@ export class AiService {
       if (input.emitEvent === false) return updated;
       const conversation = await this.repository.lockConversation(
         tx,
-        updated.userId,
+        updated.tenantId,
         updated.conversationId,
       );
       if (conversation) {
@@ -410,7 +414,7 @@ export class AiService {
     cmd: RegisterArtifactCommand,
   ): Promise<{ artifact: ArtifactRow; created: boolean; run: RunRow }> {
     return this.tx(async (tx) => {
-      const current = await this.repository.lockRun(tx, cmd.run.userId, cmd.run.id);
+      const current = await this.repository.lockRun(tx, cmd.run.tenantId, cmd.run.id);
       if (
         !current ||
         current.leaseOwner !== cmd.owner ||
@@ -425,7 +429,7 @@ export class AiService {
       }) as AssistantExecution;
       const inserted = await this.repository.insertArtifact(tx, {
         id: `art_${randomUUID().replaceAll("-", "")}`,
-        userId: current.userId,
+        tenantId: current.tenantId,
         conversationId: current.conversationId,
         runId: current.id,
         producerCallId: cmd.producerCallId,
@@ -439,7 +443,7 @@ export class AiService {
       });
       if (!inserted.created) return { ...inserted, run: current };
       if (cmd.evidenceIds.length)
-        await this.repository.setArtifactPayload(tx, current.userId, inserted.artifact.id, {
+        await this.repository.setArtifactPayload(tx, current.tenantId, inserted.artifact.id, {
           evidenceRefs: cmd.evidenceIds.map((evidenceId) => ({
             evidenceArtifactId: inserted.artifact.id,
             evidenceId,
@@ -467,11 +471,15 @@ export class AiService {
       }
       const conversation = await this.repository.lockConversation(
         tx,
-        current.userId,
+        current.tenantId,
         current.conversationId,
       );
       if (conversation) {
-        const stored = await this.repository.findArtifact(tx, current.userId, inserted.artifact.id);
+        const stored = await this.repository.findArtifact(
+          tx,
+          current.tenantId,
+          inserted.artifact.id,
+        );
         await this.repository.appendEvent(tx, conversation, {
           eventId: randomUUID(),
           type: "artifact.created",
@@ -491,7 +499,7 @@ export class AiService {
     parts: MessagePart[],
   ): Promise<MessageRow | undefined> {
     return this.tx(async (tx) => {
-      const current = await this.repository.lockRun(tx, run.userId, run.id);
+      const current = await this.repository.lockRun(tx, run.tenantId, run.id);
       if (
         !current ||
         current.leaseOwner !== owner ||
@@ -501,7 +509,7 @@ export class AiService {
         return;
       const staged = await this.repository.upsertStagedAssistant(tx, {
         id: `amsg_${current.id}`,
-        userId: current.userId,
+        tenantId: current.tenantId,
         conversationId: current.conversationId,
         runId: current.id,
         parts,
@@ -522,7 +530,7 @@ export class AiService {
   /** Final product commit: fenced Run terminal, staged output and artifacts committed, events. */
   async commitRunOutput(cmd: CommitOutputCommand): Promise<RunRow> {
     return this.tx(async (tx) => {
-      const current = await this.repository.lockRun(tx, cmd.run.userId, cmd.run.id);
+      const current = await this.repository.lockRun(tx, cmd.run.tenantId, cmd.run.id);
       if (
         !current ||
         current.leaseOwner !== cmd.owner ||
@@ -533,7 +541,7 @@ export class AiService {
       if (TERMINAL_RUN.includes(current.status)) return current;
       const conversation = await this.repository.lockConversation(
         tx,
-        current.userId,
+        current.tenantId,
         current.conversationId,
       );
       if (!conversation) throw new DomainError("CONFLICT", "会话不存在");
@@ -551,7 +559,7 @@ export class AiService {
         errorCode: cmd.errorCode ?? null,
       };
       for (const artifactId of cmd.artifactIdsToCommit ?? []) {
-        const committed = await this.repository.commitArtifact(tx, settled.userId, artifactId);
+        const committed = await this.repository.commitArtifact(tx, settled.tenantId, artifactId);
         if (committed)
           await this.repository.appendEvent(tx, conversation, {
             eventId: randomUUID(),
@@ -562,19 +570,19 @@ export class AiService {
           });
       }
       if (cmd.assistantParts) {
-        const existing = await this.repository.assistantMessage(tx, settled.userId, settled.id);
+        const existing = await this.repository.assistantMessage(tx, settled.tenantId, settled.id);
         const staged =
           existing ??
           (await this.repository.upsertStagedAssistant(tx, {
             id: `amsg_${settled.id}`,
-            userId: settled.userId,
+            tenantId: settled.tenantId,
             conversationId: settled.conversationId,
             runId: settled.id,
             parts: cmd.assistantParts,
             generationAttempt: settled.attempt,
           }));
         if (staged && staged.state === "staged") {
-          const committed = await this.repository.commitMessage(tx, settled.userId, staged.id);
+          const committed = await this.repository.commitMessage(tx, settled.tenantId, staged.id);
           if (committed)
             await this.repository.appendEvent(tx, conversation, {
               eventId: randomUUID(),
@@ -603,7 +611,7 @@ export class AiService {
     approval: ToolApproval,
   ): Promise<RunRow | undefined> {
     return this.tx(async (tx) => {
-      const current = await this.repository.lockRun(tx, run.userId, run.id);
+      const current = await this.repository.lockRun(tx, run.tenantId, run.id);
       if (
         !current ||
         current.leaseOwner !== owner ||
@@ -627,7 +635,7 @@ export class AiService {
       if (!updated) return;
       const conversation = await this.repository.lockConversation(
         tx,
-        updated.userId,
+        updated.tenantId,
         updated.conversationId,
       );
       if (conversation)
@@ -652,7 +660,7 @@ export class AiService {
     outcome: ToolApproval["status"];
   }): Promise<void> {
     await this.tx(async (tx) => {
-      const current = await this.repository.lockRun(tx, input.run.userId, input.run.id);
+      const current = await this.repository.lockRun(tx, input.run.tenantId, input.run.id);
       if (
         !current ||
         current.leaseOwner !== input.owner ||
@@ -679,7 +687,7 @@ export class AiService {
       if (!updated) return;
       const conversation = await this.repository.lockConversation(
         tx,
-        updated.userId,
+        updated.tenantId,
         updated.conversationId,
       );
       if (conversation)
@@ -698,26 +706,26 @@ export class AiService {
    * closes the Run; staged output re-delivers without regeneration; otherwise a new attempt.
    */
   async retryRun(
-    userId: string,
+    tenantId: string,
     runId: string,
   ): Promise<{ kind: "already-terminal" | "queued" | "redeliver-staged"; run: RunRow }> {
     return this.tx(async (tx) => {
-      const current = await this.repository.lockRun(tx, userId, runId);
+      const current = await this.repository.lockRun(tx, tenantId, runId);
       if (!current) throw new DomainError("NOT_FOUND", "任务不存在");
       if (current.status === "completed") return { kind: "already-terminal", run: current };
       if (current.status !== "failed" && current.status !== "interrupted")
         throw new DomainError("CONFLICT", "当前状态不能重试");
       const conversation = await this.repository.lockConversation(
         tx,
-        current.userId,
+        current.tenantId,
         current.conversationId,
       );
       if (!conversation) throw new DomainError("CONFLICT", "会话不存在");
-      const assistant = await this.repository.assistantMessage(tx, userId, current.id);
+      const assistant = await this.repository.assistantMessage(tx, tenantId, current.id);
       if (assistant?.state === "committed") {
         const closed = await this.repository.setRunStatusUnleased(
           tx,
-          userId,
+          tenantId,
           current.id,
           "completed",
         );
@@ -731,7 +739,7 @@ export class AiService {
         });
         return { kind: "already-terminal", run: settled };
       }
-      const bumped = await this.repository.bumpRunAttempt(tx, userId, current.id, [
+      const bumped = await this.repository.bumpRunAttempt(tx, tenantId, current.id, [
         "failed",
         "interrupted",
       ]);
@@ -758,7 +766,7 @@ export class AiService {
       seen.add(queuedRun.conversationId);
       const conversation = await this.repository.findConversation(
         this.db,
-        queuedRun.userId,
+        queuedRun.tenantId,
         queuedRun.conversationId,
       );
       if (!conversation || conversation.status !== "active") continue;
@@ -768,48 +776,48 @@ export class AiService {
     return undefined;
   }
 
-  async readRun(userId: string, runId: string): Promise<RunRow | undefined> {
-    return this.repository.findRun(this.db, userId, runId);
+  async readRun(tenantId: string, runId: string): Promise<RunRow | undefined> {
+    return this.repository.findRun(this.db, tenantId, runId);
   }
 
-  async readMessage(userId: string, messageId: string): Promise<MessageRow | undefined> {
-    return this.repository.findMessage(this.db, userId, messageId);
+  async readMessage(tenantId: string, messageId: string): Promise<MessageRow | undefined> {
+    return this.repository.findMessage(this.db, tenantId, messageId);
   }
 
   async userMessageForRun(
-    userId: string,
+    tenantId: string,
     runId: string,
     conversationId: string,
   ): Promise<MessageRow | undefined> {
-    return this.repository.userMessage(this.db, userId, conversationId, runId);
+    return this.repository.userMessage(this.db, tenantId, conversationId, runId);
   }
 
   async listCommittedMessages(
-    userId: string,
+    tenantId: string,
     conversationId: string,
     limit: number,
   ): Promise<MessageRow[]> {
     const rows = await this.repository.listMessages(this.db, {
-      userId,
+      tenantId,
       conversationId,
       limit,
     });
     return [...rows].reverse();
   }
 
-  async cancelRun(userId: string, runId: string): Promise<RunRow> {
+  async cancelRun(tenantId: string, runId: string): Promise<RunRow> {
     return this.tx(async (tx) => {
-      const current = await this.repository.lockRun(tx, userId, runId);
+      const current = await this.repository.lockRun(tx, tenantId, runId);
       if (!current) throw new DomainError("NOT_FOUND", "任务不存在");
       if (TERMINAL_RUN.includes(current.status)) return current;
-      const marked = await this.repository.markCancelRequested(tx, userId, runId);
+      const marked = await this.repository.markCancelRequested(tx, tenantId, runId);
       const finalized =
         current.status === "queued"
-          ? await this.repository.setRunStatusUnleased(tx, userId, runId, "cancelled")
+          ? await this.repository.setRunStatusUnleased(tx, tenantId, runId, "cancelled")
           : marked;
       const conversation = await this.repository.lockConversation(
         tx,
-        userId,
+        tenantId,
         current.conversationId,
       );
       if (conversation && finalized)
@@ -833,20 +841,20 @@ export class AiService {
     return this.tx(async (tx) => {
       const locked = await this.repository.lockConversation(
         tx,
-        conversation.userId,
+        conversation.tenantId,
         conversation.id,
       );
       if (!locked) throw new DomainError("NOT_FOUND", "会话不存在");
       if (locked.contextRevision !== expectedContextRevision)
         throw new DomainError("CONFLICT", "上下文已更新，请刷新后重试");
-      const active = await this.repository.listActiveRuns(tx, locked.userId, locked.id);
+      const active = await this.repository.listActiveRuns(tx, locked.tenantId, locked.id);
       const cancelledRunIds: string[] = [];
       for (const run of active) {
         if (run.status === "queued") {
-          await this.repository.setRunStatusUnleased(tx, locked.userId, run.id, "cancelled");
+          await this.repository.setRunStatusUnleased(tx, locked.tenantId, run.id, "cancelled");
           cancelledRunIds.push(run.id);
         } else if (run.status === "running" || run.status === "waiting-approval") {
-          await this.repository.markCancelRequested(tx, locked.userId, run.id);
+          await this.repository.markCancelRequested(tx, locked.tenantId, run.id);
           cancelledRunIds.push(run.id);
         }
       }
@@ -879,21 +887,21 @@ export class AiService {
     return this.tx(async (tx) => {
       const locked = await this.repository.lockConversation(
         tx,
-        conversation.userId,
+        conversation.tenantId,
         conversation.id,
       );
       if (!locked) throw new DomainError("NOT_FOUND", "会话不存在");
       if (locked.siteId) throw new DomainError("FORBIDDEN", "公开会话不能绑定文档目标");
       if (locked.contextRevision !== expectedContextRevision)
         throw new DomainError("CONFLICT", "上下文已更新，请刷新后重试");
-      const active = await this.repository.listActiveRuns(tx, locked.userId, locked.id);
+      const active = await this.repository.listActiveRuns(tx, locked.tenantId, locked.id);
       const cancelledRunIds: string[] = [];
       for (const run of active) {
         if (run.status === "queued") {
-          await this.repository.setRunStatusUnleased(tx, locked.userId, run.id, "cancelled");
+          await this.repository.setRunStatusUnleased(tx, locked.tenantId, run.id, "cancelled");
           cancelledRunIds.push(run.id);
         } else if (run.status === "running" || run.status === "waiting-approval") {
-          await this.repository.markCancelRequested(tx, locked.userId, run.id);
+          await this.repository.markCancelRequested(tx, locked.tenantId, run.id);
           cancelledRunIds.push(run.id);
         }
       }
@@ -923,22 +931,22 @@ export class AiService {
 
   /** Revocation transaction: withdraw staged, cancel active runs, bump revision. */
   async invalidateContext(
-    userId: string,
+    tenantId: string,
     conversationIds: string[],
     reason: string,
   ): Promise<void> {
     for (const id of conversationIds) {
       await this.tx(async (tx) => {
-        const conversation = await this.repository.lockConversation(tx, userId, id);
+        const conversation = await this.repository.lockConversation(tx, tenantId, id);
         if (!conversation) return;
-        await this.repository.withdrawMessages(tx, userId, id);
-        const active = await this.repository.listActiveRuns(tx, userId, id);
+        await this.repository.withdrawMessages(tx, tenantId, id);
+        const active = await this.repository.listActiveRuns(tx, tenantId, id);
         const cancelledRunIds: string[] = [];
         for (const run of active) {
           cancelledRunIds.push(run.id);
           if (run.status === "running" || run.status === "waiting-approval")
-            await this.repository.markCancelRequested(tx, userId, run.id);
-          else await this.repository.setRunStatusUnleased(tx, userId, run.id, "cancelled");
+            await this.repository.markCancelRequested(tx, tenantId, run.id);
+          else await this.repository.setRunStatusUnleased(tx, tenantId, run.id, "cancelled");
         }
         await this.repository.updateConversation(tx, conversation, {
           contextRevision: conversation.contextRevision + 1,
@@ -962,7 +970,7 @@ export class AiService {
 
   /** Record a review decision; duplicate decisionId replays, unknown application keeps pending. */
   async recordProposalReview(input: {
-    userId: string;
+    tenantId: string;
     artifactId: string;
     expectedRevision: number;
     decisionId: string;
@@ -972,7 +980,7 @@ export class AiService {
     receipt?: StructureReceipt | null;
   }): Promise<{ changed: boolean; artifact: ArtifactRow }> {
     return this.tx(async (tx) => {
-      const artifact = await this.repository.lockArtifact(tx, input.userId, input.artifactId);
+      const artifact = await this.repository.lockArtifact(tx, input.tenantId, input.artifactId);
       if (!artifact || artifact.kind !== "proposal")
         throw new DomainError("NOT_FOUND", "提案不存在");
       const receipts = artifact.review?.receipts ?? {};
@@ -996,7 +1004,7 @@ export class AiService {
       if (!updated) throw new DomainError("CONFLICT", "提案状态已更新，请刷新后重试");
       const conversation = await this.repository.lockConversation(
         tx,
-        updated.userId,
+        updated.tenantId,
         updated.conversationId,
       );
       if (conversation)
@@ -1022,25 +1030,25 @@ export class AiService {
   ): Promise<import("@zhishu/chat-contracts").ConversationSnapshot> {
     const limit = page.limit ?? 60;
     const messages = await this.repository.listMessages(this.db, {
-      userId: conversation.userId,
+      tenantId: conversation.tenantId,
       conversationId: conversation.id,
       limit,
       before: page.before,
     });
     const runs = await this.repository.listRecentRuns(
       this.db,
-      conversation.userId,
+      conversation.tenantId,
       conversation.id,
       50,
     );
     const artifacts = await this.repository.listArtifacts(
       this.db,
-      conversation.userId,
+      conversation.tenantId,
       conversation.id,
       80,
     );
     const title =
-      (await this.repository.conversationTitle(this.db, conversation.id, conversation.userId)) ??
+      (await this.repository.conversationTitle(this.db, conversation.id, conversation.tenantId)) ??
       "对话";
     return {
       conversation: conversationDto(conversation, title),
@@ -1052,8 +1060,8 @@ export class AiService {
     };
   }
 
-  async events(userId: string, conversationId: string, cursor: string, limit = 100) {
-    return this.repository.eventsAfter(this.db, userId, conversationId, cursor, limit);
+  async events(tenantId: string, conversationId: string, cursor: string, limit = 100) {
+    return this.repository.eventsAfter(this.db, tenantId, conversationId, cursor, limit);
   }
 
   /** Scheduler maintenance: stale leases, deadlines and reference-ordered GC. */
@@ -1061,7 +1069,7 @@ export class AiService {
     const stale = await this.repository.staleRuns();
     for (const run of stale) {
       await this.tx(async (tx) => {
-        const current = await this.repository.lockRun(tx, run.userId, run.id);
+        const current = await this.repository.lockRun(tx, run.tenantId, run.id);
         if (
           !current ||
           !["queued", "running", "waiting-approval", "interrupted"].includes(current.status)
@@ -1074,14 +1082,14 @@ export class AiService {
         const code = deadline ? "DEADLINE" : "OWNER_EXITED";
         const updated = await this.repository.setRunStatusUnleased(
           tx,
-          current.userId,
+          current.tenantId,
           current.id,
           target,
           code,
         );
         const conversation = await this.repository.lockConversation(
           tx,
-          current.userId,
+          current.tenantId,
           current.conversationId,
         );
         if (conversation && updated)
@@ -1100,11 +1108,11 @@ export class AiService {
       const deleted = await this.tx(async (tx) => {
         const locked = await this.repository.lockConversation(
           tx,
-          conversation.userId,
+          conversation.tenantId,
           conversation.id,
         );
         if (!locked) return false;
-        return this.repository.deleteConversationRows(tx, locked.userId, locked.id);
+        return this.repository.deleteConversationRows(tx, locked.tenantId, locked.id);
       });
       if (deleted) this.log("ai_conversation_gc", { conversationId: conversation.id });
       else
@@ -1115,21 +1123,25 @@ export class AiService {
     }
   }
 
-  async findArtifact(userId: string, artifactId: string): Promise<ArtifactRow | undefined> {
-    return this.repository.findArtifact(this.db, userId, artifactId);
+  async findArtifact(tenantId: string, artifactId: string): Promise<ArtifactRow | undefined> {
+    return this.repository.findArtifact(this.db, tenantId, artifactId);
   }
 
-  async listArtifacts(userId: string, conversationId: string, limit = 80): Promise<ArtifactRow[]> {
-    return this.repository.listArtifacts(this.db, userId, conversationId, limit);
+  async listArtifacts(
+    tenantId: string,
+    conversationId: string,
+    limit = 80,
+  ): Promise<ArtifactRow[]> {
+    return this.repository.listArtifacts(this.db, tenantId, conversationId, limit);
   }
 
-  async listActiveRuns(userId: string, conversationId: string): Promise<RunRow[]> {
-    return this.repository.listActiveRuns(this.db, userId, conversationId);
+  async listActiveRuns(tenantId: string, conversationId: string): Promise<RunRow[]> {
+    return this.repository.listActiveRuns(this.db, tenantId, conversationId);
   }
 
-  async listConversationsByIds(userId: string, ids: string[]): Promise<ConversationRow[]> {
+  async listConversationsByIds(tenantId: string, ids: string[]): Promise<ConversationRow[]> {
     if (!ids.length) return [];
-    return this.repository.listConversationsByIds(this.db, userId, ids);
+    return this.repository.listConversationsByIds(this.db, tenantId, ids);
   }
 }
 

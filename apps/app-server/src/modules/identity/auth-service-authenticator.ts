@@ -29,7 +29,7 @@ export type AuthServiceConfigFields = Pick<
 /**
  * Maps a verified Auth Service identity onto a Zhishu principal. The identity id
  * is the Casdoor "organization/name" key: the organization is the data-isolation
- * domain (`userId`, same slot as the mock "local"), the name is the username.
+ * domain (`tenantId`, same slot as the mock "local"), the name is the username.
  * The Auth Service profile carries no email; the directory keys on displayName.
  */
 export function principalFromVerifiedIdentity(identity: AuthServiceIdentity): Principal {
@@ -39,7 +39,7 @@ export function principalFromVerifiedIdentity(identity: AuthServiceIdentity): Pr
   const username = separator > 0 ? identity.identityId.slice(separator + 1) : identity.identityId;
   return {
     identityId: identity.identityId,
-    userId: organization,
+    tenantId: organization,
     username,
     displayName: identity.displayName || username,
     email: "",

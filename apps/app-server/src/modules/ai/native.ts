@@ -33,7 +33,7 @@ interface Stored {
 
 /**
  * Native session log identity is derivable: `ws_<conversation-32hex>_<revision>`.
- * Persistence rows carry user/conversation/contextRevision so product tables can
+ * Persistence rows carry tenant/conversation/contextRevision so product tables can
  * enforce composite foreign keys without a second snapshot of product state.
  */
 export function nativeSessionIdFor(conversationId: string, contextRevision: number): string {
@@ -78,21 +78,21 @@ export function postgresNativeSessionPersistence(
       const checked = materializeCreateHeader(header);
       const parsed = parseNativeSessionId(checked.id);
       const meta = parsed
-        ? await pool.query<{ userId: string }>(
-            'select user_id as "userId" from ai_conversations where id=$1',
+        ? await pool.query<{ tenantId: string }>(
+            'select tenant_id as "tenantId" from ai_conversations where id=$1',
             [parsed.conversationId],
           )
         : undefined;
-      const userId = meta?.rows[0]?.userId;
-      if (!parsed || !userId) throw new Error("NATIVE_SESSION_CONTEXT_MISSING");
+      const tenantId = meta?.rows[0]?.tenantId;
+      if (!parsed || !tenantId) throw new Error("NATIVE_SESSION_CONTEXT_MISSING");
       const client = await this.writer(checked.id);
       try {
         const result = await client.query(
-          `insert into ai_sessions(id,user_id,conversation_id,context_revision,header,inherited_event_count,events,next_seq)
+          `insert into ai_sessions(id,tenant_id,conversation_id,context_revision,header,inherited_event_count,events,next_seq)
            values($1,$2,$3,$4,$5,$6,'[]',0) on conflict do nothing returning id`,
           [
             checked.id,
-            userId,
+            tenantId,
             parsed.conversationId,
             parsed.contextRevision,
             JSON.stringify(checked),

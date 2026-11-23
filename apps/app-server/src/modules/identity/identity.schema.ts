@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const principalSchema = z.object({
   identityId: z.string(),
-  userId: z.string().min(1).max(128),
+  tenantId: z.string().min(1).max(128),
   username: z.string(),
   displayName: z.string(),
   // Casdoor profiles may have no email; the directory keys on displayName then.

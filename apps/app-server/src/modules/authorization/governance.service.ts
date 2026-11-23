@@ -33,7 +33,7 @@ export class GovernanceService {
       .from(workspaces)
       .where(
         and(
-          eq(workspaces.userId, principal.userId),
+          eq(workspaces.tenantId, principal.tenantId),
           eq(workspaces.id, workspaceId),
           spaceActionSql(principal, "manage"),
         ),
@@ -45,7 +45,7 @@ export class GovernanceService {
   }
   async state(principal: Principal) {
     // Only scopes the caller can currently read, including independently shared documents.
-    const ownAccessSources = sql`from document_shares s join documents d on d.user_id=s.user_id and d.id=s.document_id where d.user_id=${principal.userId} and d.workspace_id=workspaces.id and s.kind='access' and s.revoked_at is null and exists(select 1 from resource_acl a where a.user_id=s.user_id and a.source_share_id=s.id and a.identity_id=${principal.identityId})`;
+    const ownAccessSources = sql`from document_shares s join documents d on d.tenant_id=s.tenant_id and d.id=s.document_id where d.tenant_id=${principal.tenantId} and d.workspace_id=workspaces.id and s.kind='access' and s.revoked_at is null and exists(select 1 from resource_acl a where a.tenant_id=s.tenant_id and a.source_share_id=s.id and a.identity_id=${principal.identityId})`;
     return this.db
       .select({
         workspaceId: workspaces.id,
@@ -61,8 +61,8 @@ export class GovernanceService {
       .from(workspaces)
       .where(
         and(
-          eq(workspaces.userId, principal.userId),
-          sql`(${spaceActionSql(principal, "read")} or exists (select 1 from documents where documents.user_id = ${principal.userId} and documents.workspace_id = workspaces.id and ${documentActionSql(principal, "read")}))`,
+          eq(workspaces.tenantId, principal.tenantId),
+          sql`(${spaceActionSql(principal, "read")} or exists (select 1 from documents where documents.tenant_id = ${principal.tenantId} and documents.workspace_id = workspaces.id and ${documentActionSql(principal, "read")}))`,
         ),
       )
       .orderBy(asc(workspaces.id));
@@ -74,7 +74,7 @@ export class GovernanceService {
       .from(authorizationEvents)
       .where(
         and(
-          eq(authorizationEvents.userId, principal.userId),
+          eq(authorizationEvents.tenantId, principal.tenantId),
           eq(authorizationEvents.workspaceId, workspaceId),
           before ? sql`${authorizationEvents.id} < ${before}` : undefined,
         ),
@@ -94,18 +94,18 @@ export class GovernanceService {
     input: { revision: number; offlineCacheAllowed: boolean },
   ) {
     return this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
       const space = await this.workspace(tx, principal, workspaceId, true);
       if (space.authorizationRevision !== input.revision)
         throw new DomainError("CONFLICT", "权限配置已变化，请刷新后重试");
       await tx
         .update(workspaces)
         .set({ offlineCacheAllowed: input.offlineCacheAllowed })
-        .where(and(eq(workspaces.userId, principal.userId), eq(workspaces.id, workspaceId)));
+        .where(and(eq(workspaces.tenantId, principal.tenantId), eq(workspaces.id, workspaceId)));
       const [updated] = await tx
         .select({ revision: workspaces.authorizationRevision })
         .from(workspaces)
-        .where(and(eq(workspaces.userId, principal.userId), eq(workspaces.id, workspaceId)));
+        .where(and(eq(workspaces.tenantId, principal.tenantId), eq(workspaces.id, workspaceId)));
       return { revision: updated!.revision };
     });
   }
@@ -115,7 +115,7 @@ export class GovernanceService {
     input: { identityId: string; revision: number },
   ) {
     return this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
       const space = await this.workspace(tx, principal, workspaceId, true);
       if (space.kind !== "team")
         throw new DomainError("VALIDATION_ERROR", "仅团队空间支持所有权转移");
@@ -128,13 +128,13 @@ export class GovernanceService {
         .innerJoin(
           identityProfiles,
           and(
-            eq(identityProfiles.userId, resourceAcl.userId),
+            eq(identityProfiles.tenantId, resourceAcl.tenantId),
             eq(identityProfiles.identityId, resourceAcl.identityId),
           ),
         )
         .where(
           and(
-            eq(resourceAcl.userId, principal.userId),
+            eq(resourceAcl.tenantId, principal.tenantId),
             eq(resourceAcl.workspaceId, workspaceId),
             eq(resourceAcl.identityId, input.identityId),
             eq(identityProfiles.active, true),
@@ -146,7 +146,7 @@ export class GovernanceService {
         .delete(resourceAcl)
         .where(
           and(
-            eq(resourceAcl.userId, principal.userId),
+            eq(resourceAcl.tenantId, principal.tenantId),
             eq(resourceAcl.workspaceId, workspaceId),
             eq(resourceAcl.identityId, input.identityId),
           ),
@@ -154,47 +154,47 @@ export class GovernanceService {
       await tx
         .insert(resourceAcl)
         .values({
-          userId: principal.userId,
+          tenantId: principal.tenantId,
           workspaceId,
           identityId: principal.identityId,
           role: "admin",
           createdBy: principal.identityId,
         })
         .onConflictDoUpdate({
-          target: [resourceAcl.userId, resourceAcl.workspaceId, resourceAcl.identityId],
+          target: [resourceAcl.tenantId, resourceAcl.workspaceId, resourceAcl.identityId],
           set: { role: "admin" },
         });
       await tx
         .update(workspaces)
         .set({ ownerIdentityId: input.identityId })
-        .where(and(eq(workspaces.userId, principal.userId), eq(workspaces.id, workspaceId)));
+        .where(and(eq(workspaces.tenantId, principal.tenantId), eq(workspaces.id, workspaceId)));
       return { ownerIdentityId: input.identityId };
     });
   }
   async recover(principal: Principal, documentId: string, reason: string) {
     return this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
       const [document] = await tx
         .select({ workspaceId: documents.workspaceId })
         .from(documents)
-        .where(and(eq(documents.userId, principal.userId), eq(documents.id, documentId)))
+        .where(and(eq(documents.tenantId, principal.tenantId), eq(documents.id, documentId)))
         .limit(1);
       if (!document) throw new DomainError("NOT_FOUND", "文档不存在或无治理权限");
       await this.workspace(tx, principal, document.workspaceId, true);
       await tx
         .insert(resourceAcl)
         .values({
-          userId: principal.userId,
+          tenantId: principal.tenantId,
           documentId,
           identityId: principal.identityId,
           role: "manage",
           createdBy: principal.identityId,
         })
         .onConflictDoNothing();
-      await requireDocumentManager(tx, principal.userId, documentId);
+      await requireDocumentManager(tx, principal.tenantId, documentId);
       await tx.execute(sql`select pg_advisory_xact_lock(718270,1)`);
       await tx.insert(authorizationEvents).values({
-        userId: principal.userId,
+        tenantId: principal.tenantId,
         workspaceId: document.workspaceId,
         documentId,
         actorId: principal.identityId,
@@ -213,14 +213,14 @@ export class GovernanceService {
       .from(documents)
       .where(
         and(
-          eq(documents.userId, principal.userId),
+          eq(documents.tenantId, principal.tenantId),
           eq(documents.id, documentId),
           documentActionSql(principal, "read"),
         ),
       )
       .limit(1);
     if (!document) throw new DomainError("NOT_FOUND", "文档不存在或无权访问");
-    const overrides = await loadPolicyOverrides(this.db, principal.userId, document.workspaceId);
+    const overrides = await loadPolicyOverrides(this.db, principal.tenantId, document.workspaceId);
     const actions = [
       ...new Set(document.roles.flatMap((role) => effectiveActions("document", role, overrides))),
     ];
@@ -235,18 +235,18 @@ export class GovernanceService {
       .from(resourceAcl)
       .innerJoin(
         documents,
-        and(eq(documents.userId, resourceAcl.userId), eq(documents.id, resourceAcl.documentId)),
+        and(eq(documents.tenantId, resourceAcl.tenantId), eq(documents.id, resourceAcl.documentId)),
       )
       .leftJoin(
         documentShares,
         and(
-          eq(documentShares.userId, resourceAcl.userId),
+          eq(documentShares.tenantId, resourceAcl.tenantId),
           eq(documentShares.id, resourceAcl.sourceShareId),
         ),
       )
       .where(
         and(
-          eq(resourceAcl.userId, principal.userId),
+          eq(resourceAcl.tenantId, principal.tenantId),
           eq(resourceAcl.documentId, documentId),
           eq(resourceAcl.identityId, principal.identityId),
         ),

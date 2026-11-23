@@ -1501,7 +1501,7 @@ export type MockLogin200User = {
      * @minLength 1
      * @maxLength 128
      */
-  userId: string;
+  tenantId: string;
   username: string;
   displayName: string;
   email: string | '';
@@ -1543,7 +1543,7 @@ export type GetCurrentUser200 = {
      * @minLength 1
      * @maxLength 128
      */
-  userId: string;
+  tenantId: string;
   username: string;
   displayName: string;
   email: string | '';
@@ -1585,7 +1585,7 @@ export type GetWorkspaceAuthorizationAudit200ItemsItemAfter = {[key: string]: un
 
 export type GetWorkspaceAuthorizationAudit200ItemsItem = {
   id: number;
-  userId: string;
+  tenantId: string;
   workspaceId: string;
   documentId: string | null;
   actorId: string | null;
@@ -2646,7 +2646,7 @@ export type ImportDocumentJson200 = {
   document: {
   /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
   id: string;
-  userId: string;
+  tenantId: string;
   title: string;
   workspaceId: string;
   /** @pattern ^cat_[A-Za-z0-9_-]{1,64}$ */
@@ -2834,7 +2834,7 @@ export const ListDocuments200ItemsItemAccessMode = {
 export type ListDocuments200ItemsItem = {
   /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
   id: string;
-  userId: string;
+  tenantId: string;
   title: string;
   workspaceId: string;
   /** @pattern ^cat_[A-Za-z0-9_-]{1,64}$ */
@@ -2941,7 +2941,7 @@ export const CreateDocument201AccessMode = {
 export type CreateDocument201 = {
   /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
   id: string;
-  userId: string;
+  tenantId: string;
   title: string;
   workspaceId: string;
   /** @pattern ^cat_[A-Za-z0-9_-]{1,64}$ */
@@ -3027,7 +3027,7 @@ export const GetDocument200AccessMode = {
 export type GetDocument200 = {
   /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
   id: string;
-  userId: string;
+  tenantId: string;
   title: string;
   workspaceId: string;
   /** @pattern ^cat_[A-Za-z0-9_-]{1,64}$ */
@@ -3151,7 +3151,7 @@ export const UpdateDocumentMetadata200AccessMode = {
 export type UpdateDocumentMetadata200 = {
   /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
   id: string;
-  userId: string;
+  tenantId: string;
   title: string;
   workspaceId: string;
   /** @pattern ^cat_[A-Za-z0-9_-]{1,64}$ */
@@ -3477,7 +3477,7 @@ export const RestoreDocumentVersion200AccessMode = {
 export type RestoreDocumentVersion200 = {
   /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
   id: string;
-  userId: string;
+  tenantId: string;
   title: string;
   workspaceId: string;
   /** @pattern ^cat_[A-Za-z0-9_-]{1,64}$ */
@@ -3571,7 +3571,7 @@ export const CopyDocumentTemplate201AccessMode = {
 export type CopyDocumentTemplate201 = {
   /** @pattern ^doc_[A-Za-z0-9_-]{1,64}$ */
   id: string;
-  userId: string;
+  tenantId: string;
   title: string;
   workspaceId: string;
   /** @pattern ^cat_[A-Za-z0-9_-]{1,64}$ */

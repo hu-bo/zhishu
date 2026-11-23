@@ -8,18 +8,18 @@ import { stableJsonStringify } from "./stable-json.js";
 
 type ReceiptScope = Pick<
   typeof apiIdempotencyRecords.$inferInsert,
-  "userId" | "subjectId" | "operationId" | "keyHash" | "requestHash"
+  "tenantId" | "subjectId" | "operationId" | "keyHash" | "requestHash"
 >;
 
 export function idempotencyScope(
-  principal: { userId: string; identityId: string },
+  principal: { tenantId: string; identityId: string },
   operationId: string,
   key: string | undefined,
   input: unknown,
 ): ReceiptScope | null {
   return key
     ? {
-        userId: principal.userId,
+        tenantId: principal.tenantId,
         subjectId: principal.identityId,
         operationId,
         keyHash: createHash("sha256").update(key).digest("hex"),
@@ -28,7 +28,7 @@ export function idempotencyScope(
     : null;
 }
 
-/** Call under the operation's transaction lock; receipts are scoped to user, actor and operation. */
+/** Call under the operation's transaction lock; receipts are scoped to tenant, actor and operation. */
 export async function loadIdempotencyReplay<T>(
   tx: Pick<Database, "select">,
   scope: ReceiptScope | null,
@@ -40,7 +40,7 @@ export async function loadIdempotencyReplay<T>(
     .from(apiIdempotencyRecords)
     .where(
       and(
-        eq(apiIdempotencyRecords.userId, scope.userId),
+        eq(apiIdempotencyRecords.tenantId, scope.tenantId),
         eq(apiIdempotencyRecords.subjectId, scope.subjectId),
         eq(apiIdempotencyRecords.operationId, scope.operationId),
         eq(apiIdempotencyRecords.keyHash, scope.keyHash),

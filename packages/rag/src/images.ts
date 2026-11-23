@@ -23,7 +23,7 @@ export function validateImageUrl(value: string): string {
   return url.href;
 }
 
-/** One owner and cache per parse; no process-wide cache can cross a user boundary. */
+/** One owner and cache per parse; no process-wide cache can cross a tenant boundary. */
 export function createImageProcessor(sourceId: string, options: DocumentParseOptions) {
   const signal = options.signal ?? new AbortController().signal,
     limits = parseLimits(options);

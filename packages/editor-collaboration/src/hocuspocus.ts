@@ -40,7 +40,7 @@ type PendingStructureOperation = {
 };
 
 type SessionTicketMetadata = {
-  userId: string;
+  tenantId: string;
   subject: string;
   documentId: string;
   generationId: string;
@@ -92,7 +92,7 @@ function readSessionTicketMetadata(token: string): SessionTicketMetadata | null 
     if (
       value.version !== 1 ||
       value.audience !== "document-collaboration" ||
-      typeof value.userId !== "string" ||
+      typeof value.tenantId !== "string" ||
       typeof value.subject !== "string" ||
       typeof value.documentId !== "string" ||
       typeof value.generationId !== "string" ||
@@ -249,7 +249,7 @@ export class HocuspocusCollaborationSession {
   private hashingCount = 0;
   private readonly unhashedUpdates = new Set<Uint8Array>();
   private currentSession: CollaborationSessionInfo;
-  private readonly principalBinding: { userId: string; subject: string };
+  private readonly principalBinding: { tenantId: string; subject: string };
   private sessionRefreshTimer?: ReturnType<typeof setTimeout>;
   private readonly pendingStructureOperations = new Map<string, PendingStructureOperation>();
   private waitingForReconnect?: (event: { status: string }) => void;
@@ -344,7 +344,7 @@ export class HocuspocusCollaborationSession {
     if (!ticketMatchesSession(ticket, options.session)) {
       throw new TypeError("The collaboration session ticket does not match its session metadata.");
     }
-    this.principalBinding = { userId: ticket.userId, subject: ticket.subject };
+    this.principalBinding = { tenantId: ticket.tenantId, subject: ticket.subject };
     this.localPresence = {
       protocolVersion: 1,
       displayName: ticket.displayName,
@@ -397,7 +397,7 @@ export class HocuspocusCollaborationSession {
         const refreshedTicket = readSessionTicketMetadata(refreshed.token);
         if (
           !ticketMatchesSession(refreshedTicket, refreshed) ||
-          refreshedTicket.userId !== this.principalBinding.userId ||
+          refreshedTicket.tenantId !== this.principalBinding.tenantId ||
           refreshedTicket.subject !== this.principalBinding.subject
         ) {
           throw new Error("collaboration-principal-changed");

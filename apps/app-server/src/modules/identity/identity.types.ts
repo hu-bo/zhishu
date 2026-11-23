@@ -1,6 +1,6 @@
 export type Principal = {
   identityId: string;
-  userId: string;
+  tenantId: string;
   username: string;
   displayName: string;
   email: string;

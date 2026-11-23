@@ -103,7 +103,7 @@ type DocumentAuditExecutor = Pick<Database, "insert">;
 async function insertDocumentAudit(
   executor: DocumentAuditExecutor,
   input: {
-    userId: string;
+    tenantId: string;
     actorIdentityId: string;
     action: DocumentAuditAction;
     resourceId: string;
@@ -113,7 +113,7 @@ async function insertDocumentAudit(
   },
 ): Promise<void> {
   await executor.insert(documentAuditEvents).values({
-    userId: input.userId,
+    tenantId: input.tenantId,
     actorIdentityId: input.actorIdentityId,
     action: input.action,
     resourceType: "document",
@@ -129,7 +129,7 @@ type MigrationSnapshotExecutor = Pick<Database, "insert">;
 async function insertMigrationSnapshots(
   executor: MigrationSnapshotExecutor,
   input: {
-    userId: string;
+    tenantId: string;
     documentId: string;
     migrationId?: string;
     stepSnapshots?: readonly ContentMigrationStepSnapshot[];
@@ -138,7 +138,7 @@ async function insertMigrationSnapshots(
   if (!input.migrationId || !input.stepSnapshots?.length) return;
   await executor.insert(documentMigrationSnapshots).values(
     input.stepSnapshots.map((step, stepIndex) => ({
-      userId: input.userId,
+      tenantId: input.tenantId,
       documentId: input.documentId,
       migrationId: input.migrationId!,
       stepIndex,
@@ -162,7 +162,7 @@ function parseDocumentVersionKind(kind: string): DocumentVersion["kind"] {
 
 export type ActiveDocument = {
   id: string;
-  userId: string;
+  tenantId: string;
   title: string;
   workspaceId?: string;
   catalogId?: string;
@@ -210,7 +210,7 @@ function parseStoredActiveDocument(value: Record<string, unknown>): ActiveDocume
   const updatedAt = new Date(String(value.updatedAt));
   if (
     typeof value.id !== "string" ||
-    typeof value.userId !== "string" ||
+    typeof value.tenantId !== "string" ||
     typeof value.title !== "string" ||
     typeof value.createdBy !== "string" ||
     typeof value.schemaVersion !== "number" ||
@@ -225,7 +225,7 @@ function parseStoredActiveDocument(value: Record<string, unknown>): ActiveDocume
   }
   return {
     id: value.id,
-    userId: value.userId,
+    tenantId: value.tenantId,
     title: value.title,
     workspaceId: typeof value.workspaceId === "string" ? value.workspaceId : "ws_default",
     catalogId: typeof value.catalogId === "string" ? value.catalogId : "",
@@ -318,21 +318,23 @@ function parseStoredVersionRestoreResponse(value: Record<string, unknown>): {
 async function loadIdempotencyReplay<T>(
   tx: IdempotencyExecutor,
   input: {
-    userId: string;
+    tenantId: string;
     subjectId: string;
     idempotency: DocumentIdempotency;
   },
   parseResponse: (value: Record<string, unknown>) => T,
 ): Promise<T | null> {
   const keyHash = createHash("sha256").update(input.idempotency.key).digest("hex");
-  const lockKey = [input.userId, input.subjectId, input.idempotency.operationId, keyHash].join(":");
+  const lockKey = [input.tenantId, input.subjectId, input.idempotency.operationId, keyHash].join(
+    ":",
+  );
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 718269))`);
   const [record] = await tx
     .select()
     .from(apiIdempotencyRecords)
     .where(
       and(
-        eq(apiIdempotencyRecords.userId, input.userId),
+        eq(apiIdempotencyRecords.tenantId, input.tenantId),
         eq(apiIdempotencyRecords.subjectId, input.subjectId),
         eq(apiIdempotencyRecords.operationId, input.idempotency.operationId),
         eq(apiIdempotencyRecords.keyHash, keyHash),
@@ -346,7 +348,7 @@ async function loadIdempotencyReplay<T>(
       .delete(apiIdempotencyRecords)
       .where(
         and(
-          eq(apiIdempotencyRecords.userId, input.userId),
+          eq(apiIdempotencyRecords.tenantId, input.tenantId),
           eq(apiIdempotencyRecords.subjectId, input.subjectId),
           eq(apiIdempotencyRecords.operationId, input.idempotency.operationId),
           eq(apiIdempotencyRecords.keyHash, keyHash),
@@ -365,35 +367,35 @@ async function loadIdempotencyReplay<T>(
 
 function loadDocumentIdempotencyReplay(
   tx: IdempotencyExecutor,
-  input: { userId: string; subjectId: string; idempotency: DocumentIdempotency },
+  input: { tenantId: string; subjectId: string; idempotency: DocumentIdempotency },
 ): Promise<ActiveDocument | null> {
   return loadIdempotencyReplay(tx, input, parseStoredActiveDocument);
 }
 
 function loadVersionIdempotencyReplay(
   tx: IdempotencyExecutor,
-  input: { userId: string; subjectId: string; idempotency: DocumentIdempotency },
+  input: { tenantId: string; subjectId: string; idempotency: DocumentIdempotency },
 ): Promise<DocumentVersion | null> {
   return loadIdempotencyReplay(tx, input, parseStoredDocumentVersion);
 }
 
 function loadLifecycleIdempotencyReplay(
   tx: IdempotencyExecutor,
-  input: { userId: string; subjectId: string; idempotency: DocumentIdempotency },
+  input: { tenantId: string; subjectId: string; idempotency: DocumentIdempotency },
 ): Promise<string | null> {
   return loadIdempotencyReplay(tx, input, parseStoredLifecycleResponse);
 }
 
 function loadAclIdempotencyReplay(
   tx: IdempotencyExecutor,
-  input: { userId: string; subjectId: string; idempotency: DocumentIdempotency },
+  input: { tenantId: string; subjectId: string; idempotency: DocumentIdempotency },
 ): Promise<{ generationId: string; actions: PermissionAction[] } | null> {
   return loadIdempotencyReplay(tx, input, parseStoredAclResponse);
 }
 
 function loadVersionRestoreIdempotencyReplay(
   tx: IdempotencyExecutor,
-  input: { userId: string; subjectId: string; idempotency: DocumentIdempotency },
+  input: { tenantId: string; subjectId: string; idempotency: DocumentIdempotency },
 ): Promise<{ previousGenerationId: string; document: ActiveDocument } | null> {
   return loadIdempotencyReplay(tx, input, parseStoredVersionRestoreResponse);
 }
@@ -401,7 +403,7 @@ function loadVersionRestoreIdempotencyReplay(
 async function saveIdempotencyReplay(
   tx: IdempotencyExecutor,
   input: {
-    userId: string;
+    tenantId: string;
     subjectId: string;
     idempotency: DocumentIdempotency;
     response: object;
@@ -409,7 +411,7 @@ async function saveIdempotencyReplay(
   },
 ): Promise<void> {
   await tx.insert(apiIdempotencyRecords).values({
-    userId: input.userId,
+    tenantId: input.tenantId,
     subjectId: input.subjectId,
     operationId: input.idempotency.operationId,
     keyHash: createHash("sha256").update(input.idempotency.key).digest("hex"),
@@ -485,7 +487,7 @@ export class DocumentRepository {
   ) {}
 
   async findDocumentIdempotencyReplay(input: {
-    userId: string;
+    tenantId: string;
     subjectId: string;
     idempotency: DocumentIdempotency;
   }): Promise<ActiveDocument | null> {
@@ -493,22 +495,22 @@ export class DocumentRepository {
   }
 
   async listActiveForIntegrityScan(): Promise<
-    Array<{ id: string; userId: string; createdBy: string }>
+    Array<{ id: string; tenantId: string; createdBy: string }>
   > {
     return this.db
-      .select({ id: documents.id, userId: documents.userId, createdBy: documents.createdBy })
+      .select({ id: documents.id, tenantId: documents.tenantId, createdBy: documents.createdBy })
       .from(documents)
       .where(eq(documents.status, "active"))
       .orderBy(asc(documents.id));
   }
 
   async create(
-    userId: string,
+    tenantId: string,
     ownerId: string,
     title: string,
     template?: { schemaVersion: number; extensions: ActiveDocument["extensions"] },
     requestId?: string,
-    maxDocumentsPerUser = 10_000,
+    maxDocumentsPerTenant = 10_000,
     initialUpdate?: { updateHash: string; updateBytes: Uint8Array; content: DocumentContent },
     idempotency?: DocumentIdempotency,
     migrationReport?: ContentMigrationReport,
@@ -524,12 +526,12 @@ export class DocumentRepository {
     return this.db.transaction((tx) =>
       this.createInTx(
         tx,
-        userId,
+        tenantId,
         ownerId,
         title,
         template,
         requestId,
-        maxDocumentsPerUser,
+        maxDocumentsPerTenant,
         initialUpdate,
         idempotency,
         migrationReport,
@@ -546,12 +548,12 @@ export class DocumentRepository {
    */
   async createInTx(
     tx: DocumentWriteTransaction,
-    userId: string,
+    tenantId: string,
     ownerId: string,
     title: string,
     template?: { schemaVersion: number; extensions: ActiveDocument["extensions"] },
     requestId?: string,
-    maxDocumentsPerUser = 10_000,
+    maxDocumentsPerTenant = 10_000,
     initialUpdate?: { updateHash: string; updateBytes: Uint8Array; content: DocumentContent },
     idempotency?: DocumentIdempotency,
     migrationReport?: ContentMigrationReport,
@@ -569,20 +571,20 @@ export class DocumentRepository {
     {
       if (idempotency) {
         const replay = await loadDocumentIdempotencyReplay(tx, {
-          userId,
+          tenantId,
           subjectId: ownerId,
           idempotency,
         });
         if (replay) return replay;
       }
       await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`document-quota:${userId}`}, 718267))`,
+        sql`select pg_advisory_xact_lock(hashtextextended(${`document-quota:${tenantId}`}, 718267))`,
       );
-      await lockKnowledgeTree(tx, userId, ownerId);
+      await lockKnowledgeTree(tx, tenantId, ownerId);
       await tx
         .insert(workspaces)
         .values({
-          userId,
+          tenantId,
           id: "ws_default",
           name: "团队知识库",
           kind: "team",
@@ -592,22 +594,22 @@ export class DocumentRepository {
       const [workspace] = await tx
         .select({ id: workspaces.id, kind: workspaces.kind })
         .from(workspaces)
-        .where(and(eq(workspaces.userId, userId), eq(workspaces.id, location.workspaceId)))
+        .where(and(eq(workspaces.tenantId, tenantId), eq(workspaces.id, location.workspaceId)))
         .limit(1);
       if (!workspace) throw new DomainError("NOT_FOUND", "Workspace not found");
-      await requireWorkspaceOrganizer(tx, { userId, identityId: ownerId }, location.workspaceId);
+      await requireWorkspaceOrganizer(tx, { tenantId, identityId: ownerId }, location.workspaceId);
       const catalogId =
-        location.catalogId ?? (await ensureRootCatalog(tx, userId, location.workspaceId));
+        location.catalogId ?? (await ensureRootCatalog(tx, tenantId, location.workspaceId));
       if (location.catalogId) {
         const [catalog] = await tx
           .select({ id: catalogs.id })
           .from(catalogs)
           .where(
             and(
-              eq(catalogs.userId, userId),
+              eq(catalogs.tenantId, tenantId),
               eq(catalogs.id, location.catalogId),
               eq(catalogs.workspaceId, location.workspaceId),
-              catalogActionSql({ userId, identityId: ownerId }, "write"),
+              catalogActionSql({ tenantId, identityId: ownerId }, "write"),
             ),
           )
           .limit(1);
@@ -618,19 +620,19 @@ export class DocumentRepository {
         .from(documents)
         .where(
           and(
-            eq(documents.userId, userId),
+            eq(documents.tenantId, tenantId),
             eq(documents.workspaceId, location.workspaceId),
             eq(documents.catalogId, catalogId),
             eq(documents.status, "active"),
           ),
         );
-      const [userDocumentCount] = await tx
+      const [tenantDocumentCount] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(documents)
-        .where(eq(documents.userId, userId));
-      if ((userDocumentCount?.count ?? 0) >= maxDocumentsPerUser) {
-        throw new DomainError("RESOURCE_LIMIT", "The user document limit has been reached", {
-          limit: maxDocumentsPerUser,
+        .where(eq(documents.tenantId, tenantId));
+      if ((tenantDocumentCount?.count ?? 0) >= maxDocumentsPerTenant) {
+        throw new DomainError("RESOURCE_LIMIT", "The tenant document limit has been reached", {
+          limit: maxDocumentsPerTenant,
         });
       }
 
@@ -638,7 +640,7 @@ export class DocumentRepository {
         .insert(documents)
         .values({
           id: documentId,
-          userId,
+          tenantId,
           title,
           createdBy: ownerId,
           accessMode:
@@ -656,8 +658,8 @@ export class DocumentRepository {
       if (document.accessMode !== "workspace-inherited")
         await tx
           .insert(resourceAcl)
-          .values({ userId, documentId, identityId: ownerId, role: "admin", createdBy: ownerId });
-      await requireDocumentManager(tx, userId, documentId);
+          .values({ tenantId, documentId, identityId: ownerId, role: "admin", createdBy: ownerId });
+      await requireDocumentManager(tx, tenantId, documentId);
 
       const [generation] = await tx
         .insert(documentGenerations)
@@ -672,7 +674,7 @@ export class DocumentRepository {
       if (!generation) throw new Error("Generation insert returned no row");
 
       await insertDocumentAudit(tx, {
-        userId,
+        tenantId,
         actorIdentityId: ownerId,
         action: initialUpdate ? "document.imported" : "document.created",
         resourceId: document.id,
@@ -690,7 +692,7 @@ export class DocumentRepository {
           : {}),
       });
       await insertMigrationSnapshots(tx, {
-        userId,
+        tenantId,
         documentId: document.id,
         ...migrationPersistence,
       });
@@ -705,7 +707,7 @@ export class DocumentRepository {
           createdBy: ownerId,
         });
         await insertProjectionOutbox(tx, {
-          userId,
+          tenantId,
           documentId: document.id,
           generationId: generation.id,
           durableSeq: 1,
@@ -715,7 +717,7 @@ export class DocumentRepository {
         });
       } else {
         await insertEmptyProjectionSnapshot(tx, {
-          userId,
+          tenantId,
           documentId: document.id,
           generationId: generation.id,
         });
@@ -723,7 +725,7 @@ export class DocumentRepository {
 
       const createdDocument: ActiveDocument = {
         id: document.id,
-        userId: document.userId,
+        tenantId: document.tenantId,
         title: document.title,
         workspaceId: document.workspaceId,
         catalogId: document.catalogId,
@@ -742,7 +744,7 @@ export class DocumentRepository {
       };
       if (idempotency) {
         await saveIdempotencyReplay(tx, {
-          userId,
+          tenantId,
           subjectId: ownerId,
           idempotency,
           response: createdDocument,
@@ -753,7 +755,7 @@ export class DocumentRepository {
   }
 
   async copyTemplate(input: {
-    userId: string;
+    tenantId: string;
     identityId: string;
     templateId: string;
     expectedGenerationId: string;
@@ -767,7 +769,7 @@ export class DocumentRepository {
       stepSnapshots: readonly ContentMigrationStepSnapshot[];
     };
     requestId?: string;
-    maxDocumentsPerUser: number;
+    maxDocumentsPerTenant: number;
     idempotency?: DocumentIdempotency;
   }): Promise<
     | { status: "not-found" }
@@ -779,7 +781,7 @@ export class DocumentRepository {
     return this.db.transaction(async (tx) => {
       if (input.idempotency) {
         const replay = await loadDocumentIdempotencyReplay(tx, {
-          userId: input.userId,
+          tenantId: input.tenantId,
           subjectId: input.identityId,
           idempotency: input.idempotency,
         });
@@ -787,13 +789,13 @@ export class DocumentRepository {
       }
 
       await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`document-quota:${input.userId}`}, 718267))`,
+        sql`select pg_advisory_xact_lock(hashtextextended(${`document-quota:${input.tenantId}`}, 718267))`,
       );
-      await lockKnowledgeTree(tx, input.userId, input.identityId);
+      await lockKnowledgeTree(tx, input.tenantId, input.identityId);
       const [template] = await tx
         .select({
           id: documents.id,
-          userId: documents.userId,
+          tenantId: documents.tenantId,
           createdBy: documents.createdBy,
           accessMode: documents.accessMode,
         })
@@ -801,7 +803,7 @@ export class DocumentRepository {
         .where(
           and(
             eq(documents.id, input.templateId),
-            eq(documents.userId, input.userId),
+            eq(documents.tenantId, input.tenantId),
             eq(documents.status, "active"),
           ),
         )
@@ -812,7 +814,7 @@ export class DocumentRepository {
       if (
         !(await hasDocumentPermission(
           tx,
-          { userId: input.userId, identityId: input.identityId },
+          { tenantId: input.tenantId, identityId: input.identityId },
           template.id,
           "export",
         ))
@@ -844,28 +846,28 @@ export class DocumentRepository {
         return { status: "conflict" };
       }
 
-      const [userDocumentCount] = await tx
+      const [tenantDocumentCount] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(documents)
-        .where(eq(documents.userId, input.userId));
-      if ((userDocumentCount?.count ?? 0) >= input.maxDocumentsPerUser) {
+        .where(eq(documents.tenantId, input.tenantId));
+      if ((tenantDocumentCount?.count ?? 0) >= input.maxDocumentsPerTenant) {
         return { status: "quota-exceeded" };
       }
 
       const documentId = `doc_${randomUUID()}`;
       const generationId = `gen_${randomUUID()}`;
       const initialDurableSeq = input.initialUpdate ? 1 : 0;
-      const copyCatalogId = await ensureRootCatalog(tx, input.userId, "ws_default");
+      const copyCatalogId = await ensureRootCatalog(tx, input.tenantId, "ws_default");
       await requireWorkspaceOrganizer(
         tx,
-        { userId: input.userId, identityId: input.identityId },
+        { tenantId: input.tenantId, identityId: input.identityId },
         "ws_default",
       );
       const [document] = await tx
         .insert(documents)
         .values({
           id: documentId,
-          userId: input.userId,
+          tenantId: input.tenantId,
           title: input.title,
           createdBy: input.identityId,
           catalogId: copyCatalogId,
@@ -873,13 +875,13 @@ export class DocumentRepository {
         .returning();
       if (!document) throw new Error("Copied document insert returned no row");
       await tx.insert(resourceAcl).values({
-        userId: input.userId,
+        tenantId: input.tenantId,
         documentId,
         identityId: input.identityId,
         role: "admin",
         createdBy: input.identityId,
       });
-      await requireDocumentManager(tx, input.userId, documentId);
+      await requireDocumentManager(tx, input.tenantId, documentId);
 
       const [copiedGeneration] = await tx
         .insert(documentGenerations)
@@ -904,7 +906,7 @@ export class DocumentRepository {
           createdBy: input.identityId,
         });
         await insertProjectionOutbox(tx, {
-          userId: input.userId,
+          tenantId: input.tenantId,
           documentId,
           generationId,
           durableSeq: initialDurableSeq,
@@ -914,14 +916,14 @@ export class DocumentRepository {
         });
       } else {
         await insertEmptyProjectionSnapshot(tx, {
-          userId: input.userId,
+          tenantId: input.tenantId,
           documentId,
           generationId,
         });
       }
 
       await insertDocumentAudit(tx, {
-        userId: input.userId,
+        tenantId: input.tenantId,
         actorIdentityId: input.identityId,
         action: "document.copied",
         resourceId: documentId,
@@ -936,14 +938,14 @@ export class DocumentRepository {
         },
       });
       await insertMigrationSnapshots(tx, {
-        userId: input.userId,
+        tenantId: input.tenantId,
         documentId,
         ...input.migrationPersistence,
       });
 
       const copiedDocument: ActiveDocument = {
         id: document.id,
-        userId: document.userId,
+        tenantId: document.tenantId,
         title: document.title,
         workspaceId: document.workspaceId,
         catalogId: document.catalogId,
@@ -962,7 +964,7 @@ export class DocumentRepository {
       };
       if (input.idempotency) {
         await saveIdempotencyReplay(tx, {
-          userId: input.userId,
+          tenantId: input.tenantId,
           subjectId: input.identityId,
           idempotency: input.idempotency,
           response: copiedDocument,
@@ -977,7 +979,7 @@ export class DocumentRepository {
   }
 
   async list(input: {
-    userId: string;
+    tenantId: string;
     identityId: string;
     view: DocumentListView;
     query?: string;
@@ -991,7 +993,11 @@ export class DocumentRepository {
     const readable = documentActionSql(input, "read");
     const status =
       input.view === "trash" ? "trashed" : input.view === "archived" ? "archived" : "active";
-    const filters = [eq(documents.userId, input.userId), eq(documents.status, status), readable];
+    const filters = [
+      eq(documents.tenantId, input.tenantId),
+      eq(documents.status, status),
+      readable,
+    ];
     if (input.workspaceId) filters.push(eq(documents.workspaceId, input.workspaceId));
     if (input.view === "mine") {
       filters.push(owner);
@@ -1028,7 +1034,7 @@ export class DocumentRepository {
     const rows = await this.db
       .select({
         id: documents.id,
-        userId: documents.userId,
+        tenantId: documents.tenantId,
         title: documents.title,
         workspaceId: documents.workspaceId,
         workspaceName: workspaceNameSql(input),
@@ -1060,7 +1066,7 @@ export class DocumentRepository {
       .from(documents)
       .innerJoin(
         workspaces,
-        and(eq(workspaces.userId, documents.userId), eq(workspaces.id, documents.workspaceId)),
+        and(eq(workspaces.tenantId, documents.tenantId), eq(workspaces.id, documents.workspaceId)),
       )
       .innerJoin(
         documentGenerations,
@@ -1072,7 +1078,7 @@ export class DocumentRepository {
       .leftJoin(
         documentFavorites,
         and(
-          eq(documentFavorites.userId, input.userId),
+          eq(documentFavorites.tenantId, input.tenantId),
           eq(documentFavorites.documentId, documents.id),
           eq(documentFavorites.identityId, input.identityId),
         ),
@@ -1080,7 +1086,7 @@ export class DocumentRepository {
       .leftJoin(
         documentProjectionSnapshots,
         and(
-          eq(documentProjectionSnapshots.userId, documents.userId),
+          eq(documentProjectionSnapshots.tenantId, documents.tenantId),
           eq(documentProjectionSnapshots.documentId, documents.id),
           eq(documentProjectionSnapshots.generationId, documentGenerations.id),
         ),
@@ -1088,7 +1094,7 @@ export class DocumentRepository {
       .leftJoin(
         documentRecents,
         and(
-          eq(documentRecents.userId, input.userId),
+          eq(documentRecents.tenantId, input.tenantId),
           eq(documentRecents.documentId, documents.id),
           eq(documentRecents.identityId, input.identityId),
         ),
@@ -1110,32 +1116,32 @@ export class DocumentRepository {
   async markRecent(document: ActiveDocument, identityId: string): Promise<void> {
     await this.db
       .insert(documentRecents)
-      .values({ userId: document.userId, documentId: document.id, identityId })
+      .values({ tenantId: document.tenantId, documentId: document.id, identityId })
       .onConflictDoUpdate({
-        target: [documentRecents.userId, documentRecents.documentId, documentRecents.identityId],
+        target: [documentRecents.tenantId, documentRecents.documentId, documentRecents.identityId],
         set: { lastOpenedAt: sql`now()` },
       });
   }
 
   async setFavorite(
-    userId: string,
+    tenantId: string,
     documentId: string,
     identityId: string,
     favorite: boolean,
   ): Promise<boolean> {
-    const document = await this.findActiveForAction(documentId, userId, identityId, "read");
+    const document = await this.findActiveForAction(documentId, tenantId, identityId, "read");
     if (!document) return false;
     if (favorite) {
       await this.db
         .insert(documentFavorites)
-        .values({ userId, documentId, identityId })
+        .values({ tenantId, documentId, identityId })
         .onConflictDoNothing();
     } else {
       await this.db
         .delete(documentFavorites)
         .where(
           and(
-            eq(documentFavorites.userId, userId),
+            eq(documentFavorites.tenantId, tenantId),
             eq(documentFavorites.documentId, documentId),
             eq(documentFavorites.identityId, identityId),
           ),
@@ -1145,7 +1151,7 @@ export class DocumentRepository {
   }
 
   async updateTitle(input: {
-    userId: string;
+    tenantId: string;
     documentId: string;
     identityId: string;
     expectedRevision: number;
@@ -1162,11 +1168,11 @@ export class DocumentRepository {
     | { status: "updated" | "replayed"; document: ActiveDocument }
   > {
     return this.db.transaction(async (tx) => {
-      await readKnowledgeTree(tx, input.userId);
+      await readKnowledgeTree(tx, input.tenantId);
       const [document] = await tx
         .select({
           id: documents.id,
-          userId: documents.userId,
+          tenantId: documents.tenantId,
           createdBy: documents.createdBy,
           accessMode: documents.accessMode,
           createdAt: documents.createdAt,
@@ -1176,7 +1182,7 @@ export class DocumentRepository {
         .where(
           and(
             eq(documents.id, input.documentId),
-            eq(documents.userId, input.userId),
+            eq(documents.tenantId, input.tenantId),
             eq(documents.status, "active"),
           ),
         )
@@ -1186,7 +1192,7 @@ export class DocumentRepository {
       if (
         !(await hasDocumentPermission(
           tx,
-          { userId: input.userId, identityId: input.identityId },
+          { tenantId: input.tenantId, identityId: input.identityId },
           input.documentId,
           "write",
         ))
@@ -1194,7 +1200,7 @@ export class DocumentRepository {
         return { status: "not-found" };
       if (input.idempotency) {
         const replay = await loadDocumentIdempotencyReplay(tx, {
-          userId: input.userId,
+          tenantId: input.tenantId,
           subjectId: input.identityId,
           idempotency: input.idempotency,
         });
@@ -1232,7 +1238,7 @@ export class DocumentRepository {
         .returning();
       if (!updatedDocument) return { status: "not-found" };
       await insertDocumentAudit(tx, {
-        userId: input.userId,
+        tenantId: input.tenantId,
         actorIdentityId: input.identityId,
         action: "document.title-updated",
         resourceId: input.documentId,
@@ -1241,7 +1247,7 @@ export class DocumentRepository {
       });
       const activeDocument: ActiveDocument = {
         id: updatedDocument.id,
-        userId: updatedDocument.userId,
+        tenantId: updatedDocument.tenantId,
         title: updatedDocument.title,
         workspaceId: updatedDocument.workspaceId,
         catalogId: updatedDocument.catalogId,
@@ -1260,7 +1266,7 @@ export class DocumentRepository {
       };
       if (input.idempotency) {
         await saveIdempotencyReplay(tx, {
-          userId: input.userId,
+          tenantId: input.tenantId,
           subjectId: input.identityId,
           idempotency: input.idempotency,
           response: activeDocument,
@@ -1272,7 +1278,7 @@ export class DocumentRepository {
   }
 
   async setLifecycle(input: {
-    userId: string;
+    tenantId: string;
     documentId: string;
     ownerId: string;
     operation: "archive" | "trash" | "restore" | "purge";
@@ -1280,10 +1286,10 @@ export class DocumentRepository {
     idempotency?: DocumentIdempotency;
   }): Promise<DocumentLifecycleResult> {
     return this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, input.userId, input.ownerId);
+      await lockKnowledgeTree(tx, input.tenantId, input.ownerId);
       if (input.idempotency) {
         const replay = await loadLifecycleIdempotencyReplay(tx, {
-          userId: input.userId,
+          tenantId: input.tenantId,
           subjectId: input.ownerId,
           idempotency: input.idempotency,
         });
@@ -1296,14 +1302,14 @@ export class DocumentRepository {
           status: documents.status,
         })
         .from(documents)
-        .where(and(eq(documents.id, input.documentId), eq(documents.userId, input.userId)))
+        .where(and(eq(documents.id, input.documentId), eq(documents.tenantId, input.tenantId)))
         .for("update")
         .limit(1);
       if (!document) return { status: "not-found" };
       if (
         !(await hasDocumentPermission(
           tx,
-          { userId: input.userId, identityId: input.ownerId },
+          { tenantId: input.tenantId, identityId: input.ownerId },
           input.documentId,
           "manage",
         ))
@@ -1330,12 +1336,12 @@ export class DocumentRepository {
       if (!generation) return { status: "not-found" };
       if (input.operation === "trash" || input.operation === "purge") {
         // Public site approvals dissolve first: a trashed or purged document must never stay readable.
-        await this.publicLinkage?.detachDocuments(tx, input.userId, [input.documentId]);
-        const recipients = await documentRecipients(tx, input.userId, input.documentId);
+        await this.publicLinkage?.detachDocuments(tx, input.tenantId, [input.documentId]);
+        const recipients = await documentRecipients(tx, input.tenantId, input.documentId);
         await insertNotifications(
           tx,
           recipients.map((recipientId) => ({
-            userId: input.userId,
+            tenantId: input.tenantId,
             actorId: input.ownerId,
             recipientId,
             type: "deleted",
@@ -1375,7 +1381,7 @@ export class DocumentRepository {
       };
       const action = lifecycleActions[input.operation];
       await insertDocumentAudit(tx, {
-        userId: input.userId,
+        tenantId: input.tenantId,
         actorIdentityId: input.ownerId,
         action,
         resourceId: input.documentId,
@@ -1385,7 +1391,7 @@ export class DocumentRepository {
       });
       if (input.idempotency) {
         await saveIdempotencyReplay(tx, {
-          userId: input.userId,
+          tenantId: input.tenantId,
           subjectId: input.ownerId,
           idempotency: input.idempotency,
           response: { generationId: generation.id },
@@ -1397,7 +1403,7 @@ export class DocumentRepository {
   }
 
   async createVersion(input: {
-    userId: string;
+    tenantId: string;
     documentId: string;
     identityId: string;
     name: string;
@@ -1407,14 +1413,14 @@ export class DocumentRepository {
     idempotency?: DocumentIdempotency;
   }): Promise<VersionMutationResult> {
     return this.db.transaction(async (tx) => {
-      await readKnowledgeTree(tx, input.userId);
+      await readKnowledgeTree(tx, input.tenantId);
       const [document] = await tx
         .select({ id: documents.id, createdBy: documents.createdBy })
         .from(documents)
         .where(
           and(
             eq(documents.id, input.documentId),
-            eq(documents.userId, input.userId),
+            eq(documents.tenantId, input.tenantId),
             eq(documents.status, "active"),
           ),
         )
@@ -1424,7 +1430,7 @@ export class DocumentRepository {
       if (
         !(await hasDocumentPermission(
           tx,
-          { userId: input.userId, identityId: input.identityId },
+          { tenantId: input.tenantId, identityId: input.identityId },
           input.documentId,
           "write",
         ))
@@ -1432,7 +1438,7 @@ export class DocumentRepository {
         return { status: "not-found" };
       if (input.idempotency) {
         const replay = await loadVersionIdempotencyReplay(tx, {
-          userId: input.userId,
+          tenantId: input.tenantId,
           subjectId: input.identityId,
           idempotency: input.idempotency,
         });
@@ -1460,7 +1466,7 @@ export class DocumentRepository {
         .insert(documentVersions)
         .values({
           id: `ver_${randomUUID()}`,
-          userId: input.userId,
+          tenantId: input.tenantId,
           documentId: input.documentId,
           generationId: generation.id,
           name: input.name,
@@ -1472,7 +1478,7 @@ export class DocumentRepository {
         .returning();
       if (!version) return { status: "conflict" };
       await insertDocumentAudit(tx, {
-        userId: input.userId,
+        tenantId: input.tenantId,
         actorIdentityId: input.identityId,
         action: "document.version-created",
         resourceId: input.documentId,
@@ -1486,7 +1492,7 @@ export class DocumentRepository {
       };
       if (input.idempotency) {
         await saveIdempotencyReplay(tx, {
-          userId: input.userId,
+          tenantId: input.tenantId,
           subjectId: input.identityId,
           idempotency: input.idempotency,
           response: createdVersion,
@@ -1499,7 +1505,7 @@ export class DocumentRepository {
     });
   }
 
-  async listVersions(userId: string, documentId: string): Promise<DocumentVersion[]> {
+  async listVersions(tenantId: string, documentId: string): Promise<DocumentVersion[]> {
     const versions = await this.db
       .select({
         id: documentVersions.id,
@@ -1512,7 +1518,9 @@ export class DocumentRepository {
         createdAt: documentVersions.createdAt,
       })
       .from(documentVersions)
-      .where(and(eq(documentVersions.userId, userId), eq(documentVersions.documentId, documentId)))
+      .where(
+        and(eq(documentVersions.tenantId, tenantId), eq(documentVersions.documentId, documentId)),
+      )
       .orderBy(desc(documentVersions.createdAt), desc(documentVersions.id));
     return versions.map((version) => ({
       ...version,
@@ -1521,7 +1529,7 @@ export class DocumentRepository {
   }
 
   async findVersion(
-    userId: string,
+    tenantId: string,
     documentId: string,
     versionId: string,
   ): Promise<DocumentVersion | null> {
@@ -1539,7 +1547,7 @@ export class DocumentRepository {
       .from(documentVersions)
       .where(
         and(
-          eq(documentVersions.userId, userId),
+          eq(documentVersions.tenantId, tenantId),
           eq(documentVersions.documentId, documentId),
           eq(documentVersions.id, versionId),
         ),
@@ -1571,7 +1579,7 @@ export class DocumentRepository {
   }
 
   async restoreVersion(input: {
-    userId: string;
+    tenantId: string;
     documentId: string;
     versionId: string;
     identityId: string;
@@ -1583,11 +1591,11 @@ export class DocumentRepository {
     idempotency?: DocumentIdempotency;
   }): Promise<VersionMutationResult> {
     return this.db.transaction(async (tx) => {
-      await readKnowledgeTree(tx, input.userId);
+      await readKnowledgeTree(tx, input.tenantId);
       const [document] = await tx
         .select({
           id: documents.id,
-          userId: documents.userId,
+          tenantId: documents.tenantId,
           title: documents.title,
           workspaceId: documents.workspaceId,
           catalogId: documents.catalogId,
@@ -1601,14 +1609,14 @@ export class DocumentRepository {
           createdAt: documents.createdAt,
         })
         .from(documents)
-        .where(and(eq(documents.id, input.documentId), eq(documents.userId, input.userId)))
+        .where(and(eq(documents.id, input.documentId), eq(documents.tenantId, input.tenantId)))
         .for("update")
         .limit(1);
       if (!document || document.status !== "active") return { status: "not-found" };
       if (
         !(await hasDocumentPermission(
           tx,
-          { userId: input.userId, identityId: input.identityId },
+          { tenantId: input.tenantId, identityId: input.identityId },
           input.documentId,
           "write",
         ))
@@ -1623,7 +1631,7 @@ export class DocumentRepository {
         .from(documentVersions)
         .where(
           and(
-            eq(documentVersions.userId, input.userId),
+            eq(documentVersions.tenantId, input.tenantId),
             eq(documentVersions.documentId, input.documentId),
             eq(documentVersions.id, input.versionId),
           ),
@@ -1632,7 +1640,7 @@ export class DocumentRepository {
       if (!version) return { status: "not-found" };
       if (input.idempotency) {
         const replay = await loadVersionRestoreIdempotencyReplay(tx, {
-          userId: input.userId,
+          tenantId: input.tenantId,
           subjectId: input.identityId,
           idempotency: input.idempotency,
         });
@@ -1693,7 +1701,7 @@ export class DocumentRepository {
       });
       if (version.durableSeq === 0) {
         await insertEmptyProjectionSnapshot(tx, {
-          userId: input.userId,
+          tenantId: input.tenantId,
           documentId: input.documentId,
           generationId: nextGenerationId,
         });
@@ -1715,7 +1723,7 @@ export class DocumentRepository {
           createdBy: input.identityId,
         });
         await insertProjectionOutbox(tx, {
-          userId: input.userId,
+          tenantId: input.tenantId,
           documentId: input.documentId,
           generationId: nextGenerationId,
           durableSeq: targetDurableSeq,
@@ -1727,10 +1735,10 @@ export class DocumentRepository {
       if (targetDurableSeq > 0) {
         await tx.execute(sql`
           INSERT INTO asset_references
-            (user_id, document_id, generation_id, durable_seq, asset_id, block_id)
-          SELECT user_id, document_id, ${nextGenerationId}, durable_seq, asset_id, block_id
+            (tenant_id, document_id, generation_id, durable_seq, asset_id, block_id)
+          SELECT tenant_id, document_id, ${nextGenerationId}, durable_seq, asset_id, block_id
           FROM asset_references
-          WHERE user_id = ${input.userId}
+          WHERE tenant_id = ${input.tenantId}
             AND document_id = ${input.documentId}
             AND generation_id = ${version.generationId}
             AND durable_seq = ${version.durableSeq}
@@ -1745,7 +1753,7 @@ export class DocumentRepository {
         })
         .where(eq(documents.id, input.documentId));
       await insertDocumentAudit(tx, {
-        userId: input.userId,
+        tenantId: input.tenantId,
         actorIdentityId: input.identityId,
         action: "document.version-restored",
         resourceId: input.documentId,
@@ -1759,7 +1767,7 @@ export class DocumentRepository {
       });
       const restored: ActiveDocument = {
         id: document.id,
-        userId: document.userId,
+        tenantId: document.tenantId,
         title: document.title,
         workspaceId: document.workspaceId,
         catalogId: document.catalogId,
@@ -1778,7 +1786,7 @@ export class DocumentRepository {
       };
       if (input.idempotency) {
         await saveIdempotencyReplay(tx, {
-          userId: input.userId,
+          tenantId: input.tenantId,
           subjectId: input.identityId,
           idempotency: input.idempotency,
           response: { previousGenerationId: currentGeneration.id, document: restored },
@@ -1794,7 +1802,7 @@ export class DocumentRepository {
   }
 
   async findProjectionContentSnapshot(
-    userId: string,
+    tenantId: string,
     documentId: string,
     generationId: string,
   ): Promise<{ snapshotRevision: number; durableSeq: number; content: DocumentContent } | null> {
@@ -1807,7 +1815,7 @@ export class DocumentRepository {
       .from(documentProjectionSnapshots)
       .where(
         and(
-          eq(documentProjectionSnapshots.userId, userId),
+          eq(documentProjectionSnapshots.tenantId, tenantId),
           eq(documentProjectionSnapshots.documentId, documentId),
           eq(documentProjectionSnapshots.generationId, generationId),
         ),
@@ -1822,7 +1830,7 @@ export class DocumentRepository {
   }
 
   async recordExport(input: {
-    userId: string;
+    tenantId: string;
     documentId: string;
     identityId: string;
     generationId: string;
@@ -1832,7 +1840,7 @@ export class DocumentRepository {
     requestId?: string;
   }): Promise<"not-found" | "conflict" | "not-authorized" | "recorded"> {
     return this.db.transaction(async (tx) => {
-      await readKnowledgeTree(tx, input.userId);
+      await readKnowledgeTree(tx, input.tenantId);
       const [document] = await tx
         .select({
           id: documents.id,
@@ -1853,7 +1861,7 @@ export class DocumentRepository {
         .where(
           and(
             eq(documents.id, input.documentId),
-            eq(documents.userId, input.userId),
+            eq(documents.tenantId, input.tenantId),
             eq(documents.status, "active"),
           ),
         )
@@ -1870,14 +1878,14 @@ export class DocumentRepository {
       if (
         !(await hasDocumentPermission(
           tx,
-          { userId: input.userId, identityId: input.identityId },
+          { tenantId: input.tenantId, identityId: input.identityId },
           input.documentId,
           "export",
         ))
       )
         throw new DomainError("NOT_FOUND", "Document not found");
       await insertDocumentAudit(tx, {
-        userId: input.userId,
+        tenantId: input.tenantId,
         actorIdentityId: input.identityId,
         action: "document.exported",
         resourceId: input.documentId,
@@ -1894,7 +1902,7 @@ export class DocumentRepository {
   }
 
   async setAcl(
-    userId: string,
+    tenantId: string,
     documentId: string,
     ownerId: string,
     identityId: string,
@@ -1904,7 +1912,7 @@ export class DocumentRepository {
     role?: AccessRole,
   ): Promise<AclChangeResult> {
     return this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, userId, ownerId);
+      await lockKnowledgeTree(tx, tenantId, ownerId);
       const [document] = await tx
         .select({
           id: documents.id,
@@ -1915,14 +1923,16 @@ export class DocumentRepository {
         .where(
           and(
             eq(documents.id, documentId),
-            eq(documents.userId, userId),
+            eq(documents.tenantId, tenantId),
             eq(documents.status, "active"),
           ),
         )
         .for("update")
         .limit(1);
       if (!document) return { status: "not-found" };
-      if (!(await hasDocumentPermission(tx, { userId, identityId: ownerId }, documentId, "manage")))
+      if (
+        !(await hasDocumentPermission(tx, { tenantId, identityId: ownerId }, documentId, "manage"))
+      )
         return { status: "not-owner" };
 
       const [generation] = await tx
@@ -1939,7 +1949,7 @@ export class DocumentRepository {
 
       if (idempotency) {
         const replay = await loadAclIdempotencyReplay(tx, {
-          userId,
+          tenantId,
           subjectId: ownerId,
           idempotency,
         });
@@ -1950,7 +1960,7 @@ export class DocumentRepository {
         actions = effectiveActions(
           "document",
           role,
-          await loadPolicyOverrides(tx, userId, document.workspaceId),
+          await loadPolicyOverrides(tx, tenantId, document.workspaceId),
         ).filter(isPermissionAction);
       const grants = role ? [role] : actions;
       const previous = await tx
@@ -1958,7 +1968,7 @@ export class DocumentRepository {
         .from(resourceAcl)
         .where(
           and(
-            eq(resourceAcl.userId, userId),
+            eq(resourceAcl.tenantId, tenantId),
             eq(resourceAcl.documentId, documentId),
             eq(resourceAcl.identityId, identityId),
             isNull(resourceAcl.sourceShareId),
@@ -1968,17 +1978,17 @@ export class DocumentRepository {
         .select()
         .from(identityProfiles)
         .where(
-          and(eq(identityProfiles.userId, userId), eq(identityProfiles.identityId, identityId)),
+          and(eq(identityProfiles.tenantId, tenantId), eq(identityProfiles.identityId, identityId)),
         )
         .limit(1);
-      if (!profile) throw new DomainError("VALIDATION_ERROR", "请选择同一用户的真实成员");
+      if (!profile) throw new DomainError("VALIDATION_ERROR", "请选择同租户的真实成员");
       if (
         previous.length === grants.length &&
         previous.every((p) => grants.some((g) => g === p.role))
       ) {
         if (idempotency)
           await saveIdempotencyReplay(tx, {
-            userId,
+            tenantId,
             subjectId: ownerId,
             idempotency,
             response: { generationId: generation.id, actions: [...actions] },
@@ -1990,7 +2000,7 @@ export class DocumentRepository {
         .delete(resourceAcl)
         .where(
           and(
-            eq(resourceAcl.userId, userId),
+            eq(resourceAcl.tenantId, tenantId),
             eq(resourceAcl.documentId, documentId),
             eq(resourceAcl.identityId, identityId),
             isNull(resourceAcl.sourceShareId),
@@ -1999,7 +2009,7 @@ export class DocumentRepository {
       if (grants.length > 0) {
         await tx.insert(resourceAcl).values(
           grants.map((action) => ({
-            userId,
+            tenantId,
             documentId,
             identityId,
             role: action,
@@ -2008,10 +2018,10 @@ export class DocumentRepository {
           })),
         );
       }
-      await requireDocumentManager(tx, userId, documentId);
+      await requireDocumentManager(tx, tenantId, documentId);
       await insertNotifications(tx, [
         {
-          userId,
+          tenantId,
           actorId: ownerId,
           recipientId: identityId,
           type: previous.length ? "permission" : "share",
@@ -2021,7 +2031,7 @@ export class DocumentRepository {
         },
       ]);
       await insertDocumentAudit(tx, {
-        userId,
+        tenantId,
         actorIdentityId: ownerId,
         action: "document.acl-updated",
         resourceId: documentId,
@@ -2031,7 +2041,7 @@ export class DocumentRepository {
       });
       if (idempotency) {
         await saveIdempotencyReplay(tx, {
-          userId,
+          tenantId,
           subjectId: ownerId,
           idempotency,
           response: { generationId: generation.id, actions: [...actions] },
@@ -2043,7 +2053,7 @@ export class DocumentRepository {
   }
 
   async listAcl(
-    userId: string,
+    tenantId: string,
     documentId: string,
     ownerId: string,
   ): Promise<DocumentAclEntry[] | null> {
@@ -2054,14 +2064,14 @@ export class DocumentRepository {
         .where(
           and(
             eq(documents.id, documentId),
-            eq(documents.userId, userId),
+            eq(documents.tenantId, tenantId),
             eq(documents.status, "active"),
           ),
         )
         .limit(1);
       if (
         !document ||
-        !(await hasDocumentPermission(tx, { userId, identityId: ownerId }, documentId, "manage"))
+        !(await hasDocumentPermission(tx, { tenantId, identityId: ownerId }, documentId, "manage"))
       )
         return null;
 
@@ -2076,24 +2086,27 @@ export class DocumentRepository {
         .from(resourceAcl)
         .innerJoin(
           documents,
-          and(eq(documents.userId, resourceAcl.userId), eq(documents.id, resourceAcl.documentId)),
+          and(
+            eq(documents.tenantId, resourceAcl.tenantId),
+            eq(documents.id, resourceAcl.documentId),
+          ),
         )
         .leftJoin(
           identityProfiles,
           and(
-            eq(identityProfiles.userId, resourceAcl.userId),
+            eq(identityProfiles.tenantId, resourceAcl.tenantId),
             eq(identityProfiles.identityId, resourceAcl.identityId),
           ),
         )
         .where(
           and(
-            eq(resourceAcl.userId, userId),
+            eq(resourceAcl.tenantId, tenantId),
             eq(resourceAcl.documentId, documentId),
             documentGrantActiveSql(undefined, true, "resource_acl"),
           ),
         )
         .orderBy(asc(resourceAcl.identityId), asc(resourceAcl.role));
-      const overrides = await loadPolicyOverrides(tx, userId, document.workspaceId);
+      const overrides = await loadPolicyOverrides(tx, tenantId, document.workspaceId);
       const grouped = new Map<string, PermissionAction[]>();
       for (const row of rows) {
         const actions = grouped.get(row.identityId) ?? [];
@@ -2120,7 +2133,7 @@ export class DocumentRepository {
   }
 
   async removeAcl(
-    userId: string,
+    tenantId: string,
     documentId: string,
     ownerId: string,
     identityId: string,
@@ -2128,21 +2141,23 @@ export class DocumentRepository {
     idempotency?: DocumentIdempotency,
   ): Promise<AclChangeResult> {
     return this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, userId, ownerId);
+      await lockKnowledgeTree(tx, tenantId, ownerId);
       const [document] = await tx
         .select({ id: documents.id, createdBy: documents.createdBy })
         .from(documents)
         .where(
           and(
             eq(documents.id, documentId),
-            eq(documents.userId, userId),
+            eq(documents.tenantId, tenantId),
             eq(documents.status, "active"),
           ),
         )
         .for("update")
         .limit(1);
       if (!document) return { status: "not-found" };
-      if (!(await hasDocumentPermission(tx, { userId, identityId: ownerId }, documentId, "manage")))
+      if (
+        !(await hasDocumentPermission(tx, { tenantId, identityId: ownerId }, documentId, "manage"))
+      )
         return { status: "not-owner" };
 
       const [generation] = await tx
@@ -2159,7 +2174,7 @@ export class DocumentRepository {
 
       if (idempotency) {
         const replay = await loadAclIdempotencyReplay(tx, {
-          userId,
+          tenantId,
           subjectId: ownerId,
           idempotency,
         });
@@ -2170,17 +2185,17 @@ export class DocumentRepository {
         .delete(resourceAcl)
         .where(
           and(
-            eq(resourceAcl.userId, userId),
+            eq(resourceAcl.tenantId, tenantId),
             eq(resourceAcl.documentId, documentId),
             eq(resourceAcl.identityId, identityId),
           ),
         )
         .returning({ identityId: resourceAcl.identityId });
-      await requireDocumentManager(tx, userId, documentId);
+      await requireDocumentManager(tx, tenantId, documentId);
       if (removed.length)
         await insertNotifications(tx, [
           {
-            userId,
+            tenantId,
             actorId: ownerId,
             recipientId: identityId,
             type: "permission",
@@ -2190,7 +2205,7 @@ export class DocumentRepository {
           },
         ]);
       await insertDocumentAudit(tx, {
-        userId,
+        tenantId,
         actorIdentityId: ownerId,
         action: "document.acl-removed",
         resourceId: documentId,
@@ -2200,7 +2215,7 @@ export class DocumentRepository {
       });
       if (idempotency) {
         await saveIdempotencyReplay(tx, {
-          userId,
+          tenantId,
           subjectId: ownerId,
           idempotency,
           response: { generationId: generation.id, actions: [] },
@@ -2214,7 +2229,7 @@ export class DocumentRepository {
   async persistUpdate(input: {
     documentId: string;
     generationId: string;
-    userId: string;
+    tenantId: string;
     subjectId: string;
     updateHash: string;
     sourceUpdateHash?: string;
@@ -2228,7 +2243,7 @@ export class DocumentRepository {
   }): Promise<{ updateHash: string; durableSeq: number; duplicate: boolean }> {
     const sourceUpdateHash = input.sourceUpdateHash ?? input.updateHash;
     return this.db.transaction(async (tx) => {
-      await readKnowledgeTree(tx, input.userId);
+      await readKnowledgeTree(tx, input.tenantId);
       const [document] = await tx
         .select({
           id: documents.id,
@@ -2239,7 +2254,7 @@ export class DocumentRepository {
         .where(
           and(
             eq(documents.id, input.documentId),
-            eq(documents.userId, input.userId),
+            eq(documents.tenantId, input.tenantId),
             eq(documents.status, "active"),
           ),
         )
@@ -2249,7 +2264,7 @@ export class DocumentRepository {
       if (
         !(await hasDocumentPermission(
           tx,
-          { userId: input.userId, identityId: input.subjectId },
+          { tenantId: input.tenantId, identityId: input.subjectId },
           input.documentId,
           "write",
         ))
@@ -2315,7 +2330,7 @@ export class DocumentRepository {
 
       if (input.contentChanged)
         await recordBodyMentionNotifications(tx, {
-          userId: input.userId,
+          tenantId: input.tenantId,
           documentId: input.documentId,
           workspaceId: document.workspaceId,
           generationId: generation.id,
@@ -2326,7 +2341,7 @@ export class DocumentRepository {
         });
 
       await insertProjectionOutbox(tx, {
-        userId: input.userId,
+        tenantId: input.tenantId,
         documentId: input.documentId,
         generationId: input.generationId,
         durableSeq,
@@ -2345,7 +2360,7 @@ export class DocumentRepository {
             .from(assets)
             .where(
               and(
-                eq(assets.userId, input.userId),
+                eq(assets.tenantId, input.tenantId),
                 eq(assets.documentId, input.documentId),
                 eq(assets.status, "ready"),
                 inArray(assets.id, referencedAssetIds),
@@ -2364,7 +2379,7 @@ export class DocumentRepository {
             .insert(assetReferences)
             .values(
               input.assetReferences.map(({ assetId, blockId }) => ({
-                userId: input.userId,
+                tenantId: input.tenantId,
                 documentId: input.documentId,
                 generationId: input.generationId,
                 durableSeq,
@@ -2380,7 +2395,7 @@ export class DocumentRepository {
           .from(documentVersions)
           .where(
             and(
-              eq(documentVersions.userId, input.userId),
+              eq(documentVersions.tenantId, input.tenantId),
               eq(documentVersions.documentId, input.documentId),
               eq(documentVersions.generationId, input.generationId),
             ),
@@ -2392,7 +2407,7 @@ export class DocumentRepository {
           .delete(assetReferences)
           .where(
             and(
-              eq(assetReferences.userId, input.userId),
+              eq(assetReferences.tenantId, input.tenantId),
               eq(assetReferences.documentId, input.documentId),
               eq(assetReferences.generationId, input.generationId),
               notInArray(assetReferences.durableSeq, retainedSequences),
@@ -2412,7 +2427,7 @@ export class DocumentRepository {
         .from(documentVersions)
         .where(
           and(
-            eq(documentVersions.userId, input.userId),
+            eq(documentVersions.tenantId, input.tenantId),
             eq(documentVersions.documentId, input.documentId),
             eq(documentVersions.generationId, generation.id),
             eq(documentVersions.kind, "automatic"),
@@ -2427,7 +2442,7 @@ export class DocumentRepository {
       if (shouldCreateAutomaticVersion) {
         await tx.insert(documentVersions).values({
           id: `ver_${randomUUID()}`,
-          userId: input.userId,
+          tenantId: input.tenantId,
           documentId: input.documentId,
           generationId: generation.id,
           name: `自动版本 · ${generation.id.slice(-8)} · ${durableSeq}`,
@@ -2441,7 +2456,7 @@ export class DocumentRepository {
           .from(documentVersions)
           .where(
             and(
-              eq(documentVersions.userId, input.userId),
+              eq(documentVersions.tenantId, input.tenantId),
               eq(documentVersions.documentId, input.documentId),
               eq(documentVersions.kind, "automatic"),
             ),
@@ -2460,7 +2475,7 @@ export class DocumentRepository {
             .from(documentVersions)
             .where(
               and(
-                eq(documentVersions.userId, input.userId),
+                eq(documentVersions.tenantId, input.tenantId),
                 eq(documentVersions.documentId, input.documentId),
                 eq(documentVersions.generationId, generation.id),
               ),
@@ -2472,7 +2487,7 @@ export class DocumentRepository {
             .delete(assetReferences)
             .where(
               and(
-                eq(assetReferences.userId, input.userId),
+                eq(assetReferences.tenantId, input.tenantId),
                 eq(assetReferences.documentId, input.documentId),
                 eq(assetReferences.generationId, generation.id),
                 notInArray(assetReferences.durableSeq, retainedSequences),
@@ -2486,7 +2501,7 @@ export class DocumentRepository {
   }
 
   async switchActiveGeneration(input: {
-    userId: string;
+    tenantId: string;
     documentId: string;
     identityId: string;
     expectedGenerationId: string;
@@ -2505,11 +2520,11 @@ export class DocumentRepository {
     requestId?: string;
   }): Promise<GenerationSwitchResult> {
     return this.db.transaction(async (tx) => {
-      await readKnowledgeTree(tx, input.userId);
+      await readKnowledgeTree(tx, input.tenantId);
       const [document] = await tx
         .select({
           id: documents.id,
-          userId: documents.userId,
+          tenantId: documents.tenantId,
           title: documents.title,
           workspaceId: documents.workspaceId,
           catalogId: documents.catalogId,
@@ -2523,14 +2538,14 @@ export class DocumentRepository {
           createdAt: documents.createdAt,
         })
         .from(documents)
-        .where(and(eq(documents.id, input.documentId), eq(documents.userId, input.userId)))
+        .where(and(eq(documents.id, input.documentId), eq(documents.tenantId, input.tenantId)))
         .for("update")
         .limit(1);
       if (!document || document.status !== "active") return { status: "not-found" };
       if (
         !(await hasDocumentPermission(
           tx,
-          { userId: input.userId, identityId: input.identityId },
+          { tenantId: input.tenantId, identityId: input.identityId },
           input.documentId,
           "write",
         ))
@@ -2594,7 +2609,7 @@ export class DocumentRepository {
         createdBy: input.identityId,
       });
       await insertProjectionOutbox(tx, {
-        userId: input.userId,
+        tenantId: input.tenantId,
         documentId: input.documentId,
         generationId: nextGenerationId,
         durableSeq,
@@ -2603,7 +2618,7 @@ export class DocumentRepository {
         content: input.content,
       });
       await insertDocumentAudit(tx, {
-        userId: input.userId,
+        tenantId: input.tenantId,
         actorIdentityId: input.identityId,
         action:
           input.targetSchemaVersion === generation.schemaVersion
@@ -2623,7 +2638,7 @@ export class DocumentRepository {
         },
       });
       await insertMigrationSnapshots(tx, {
-        userId: input.userId,
+        tenantId: input.tenantId,
         documentId: input.documentId,
         ...input.migrationPersistence,
       });
@@ -2637,7 +2652,7 @@ export class DocumentRepository {
         previousGenerationId: generation.id,
         document: {
           id: document.id,
-          userId: document.userId,
+          tenantId: document.tenantId,
           title: document.title,
           workspaceId: document.workspaceId,
           catalogId: document.catalogId,
@@ -2660,33 +2675,36 @@ export class DocumentRepository {
 
   async findActiveForAction(
     documentId: string,
-    userId: string,
+    tenantId: string,
     identityId: string,
     action: PermissionAction,
   ): Promise<ActiveDocument | null> {
-    const row = await this.findActiveRow(documentId, userId, identityId);
-    if (!row || !(await hasDocumentPermission(this.db, { userId, identityId }, documentId, action)))
+    const row = await this.findActiveRow(documentId, tenantId, identityId);
+    if (
+      !row ||
+      !(await hasDocumentPermission(this.db, { tenantId, identityId }, documentId, action))
+    )
       return null;
     return row;
   }
 
   private async findActiveRow(
     documentId: string,
-    userId: string,
+    tenantId: string,
     identityId: string,
   ): Promise<ActiveDocument | null> {
     const [row] = await this.db
       .select({
-        canManage: documentActionSql({ userId, identityId }, "manage"),
-        canWrite: documentActionSql({ userId, identityId }, "write"),
-        offlineCacheAllowed: sql<boolean>`coalesce((select w.offline_cache_allowed from workspaces w where w.user_id = ${userId} and w.id = documents.workspace_id),false)`,
-        canComment: documentActionSql({ userId, identityId }, "comment"),
-        canMove: documentActionSql({ userId, identityId }, "move"),
-        canShare: documentActionSql({ userId, identityId }, "share"),
-        canExport: documentActionSql({ userId, identityId }, "export"),
+        canManage: documentActionSql({ tenantId, identityId }, "manage"),
+        canWrite: documentActionSql({ tenantId, identityId }, "write"),
+        offlineCacheAllowed: sql<boolean>`coalesce((select w.offline_cache_allowed from workspaces w where w.tenant_id = ${tenantId} and w.id = documents.workspace_id),false)`,
+        canComment: documentActionSql({ tenantId, identityId }, "comment"),
+        canMove: documentActionSql({ tenantId, identityId }, "move"),
+        canShare: documentActionSql({ tenantId, identityId }, "share"),
+        canExport: documentActionSql({ tenantId, identityId }, "export"),
 
         id: documents.id,
-        userId: documents.userId,
+        tenantId: documents.tenantId,
         title: documents.title,
         workspaceId: documents.workspaceId,
         catalogId: documents.catalogId,
@@ -2714,7 +2732,7 @@ export class DocumentRepository {
       .where(
         and(
           eq(documents.id, documentId),
-          eq(documents.userId, userId),
+          eq(documents.tenantId, tenantId),
           eq(documents.status, "active"),
         ),
       )

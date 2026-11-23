@@ -55,7 +55,7 @@ export class AuthorizationEventWorker {
       .innerJoin(
         documents,
         and(
-          eq(documents.userId, documentShares.userId),
+          eq(documents.tenantId, documentShares.tenantId),
           eq(documents.id, documentShares.documentId),
         ),
       )
@@ -84,7 +84,7 @@ export class AuthorizationEventWorker {
       .limit(100);
     const scopes = new Map(
       events.map((event) => [
-        `${event.userId}:${event.workspaceId}:${event.documentId ?? "*"}`,
+        `${event.tenantId}:${event.workspaceId}:${event.documentId ?? "*"}`,
         event,
       ]),
     );
@@ -102,7 +102,7 @@ export class AuthorizationEventWorker {
         .innerJoin(documentGenerations, eq(documents.id, documentGenerations.documentId))
         .where(
           and(
-            eq(documents.userId, event.userId),
+            eq(documents.tenantId, event.tenantId),
             event.documentId
               ? eq(documents.id, event.documentId)
               : eq(documents.workspaceId, event.workspaceId),

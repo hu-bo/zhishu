@@ -38,7 +38,7 @@ export const aiConversations = pgTable(
   "ai_conversations",
   {
     id: text("id").notNull(),
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     identityId: text("identity_id"),
     visitorId: text("visitor_id"),
     siteId: text("site_id"),
@@ -60,21 +60,21 @@ export const aiConversations = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.userId, t.id] }),
+    primaryKey({ columns: [t.tenantId, t.id] }),
     foreignKey({
       name: "ai_conversations_identity_fk",
-      columns: [t.userId, t.identityId],
-      foreignColumns: [identityProfiles.userId, identityProfiles.identityId],
+      columns: [t.tenantId, t.identityId],
+      foreignColumns: [identityProfiles.tenantId, identityProfiles.identityId],
     }),
     foreignKey({
       name: "ai_conversations_site_fk",
-      columns: [t.userId, t.siteId],
-      foreignColumns: [qaSites.userId, qaSites.id],
+      columns: [t.tenantId, t.siteId],
+      foreignColumns: [qaSites.tenantId, qaSites.id],
     }),
     foreignKey({
       name: "ai_conversations_target_document_fk",
-      columns: [t.userId, t.targetDocumentId],
-      foreignColumns: [documents.userId, documents.id],
+      columns: [t.tenantId, t.targetDocumentId],
+      foreignColumns: [documents.tenantId, documents.id],
     }),
     check(
       "ai_conversations_owner_check",
@@ -98,13 +98,13 @@ export const aiConversations = pgTable(
     // expressions make a NULL siteId an explicit part of the internal-entry tuple so public
     // and internal contexts can never collide (NULLS NOT DISTINCT emulation for pg-core).
     uniqueIndex("ai_conversations_identity_creation_uq")
-      .on(t.userId, t.identityId, sql`coalesce(${t.siteId}, '')`, t.creationKey)
+      .on(t.tenantId, t.identityId, sql`coalesce(${t.siteId}, '')`, t.creationKey)
       .where(sql`${t.creationKey} is not null and ${t.identityId} is not null`),
     uniqueIndex("ai_conversations_visitor_creation_uq")
-      .on(t.userId, t.visitorId, t.siteId, t.creationKey)
+      .on(t.tenantId, t.visitorId, t.siteId, t.creationKey)
       .where(sql`${t.creationKey} is not null and ${t.visitorId} is not null`),
-    index("ai_conversations_identity_recent_idx").on(t.userId, t.identityId, t.createdAt, t.id),
-    index("ai_conversations_site_idx").on(t.userId, t.siteId, t.createdAt, t.id),
+    index("ai_conversations_identity_recent_idx").on(t.tenantId, t.identityId, t.createdAt, t.id),
+    index("ai_conversations_site_idx").on(t.tenantId, t.siteId, t.createdAt, t.id),
     index("ai_conversations_expires_idx").on(t.expiresAt),
   ],
 );
@@ -113,7 +113,7 @@ export const aiRuns = pgTable(
   "ai_runs",
   {
     id: text("id").notNull(),
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     conversationId: text("conversation_id").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),
     inputHash: text("input_hash").notNull(),
@@ -132,17 +132,17 @@ export const aiRuns = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.userId, t.id] }),
-    uniqueIndex("ai_runs_user_conversation_id_uq").on(t.userId, t.conversationId, t.id),
+    primaryKey({ columns: [t.tenantId, t.id] }),
+    uniqueIndex("ai_runs_tenant_conversation_id_uq").on(t.tenantId, t.conversationId, t.id),
     foreignKey({
       name: "ai_runs_conversation_fk",
-      columns: [t.userId, t.conversationId],
-      foreignColumns: [aiConversations.userId, aiConversations.id],
+      columns: [t.tenantId, t.conversationId],
+      foreignColumns: [aiConversations.tenantId, aiConversations.id],
     }),
-    uniqueIndex("ai_runs_idempotency_uq").on(t.userId, t.conversationId, t.idempotencyKey),
+    uniqueIndex("ai_runs_idempotency_uq").on(t.tenantId, t.conversationId, t.idempotencyKey),
     // One executing run per conversation; queued rows are handled by the admission budget.
     uniqueIndex("ai_runs_conversation_active_uq")
-      .on(t.userId, t.conversationId)
+      .on(t.tenantId, t.conversationId)
       .where(sql`${t.status} in ('running','waiting-approval')`),
     check(
       "ai_runs_status_check",
@@ -154,7 +154,7 @@ export const aiRuns = pgTable(
       "ai_runs_error_code_check",
       sql`${t.errorCode} is null or ${t.errorCode} ~ '^[A-Z][A-Z0-9_]{0,63}$'`,
     ),
-    index("ai_runs_conversation_recent_idx").on(t.userId, t.conversationId, t.createdAt, t.id),
+    index("ai_runs_conversation_recent_idx").on(t.tenantId, t.conversationId, t.createdAt, t.id),
     index("ai_runs_expiry_idx").on(t.status, t.expiresAt),
     index("ai_runs_lease_idx").on(t.status, t.leaseExpiresAt),
   ],
@@ -164,7 +164,7 @@ export const aiMessages = pgTable(
   "ai_messages",
   {
     id: text("id").notNull(),
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     conversationId: text("conversation_id").notNull(),
     runId: text("run_id").notNull(),
     role: text("role").$type<"user" | "assistant">().notNull(),
@@ -177,25 +177,25 @@ export const aiMessages = pgTable(
     committedAt: timestamp("committed_at", { withTimezone: true }),
   },
   (t) => [
-    primaryKey({ columns: [t.userId, t.id] }),
+    primaryKey({ columns: [t.tenantId, t.id] }),
     foreignKey({
       name: "ai_messages_conversation_fk",
-      columns: [t.userId, t.conversationId],
-      foreignColumns: [aiConversations.userId, aiConversations.id],
+      columns: [t.tenantId, t.conversationId],
+      foreignColumns: [aiConversations.tenantId, aiConversations.id],
     }),
     foreignKey({
       name: "ai_messages_run_fk",
-      columns: [t.userId, t.conversationId, t.runId],
-      foreignColumns: [aiRuns.userId, aiRuns.conversationId, aiRuns.id],
+      columns: [t.tenantId, t.conversationId, t.runId],
+      foreignColumns: [aiRuns.tenantId, aiRuns.conversationId, aiRuns.id],
     }),
     uniqueIndex("ai_messages_client_id_uq")
-      .on(t.userId, t.conversationId, t.clientMessageId)
+      .on(t.tenantId, t.conversationId, t.clientMessageId)
       .where(sql`${t.clientMessageId} is not null`),
     uniqueIndex("ai_messages_run_user_uq")
-      .on(t.userId, t.conversationId, t.runId)
+      .on(t.tenantId, t.conversationId, t.runId)
       .where(sql`${t.role} = 'user'`),
     uniqueIndex("ai_messages_run_assistant_uq")
-      .on(t.userId, t.conversationId, t.runId)
+      .on(t.tenantId, t.conversationId, t.runId)
       .where(sql`${t.role} = 'assistant'`),
     check("ai_messages_role_check", sql`${t.role} in ('user','assistant')`),
     check("ai_messages_state_check", sql`${t.state} in ('staged','committed','withdrawn')`),
@@ -204,7 +204,7 @@ export const aiMessages = pgTable(
       "ai_messages_committed_at_check",
       sql`${t.state} = 'committed' or ${t.committedAt} is null`,
     ),
-    index("ai_messages_conversation_page_idx").on(t.userId, t.conversationId, t.createdAt, t.id),
+    index("ai_messages_conversation_page_idx").on(t.tenantId, t.conversationId, t.createdAt, t.id),
   ],
 );
 
@@ -212,7 +212,7 @@ export const aiArtifacts = pgTable(
   "ai_artifacts",
   {
     id: text("id").notNull(),
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     conversationId: text("conversation_id").notNull(),
     runId: text("run_id").notNull(),
     /** Server execution identity (stepId/toolCallId); never model-authored. */
@@ -230,14 +230,14 @@ export const aiArtifacts = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.userId, t.id] }),
+    primaryKey({ columns: [t.tenantId, t.id] }),
     foreignKey({
       name: "ai_artifacts_run_fk",
-      columns: [t.userId, t.conversationId, t.runId],
-      foreignColumns: [aiRuns.userId, aiRuns.conversationId, aiRuns.id],
+      columns: [t.tenantId, t.conversationId, t.runId],
+      foreignColumns: [aiRuns.tenantId, aiRuns.conversationId, aiRuns.id],
     }),
     uniqueIndex("ai_artifacts_producer_result_uq").on(
-      t.userId,
+      t.tenantId,
       t.runId,
       t.producerCallId,
       t.resultIndex,
@@ -252,14 +252,14 @@ export const aiArtifacts = pgTable(
       "ai_artifacts_application_state_check",
       sql`${t.applicationState} is null or ${t.applicationState} in ('pending','partial','applied','rejected','conflict','unknown')`,
     ),
-    index("ai_artifacts_conversation_kind_idx").on(t.userId, t.conversationId, t.kind, t.state),
+    index("ai_artifacts_conversation_kind_idx").on(t.tenantId, t.conversationId, t.kind, t.state),
   ],
 );
 
 export const aiEvents = pgTable(
   "ai_events",
   {
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     conversationId: text("conversation_id").notNull(),
     sequence: bigint("sequence", { mode: "bigint" }).notNull(),
     type: text("type")
@@ -277,11 +277,11 @@ export const aiEvents = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.userId, t.conversationId, t.sequence] }),
+    primaryKey({ columns: [t.tenantId, t.conversationId, t.sequence] }),
     foreignKey({
       name: "ai_events_conversation_fk",
-      columns: [t.userId, t.conversationId],
-      foreignColumns: [aiConversations.userId, aiConversations.id],
+      columns: [t.tenantId, t.conversationId],
+      foreignColumns: [aiConversations.tenantId, aiConversations.id],
     }).onDelete("cascade"),
     check(
       "ai_events_type_check",

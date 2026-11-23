@@ -68,7 +68,7 @@ export class AssetService {
     private readonly storage: AssetObjectStorage | null,
     private readonly options: {
       maxBytes: number;
-      maxUserBytes: number;
+      maxTenantBytes: number;
       uploadTtlSeconds: number;
       accessUrlTtlSeconds: number;
       orphanRetentionSeconds: number;
@@ -98,9 +98,9 @@ export class AssetService {
       principal,
       documentId,
       file,
-      objectKey: `users/${principal.userId}/documents/${documentId}/${randomUUID()}`,
+      objectKey: `tenants/${principal.tenantId}/documents/${documentId}/${randomUUID()}`,
       maxBytes: this.options.maxBytes,
-      maxUserBytes: this.options.maxUserBytes,
+      maxTenantBytes: this.options.maxTenantBytes,
       expiresAt,
       ...(idempotencyKey
         ? {
@@ -166,14 +166,14 @@ export class AssetService {
         sha256,
       });
     } catch (error) {
-      await this.repository.markFailed(principal.userId, assetId);
+      await this.repository.markFailed(principal.tenantId, assetId);
       throw new DomainError("SERVICE_UNAVAILABLE", "Asset storage is unavailable", undefined, {
         cause: error,
       });
     }
     if (
       !(await this.repository.markUploaded({
-        userId: principal.userId,
+        tenantId: principal.tenantId,
         assetId,
         actualSize: bytes.byteLength,
         sha256,

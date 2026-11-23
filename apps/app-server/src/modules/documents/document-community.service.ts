@@ -37,7 +37,7 @@ export class DocumentCommunityService {
       .from(documents)
       .where(
         and(
-          eq(documents.userId, principal.userId),
+          eq(documents.tenantId, principal.tenantId),
           eq(documents.id, documentId),
           eq(documents.status, "active"),
         ),
@@ -56,7 +56,7 @@ export class DocumentCommunityService {
     input: { accessMode: DocumentAccessMode; metadataRevision: number },
   ) {
     const result = await this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
       const document = await this.requireDocument(tx, principal, documentId, "manage", true);
       if (document.metadataRevision !== input.metadataRevision)
         throw new DomainError("CONFLICT", "文档权限已变化，请刷新后重试");
@@ -64,7 +64,7 @@ export class DocumentCommunityService {
         .select()
         .from(workspaces)
         .where(
-          and(eq(workspaces.userId, principal.userId), eq(workspaces.id, document.workspaceId)),
+          and(eq(workspaces.tenantId, principal.tenantId), eq(workspaces.id, document.workspaceId)),
         )
         .limit(1);
       if (
@@ -79,7 +79,7 @@ export class DocumentCommunityService {
           accessMode: document.accessMode,
           generationId: null,
         };
-      const before = await documentRecipients(tx, principal.userId, documentId);
+      const before = await documentRecipients(tx, principal.tenantId, documentId);
       await tx
         .update(documents)
         .set({
@@ -88,16 +88,16 @@ export class DocumentCommunityService {
           updatedAt: new Date(),
         })
         .where(eq(documents.id, documentId));
-      await requireDocumentManager(tx, principal.userId, documentId);
+      await requireDocumentManager(tx, principal.tenantId, documentId);
       const recipients = new Set([
         ...before,
-        ...(await documentRecipients(tx, principal.userId, documentId)),
+        ...(await documentRecipients(tx, principal.tenantId, documentId)),
       ]);
       const eventKey = `access:${randomUUID()}`;
       await insertNotifications(
         tx,
         [...recipients].map((recipientId) => ({
-          userId: principal.userId,
+          tenantId: principal.tenantId,
           actorId: principal.identityId,
           recipientId,
           type: "permission",
@@ -108,7 +108,7 @@ export class DocumentCommunityService {
         })),
       );
       await tx.insert(documentAuditEvents).values({
-        userId: principal.userId,
+        tenantId: principal.tenantId,
         actorIdentityId: principal.identityId,
         action: "document.acl-updated",
         resourceId: documentId,
@@ -152,13 +152,13 @@ export class DocumentCommunityService {
       .leftJoin(
         identityProfiles,
         and(
-          eq(identityProfiles.userId, documentComments.userId),
+          eq(identityProfiles.tenantId, documentComments.tenantId),
           eq(identityProfiles.identityId, documentComments.authorId),
         ),
       )
       .where(
         and(
-          eq(documentComments.userId, principal.userId),
+          eq(documentComments.tenantId, principal.tenantId),
           eq(documentComments.documentId, documentId),
         ),
       )
@@ -181,7 +181,7 @@ export class DocumentCommunityService {
     input: { id: string; body: string; mentionIds: string[] },
   ) {
     return this.db.transaction(async (tx) => {
-      await readKnowledgeTree(tx, principal.userId);
+      await readKnowledgeTree(tx, principal.tenantId);
       const document = await this.requireDocument(tx, principal, documentId, "comment", true);
       const [existing] = await tx
         .select()
@@ -190,7 +190,7 @@ export class DocumentCommunityService {
         .limit(1);
       if (existing) {
         if (
-          existing.userId !== principal.userId ||
+          existing.tenantId !== principal.tenantId ||
           existing.documentId !== documentId ||
           existing.authorId !== principal.identityId ||
           existing.body !== input.body ||
@@ -205,7 +205,7 @@ export class DocumentCommunityService {
           .from(identityProfiles)
           .where(
             and(
-              eq(identityProfiles.userId, principal.userId),
+              eq(identityProfiles.tenantId, principal.tenantId),
               inArray(identityProfiles.identityId, input.mentionIds),
             ),
           );
@@ -215,7 +215,7 @@ export class DocumentCommunityService {
           if (
             !(await hasDocumentPermission(
               tx,
-              { userId: principal.userId, identityId },
+              { tenantId: principal.tenantId, identityId },
               documentId,
               "read",
             ))
@@ -224,7 +224,7 @@ export class DocumentCommunityService {
       }
       await tx.insert(documentComments).values({
         ...input,
-        userId: principal.userId,
+        tenantId: principal.tenantId,
         documentId,
         authorId: principal.identityId,
       });
@@ -233,11 +233,11 @@ export class DocumentCommunityService {
         .from(documentComments)
         .where(
           and(
-            eq(documentComments.userId, principal.userId),
+            eq(documentComments.tenantId, principal.tenantId),
             eq(documentComments.documentId, documentId),
           ),
         );
-      const readable = new Set(await documentRecipients(tx, principal.userId, documentId));
+      const readable = new Set(await documentRecipients(tx, principal.tenantId, documentId));
       const recipients = new Set([
         document.createdBy,
         ...participants.map((p) => p.authorId),
@@ -248,7 +248,7 @@ export class DocumentCommunityService {
         [...recipients]
           .filter((id) => readable.has(id))
           .map((recipientId) => ({
-            userId: principal.userId,
+            tenantId: principal.tenantId,
             actorId: principal.identityId,
             recipientId,
             type: input.mentionIds.includes(recipientId) ? "mention" : "comment",
@@ -265,13 +265,13 @@ export class DocumentCommunityService {
   }
   async deleteComment(principal: Principal, documentId: string, id: string) {
     await this.db.transaction(async (tx) => {
-      await readKnowledgeTree(tx, principal.userId);
+      await readKnowledgeTree(tx, principal.tenantId);
       await this.requireDocument(tx, principal, documentId, "comment", true);
       const deleted = await tx
         .delete(documentComments)
         .where(
           and(
-            eq(documentComments.userId, principal.userId),
+            eq(documentComments.tenantId, principal.tenantId),
             eq(documentComments.documentId, documentId),
             eq(documentComments.id, id),
             eq(documentComments.authorId, principal.identityId),

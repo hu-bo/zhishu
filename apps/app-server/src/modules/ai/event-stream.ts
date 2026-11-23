@@ -45,8 +45,8 @@ export class ConversationEventBus implements LiveFeed {
   }
 }
 
-export const conversationKey = (conversation: Pick<ConversationRow, "userId" | "id">) =>
-  `${conversation.userId}:${conversation.id}`;
+export const conversationKey = (conversation: Pick<ConversationRow, "tenantId" | "id">) =>
+  `${conversation.tenantId}:${conversation.id}`;
 
 export interface SseHandle {
   frame(value: unknown, id?: string): void;
@@ -130,7 +130,7 @@ export async function streamConversation(
       resync();
       return;
     }
-    const rows = await service.events(conversation.userId, conversation.id, position, 128);
+    const rows = await service.events(conversation.tenantId, conversation.id, position, 128);
     for (const row of rows) {
       if (signal.aborted || sse.closed) return;
       const candidate = {

@@ -4,7 +4,7 @@ import { index, integer, pgTable, primaryKey, text, timestamp, uuid } from "driz
 export const documentIndexes = pgTable(
   "document_indexes",
   {
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     documentId: text("document_id").notNull(),
     activeIndexVersion: uuid("active_index_version"),
     generationId: text("generation_id"),
@@ -21,7 +21,7 @@ export const documentIndexes = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.userId, t.documentId] }),
+    primaryKey({ columns: [t.tenantId, t.documentId] }),
     index("document_indexes_ready_idx").on(t.availableAt, t.leaseUntil),
   ],
 );

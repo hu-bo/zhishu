@@ -12,7 +12,7 @@
 | F4 目录 ACL     | 按用户要求延期；存储/继承模型保留，菜单禁用且标记“规划中”，没有开放目录授权写接口。                                                                                                                  |
 | F5 来源生命周期 | 链接区分长期邀请 invite 与限时访问 access。加入后按 sourceShareId 独立保存；访问来源随撤销、过期和创建者失去委托资格失效，邀请接受后独立保留。撤销单一来源不删除其他有效来源，旧无来源授权保守保留。 |
 | F6 转授权上限   | read/share 是分享前提，编辑档额外需要 write/comment；访问链接不能作为再次委托的权限来源，避免循环授权。                                                                                              |
-| F7 事务一致性   | 授权变更持用户排他锁，正文/标题/版本/附件/评论写入先持共享锁；判权、业务落盘和审计在事务内完成。真实多连接验证先提交的撤权阻止排队中的加入或写入。                                                   |
+| F7 事务一致性   | 授权变更持租户排他锁，正文/标题/版本/附件/评论写入先持共享锁；判权、业务落盘和审计在事务内完成。真实多连接验证先提交的撤权阻止排队中的加入或写入。                                                   |
 | F8 数据搬运     | 模板复制要求 export 和目标空间组织权。跨空间文档/目录移动要求可导出全部内容，并提交绑定源/目标授权版本、元信息和子树关系的影响预览；撤销旧公开链接，保留明确提示的独立授权，失效预览拒绝提交。       |
 | P4 跨实例与审计 | 同事务 outbox、单调空间授权版本、每实例独立消费者和链接到期扫描；关闭相关本地协同连接。空间设置支持审计、缓存策略和治理操作；文档面板解释当前角色与直接授权来源。                                    |
 | P4 离线         | 授权版本、来源到期或可访问空间变化后清理接口缓存和已确认快照，隔离保留未确认草稿；禁止旧在途响应回写，到期离线缓存须重新联网校验。空间所有者可关闭正文离线缓存。                                     |
@@ -46,7 +46,7 @@
 - 所有文档列表视图先校验 read，再应用创建者、归档/回收站管理、收藏和最近过滤，过滤发生在分页前。修复第一批移除创建者特权后 mine 视图仍可能返回已撤权文档摘要的问题。
 - 前端增加共享文档独立视图，空间不在列表时仍可打开已授权文档；隐藏空间成员、设置及目录入口，返回动作进入文档列表。旧 `/documents/:id` 入口改为由稳定定位结果触发一次导航，修复浏览器检查中发现的重复重定向。
 
-验证：隔离 PGlite/Fastify 权限测试 **11 项通过**，新增个人空间单篇分享、路径脱敏、可见子目录/不可见祖先、hasChildren、跨用户、分页、收藏/最近及创建者撤权后所有列表视图的回归。Playwright 网络夹具验证旧 URL 跳转、共享文档独立视图、返回列表、1440px 浅色与 390px 暗色布局；窄屏页面宽度等于视口且无空间管理入口。截图位于 `output/playwright/`。浏览器夹具将正文协同会话固定返回 503，用于检查入口、布局和失败反馈，**不代表真实 WebSocket/正文协同已验收**。
+验证：隔离 PGlite/Fastify 权限测试 **11 项通过**，新增个人空间单篇分享、路径脱敏、可见子目录/不可见祖先、hasChildren、跨租户、分页、收藏/最近及创建者撤权后所有列表视图的回归。Playwright 网络夹具验证旧 URL 跳转、共享文档独立视图、返回列表、1440px 浅色与 390px 暗色布局；窄屏页面宽度等于视口且无空间管理入口。截图位于 `output/playwright/`。浏览器夹具将正文协同会话固定返回 503，用于检查入口、布局和失败反馈，**不代表真实 WebSocket/正文协同已验收**。
 
 整仓第一轮 `pnpm check` 通过；最终复检时仓库同时新增的 `packages/casdoor` 有 14 个文件未满足 Prettier，检查停在格式阶段。本批文件单独格式检查、服务端类型/lint、前端类型/构建/lint、OpenAPI/Orval 一致性及权限测试均通过。未改动这些新增 Casdoor 文件，也未运行需要真实数据库的 knowledge smoke；仅同步了其与空间发现政策相关的断言。
 
@@ -61,13 +61,13 @@
 | F6 转授权上限与升级 | 创建可阅读链接须具有 read + share；可编辑链接还须具有 write + comment。加入按完整目标能力判断，已有 read 不阻止升级；重试不重复增加计数。前端根据服务端 canWrite/canComment 禁用编辑档位 | 普通链接只授 read/comment/write，不授管理、分享、导出或 AI                            |
 | F2 团队创建者治理   | 删除文档 createdBy → owner 的运行时映射。正常团队继承文档跟随当前成员角色，创建者降级/移出后不再获得旁路；个人/受限文档创建时写入显式 admin                                              | 独立直接授权仍须独立撤销；空间 owner 关系仍沿用现有字段，所有权转移与治理恢复尚未实现 |
 | 管理连续性          | 访问模式、文档 ACL、空间角色策略、成员变更及文档/目录移动删除在事务内校验保留可查看且可管理文档的主体；拒绝删除/降级最后管理员并回滚                                                     | 尚未提供目录逐成员授权和断继承 API/UI；未验证账号停用场景                             |
-| F7 分享事务         | create/join/revoke 与成员、角色策略、访问模式、目录变更共用 knowledge-tree 用户事务锁。链接状态、文档状态、委托资格、授权、计数、通知及审计均在事务中检查/提交；文档 ACL 也加入此锁协议  | 尚未进行真实 PostgreSQL 多连接并发验收；PGlite 通过不证明多连接锁调度                 |
+| F7 分享事务         | create/join/revoke 与成员、角色策略、访问模式、目录变更共用 knowledge-tree 租户事务锁。链接状态、文档状态、委托资格、授权、计数、通知及审计均在事务中检查/提交；文档 ACL 也加入此锁协议  | 尚未进行真实 PostgreSQL 多连接并发验收；PGlite 通过不证明多连接锁调度                 |
 | F5 链接委托资格     | 公共详情、正文、附件及加入都复核创建者当前完整委托资格，失去资格时停止公开访问和新加入                                                                                                   | 仍为“接受后独立长期授权”的邀请语义；来源绑定、限时 access link、来源级撤销尚未实现    |
 | F8 AI 隐含权限      | 单独 write 不再隐含 ai，避免编辑邀请顺带授予 AI；editor 角色的默认 AI 能力仍由角色策略显式配置                                                                                           | 模板复制/export 政策、跨空间搬运影响预览仍待实施                                      |
 
 新增 forward migration `0039_explicit_document_managers`，不改写已发布 migration。私人/受限旧文档、无业务所有者的旧系统空间文档，以及被受限目录隔断的旧文档，将原创建者管理能力回填为可撤销的显式 manage 兼容授权并写审计，避免迁移后无人管理；正常团队继承文档不回填创建者直接授权。这些兼容授权和既有直接授权不会因移出空间自动删除，界面/API 可独立撤销。本批没有执行开发或生产数据库迁移，部署时必须将 migration 与服务版本一起切换，旧实例同时退出。
 
-验证：隔离 PGlite/Fastify 权限测试 **9 项通过**，包括 migration 兼容、SQL/Casbin 判权、创建者降级/移除、直接授权独立撤销、最后管理员保护、策略降级回滚、分享上限、只读升级、跨用户拒绝、过期/撤销/委托资格失效及审计故障注入回滚。整仓 **pnpm check 通过**，覆盖格式、lint、类型、构建、OpenAPI 导出及 Orval 生成漂移。真实多连接 revoke/join、WebSocket durable ack、浏览器多账号和多实例广播仍待专项验收。
+验证：隔离 PGlite/Fastify 权限测试 **9 项通过**，包括 migration 兼容、SQL/Casbin 判权、创建者降级/移除、直接授权独立撤销、最后管理员保护、策略降级回滚、分享上限、只读升级、跨租户拒绝、过期/撤销/委托资格失效及审计故障注入回滚。整仓 **pnpm check 通过**，覆盖格式、lint、类型、构建、OpenAPI 导出及 Orval 生成漂移。真实多连接 revoke/join、WebSocket durable ack、浏览器多账号和多实例广播仍待专项验收。
 
 下一批继续处理 F1 的空间/路径最小披露、F4 的目录 ACL API/UI，以及 F5 的来源生命周期；F8 数据搬运和 P4 离线、多实例、审计解释仍保留为后续任务。
 
@@ -112,7 +112,7 @@
 
 | 用户问题                                         | 审查结论                                                                                                                                                                                               | 主要依据                                                                                               |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| 文档/目录 tree 是否按 ACL 展示？                 | **文档节点基本是；空间与目录不是。** 文档按统一 SQL 判读，目录树只限制 user/workspace/parent，未要求空间成员或目录读取权；同一用户下的用户可查看其他空间甚至个人空间的目录元信息。                     | `document-access.ts:12`；`catalog.repository.ts:142`；`knowledge.repository.ts:46`                     |
+| 文档/目录 tree 是否按 ACL 展示？                 | **文档节点基本是；空间与目录不是。** 文档按统一 SQL 判读，目录树只限制 tenant/workspace/parent，未要求空间成员或目录读取权；同租户用户可查看其他空间甚至个人空间的目录元信息。                         | `document-access.ts:12`；`catalog.repository.ts:142`；`knowledge.repository.ts:46`                     |
 | 拼接 URL 访问文档接口是否拦截？                  | **核心正文、详情、版本、编辑、删除有服务端校验。** 未登录通常 401，无权访问通常伪装为 404。例外是明确公开的分享能力链接，以及空间/目录元信息边界。不能据此承诺“所有相关接口均安全”。                   | `identity/index.ts:7`；`document.service.ts:590`；`document.repository.ts:3297`                        |
 | 前端编辑是否拦截？                               | **正文编辑有拦截。** 根据服务端协同 session 的 `readOnly` 禁止编辑，用户选择阅读模式另外控制；缓存正文也只读。但标题、标签等用 `canManage` 控制，而 API 实际要求 `write`，会误拦有编辑权的用户。       | `document-collaboration-editor.tsx:493`；`document-topbar.tsx:159`；`document.repository.ts:1570` 附近 |
 | 删除文档前端/API 是否拦截？                      | **两端都有。** 前端按 `canManage` 隐藏或禁用，API 在事务内检查 `manage`，不是有 `write` 就能删。但目录 children 中的 `canManage` 仅看创建者，漏掉 API 允许的继承管理员；回收站列表也只列本人创建文档。 | `document.repository.ts:1658`；`catalog.repository.ts:195`；`routes/_app/documents/index.tsx:429` 附近 |
@@ -124,16 +124,16 @@
 
 - 静态追踪：`UI → Orval client → route → service/repository → SQL/事务 → 协同会话与落盘`。正文、目录、成员、版本、分享、附件与 AI 相关权限入口均作了交叉检查；后两者属于扩展抽查，并非全量专项审计。
 - 实际执行：`pnpm --filter @react-fastify-template/app-server test:workspace-policy`，**3 项通过，0 失败**。这些测试覆盖空间角色纯函数与空间 schema，不证明 HTTP、数据库 SQL、WebSocket 和浏览器链路全部通过。
-- 阅读现有 `community-smoke.ts`：已有跨用户、restricted、继承、成员移除、ACL、评论、AI/附件等案例，也明确测试了“移出空间后保留直接 ACL”的现有语义。
+- 阅读现有 `community-smoke.ts`：已有跨租户、restricted、继承、成员移除、ACL、评论、AI/附件等案例，也明确测试了“移出空间后保留直接 ACL”的现有语义。
 - **没有执行会迁移/写入数据库的 smoke、真实多账号 HTTP 攻防或浏览器回归。** `community-smoke.ts:76` 要求 disposable test/smoke/qa 数据库，且会运行 migration；本次未建立这样的隔离环境。下文“复现步骤”是根据代码得出的待执行回归场景，不冒充已运行结果。
 - 没有运行整仓 `pnpm check`：本次仅新增 Markdown；该命令会构建并导出生成物，仓库同时存在大量既有未提交改动。只对本文单独检查格式。
 - 风险级别表示本次建议处理优先级，不是经过部署环境验证的 CVSS 评分。
 
 ## 3. 当前授权模型
 
-### 3.1 身份与用户
+### 3.1 身份与租户
 
-`registerIdentityGuard` 在 `/api` 的注册树中校验可信 `Principal`，要求账号 active，再把身份放入 request；`auth: false` 的明确公共路由例外。业务使用 `principal.userId/identityId`，不会把 URL 中的用户 ID 直接视作当前身份。
+`registerIdentityGuard` 在 `/api` 的注册树中校验可信 `Principal`，要求账号 active，再把身份放入 request；`auth: false` 的明确公共路由例外。业务使用 `principal.tenantId/identityId`，不会把 URL 中的用户 ID 直接视作当前身份。
 
 `app.ts:41` 附近支持 mock 与外部可信 authenticator，外部模式缺少 authenticator 会拒绝启动；`config.ts:137` 附近阻止 production 使用 mock。这是正确基础。本次没有验证生产身份提供方、禁用账号传播时效及 token 撤销。
 
@@ -154,7 +154,7 @@
 `documentActionSql` 是现有最值得保留的集中决策入口，`hasDocumentPermission` 复用它。逻辑可概括为：
 
 ```text
-同一用户 AND（文档创建者 OR 满足团队空间继承规则 OR 显式 document_acl）
+同租户 AND（文档创建者 OR 满足团队空间继承规则 OR 显式 document_acl）
 ```
 
 | 授权来源                                     | read                                  | write/comment/ai                       | share/export    | manage           |
@@ -171,7 +171,7 @@
 
 ### 3.4 目录
 
-没有目录 ACL 或目录角色。创建要求空间组织权；重命名、移动、删除通常要求“目录创建者 + 空间组织权”。目录读取则只按用户与位置过滤。
+没有目录 ACL 或目录角色。创建要求空间组织权；重命名、移动、删除通常要求“目录创建者 + 空间组织权”。目录读取则只按租户与位置过滤。
 
 删除目录会把其中的文档移至空间根目录并放入回收站，而非永久删除；如果子树含其他人创建的目录或文档，会拒绝操作。这些是当前约束，不是统一管理角色能力。
 
@@ -179,17 +179,17 @@
 
 ### 4.1 列表、树、搜索、面包屑
 
-| 入口                      | 实际校验                                                          | 评价                                                                         |
-| ------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| 文档 all/recent/favorites | `DocumentRepository.list` 使用 `documentActionSql(read)`          | 正向基础；计数与分页在过滤后进行                                             |
-| mine/archived/trash       | 同一用户 + 创建者                                                 | 当前创建者永远可读，故未构成额外文档泄露；但管理员的管理视图不完整           |
-| 目录 children 的文档      | active + 同一用户/空间/目录 + read SQL；canWrite 也用 SQL         | 文档正文元信息过滤正确                                                       |
-| 目录 children 的目录      | 同一用户/空间/parent；无目录可见性判定                            | **空间非成员也可枚举目录**                                                   |
-| 空间列表                  | 仅 user 过滤；返回名称、描述、创建者、个人归属、成员数、根目录 ID | **空间成员边界未落实**；documentCount 虽按 read 计数，也不能补救元信息暴露   |
-| 全局搜索                  | active + read SQL 后匹配标题/正文                                 | 文档命中过滤正确；返回空间名及真实目录路径，路径没有独立脱敏                 |
-| locate                    | 文档 read 后查询真实祖先                                          | 文档不可读会 404；可读子文档的祖先名称全部返回，未来目录私密化时必须同步调整 |
+| 入口                      | 实际校验                                                            | 评价                                                                         |
+| ------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 文档 all/recent/favorites | `DocumentRepository.list` 使用 `documentActionSql(read)`            | 正向基础；计数与分页在过滤后进行                                             |
+| mine/archived/trash       | 同租户 + 创建者                                                     | 当前创建者永远可读，故未构成额外文档泄露；但管理员的管理视图不完整           |
+| 目录 children 的文档      | active + 同租户/空间/目录 + read SQL；canWrite 也用 SQL             | 文档正文元信息过滤正确                                                       |
+| 目录 children 的目录      | 同租户/空间/parent；无目录可见性判定                                | **空间非成员也可枚举目录**                                                   |
+| 空间列表                  | 仅 tenant 过滤；返回名称、描述、创建者、个人归属、成员数、根目录 ID | **空间成员边界未落实**；documentCount 虽按 read 计数，也不能补救元信息暴露   |
+| 全局搜索                  | active + read SQL 后匹配标题/正文                                   | 文档命中过滤正确；返回空间名及真实目录路径，路径没有独立脱敏                 |
+| locate                    | 文档 read 后查询真实祖先                                            | 文档不可读会 404；可读子文档的祖先名称全部返回，未来目录私密化时必须同步调整 |
 
-目前注释还明确把目录结构描述为 user-visible。因此，元信息暴露是**确定的实现行为**；是否视为当前产品安全缺陷，取决于空间是否允许同一用户发现。对个人空间及用户提出的空间/目录 ACL 目标，应按必须收紧处理。
+目前注释还明确把目录结构描述为 tenant-visible。因此，元信息暴露是**确定的实现行为**；是否视为当前产品安全缺陷，取决于空间是否允许同租户发现。对个人空间及用户提出的空间/目录 ACL 目标，应按必须收紧处理。
 
 ### 4.2 直接请求与编辑
 
@@ -197,7 +197,7 @@
 
 协同链路也有多层拦截：
 
-1. `createCollaborationSession` 先检查 read，再独立计算 write 与 schema 兼容性；服务端签发带 document/generation/user/subject/有效期的票据。
+1. `createCollaborationSession` 先检查 read，再独立计算 write 与 schema 兼容性；服务端签发带 document/generation/tenant/subject/有效期的票据。
 2. `hocuspocus.server.ts:472` 握手验票并复核 read 与代次；token 更新继续检查实时权限。
 3. 写更新在 `:644` 附近检查有效期、当前 read/write 与只读连接；只读会话不能提交改变正文的 update。
 4. `persistUpdate` 在事务内锁定文档/代次并复核 write，再落库。不能通过修改前端 editable 绕过落盘检查。
@@ -219,7 +219,7 @@
 
 证据：`knowledge.repository.ts:46` 的 listWorkspaces；`catalog.repository.ts:142` 的 listChildren。后者调用 workspaceAccess 后只使用 canOrganize，没有拒绝 isMember=false；目录 children 无 read 条件。
 
-待执行复现：A 创建个人/团队空间和敏感目录；同一用户非成员 B 调用空间列表获得根目录 ID，再请求 `/api/knowledge/workspaces/:workspaceId/catalogs/:catalogId/children` 逐级读取名称、图标、关系。正文文档仍会按 ACL 过滤，**不能把此问题描述为已证实的任意正文泄露**。
+待执行复现：A 创建个人/团队空间和敏感目录；同租户非成员 B 调用空间列表获得根目录 ID，再请求 `/api/knowledge/workspaces/:workspaceId/catalogs/:catalogId/children` 逐级读取名称、图标、关系。正文文档仍会按 ACL 过滤，**不能把此问题描述为已证实的任意正文泄露**。
 
 方案：独立定义空间 discover/read、目录 read/traverse；个人空间默认不可发现。只分享单篇文档给 B 时，通过“与我共享”入口呈现文档或最小导航，不开放整个空间树。
 
@@ -231,7 +231,7 @@
 
 需要区分：移出空间后仍保留直接分享 ACL 是现有 smoke 明确认可的策略，不能一概视为漏撤权；**团队文档创建者不受成员降级/移除约束**则很难符合企业团队内容治理预期。
 
-方案：createdBy 只作审计。团队内容归空间，创建者默认取得空间角色已有能力；如确需单篇管理权，以可撤销 role binding 表达。个人空间所有者权利独立建模。区分“移除空间成员但保留独立分享”“撤销该空间全部授权”“用户禁用/封禁”，后者是全局拒绝条件。
+方案：createdBy 只作审计。团队内容归空间，创建者默认取得空间角色已有能力；如确需单篇管理权，以可撤销 role binding 表达。个人空间所有者权利独立建模。区分“移除空间成员但保留独立分享”“撤销该空间全部授权”“租户禁用/封禁”，后者是全局拒绝条件。
 
 ### F3：前后端 capability 不一致（中，确定缺陷）
 
@@ -267,7 +267,7 @@
 
 证据：share.create 仅校验 share，然后接受 read/edit 级别；没有检查 grantor 的 write 或可委托上限。join 只要已有 read 就直接返回 joined=false。
 
-风险场景：给某人 read+share、没有 write；其仍可创建 edit 链接，让同一用户另一个账号加入取得 write。若给予 share-only，当前不隐含 read，其甚至可以通过自己新建的 edit 链接加入取得 write。**如果 share 被明确设计成“可委托任意编辑权”，这属于强权限而非实现越权；但目前 action 名称没有表达这个上限，易误授。**
+风险场景：给某人 read+share、没有 write；其仍可创建 edit 链接，让同租户另一个账号加入取得 write。若给予 share-only，当前不隐含 read，其甚至可以通过自己新建的 edit 链接加入取得 write。**如果 share 被明确设计成“可委托任意编辑权”，这属于强权限而非实现越权；但目前 action 名称没有表达这个上限，易误授。**
 
 另一个确定的功能问题：已有 viewer/直接 read 的成员点击 edit 链接时，因 existing-read 分支提前返回，不会获得 write，违背“编辑链接可加入编辑”的直觉。
 
@@ -293,13 +293,13 @@ share.create 在权限查询后独立插入；join 在事务外检查链接有�
 
 ### 6.1 三个维度，各有一个事实源
 
-1. **主体**：同一用户内 identity；接口预留 subjectType，未来引入 group 时再增加实现。
+1. **主体**：租户内 identity；接口预留 subjectType，未来引入 group 时再增加实现。
 2. **资源**：space → catalog → catalog → document 的单父层级，personal 是空间属性。正文块与协同块排序不参与 ACL 树。
 3. **授权**：subject 在某资源上的 viewer/editor/manager 角色绑定；角色映射为动作。owner 是独立所有权关系，不能靠 createdBy 推断。
 
 ```mermaid
 flowchart TD
-  I[身份与用户状态] --> P[统一 AuthorizationPolicy]
+  I[身份与租户状态] --> P[统一 AuthorizationPolicy]
   R[资源层级与继承边界] --> P
   B[成员角色与来源绑定] --> P
   G[分享及导出等业务策略] --> P
@@ -336,7 +336,7 @@ workspace 现有 admin 可在产品上对应 manager；owner 保留成员管理�
             +（inherit 时）父节点传递下来的绑定
             + 有效的独立分享来源
 
-allowed = 主体和用户有效
+allowed = 主体和租户有效
        AND 资源状态允许此动作
        AND 至少一个有效来源允许此动作
        AND 当前动作符合业务限制
@@ -345,7 +345,7 @@ allowed = 主体和用户有效
 - inherit：同一主体多个来源按能力并集；viewer 不覆盖 inherited editor。界面显示“仍通过父目录拥有编辑权”，不能展示虚假的降级结果。
 - restricted：切断父资源的内容角色继承，保留当前节点直接绑定与有效分享来源。它不是一条 deny，也不删除父级成员关系。
 - 后代默认 inherit，继承最近有效边界内的授权；restricted 目录下的默认文档自然继承该目录，文档也可再次断开。
-- 子资源直接分享可允许父资源不可读者访问；这不自动允许浏览父级所有目录。若产品要禁止非空间成员直接分享，应加“仅空间成员可获授权”空间策略，而不是把用户 ID 相等误当成成员资格。
+- 子资源直接分享可允许父资源不可读者访问；这不自动允许浏览父级所有目录。若产品要禁止非空间成员直接分享，应加“仅空间成员可获授权”空间策略，而不是把租户 ID 相等误当成成员资格。
 - 暂不引入逐用户 deny。真正需要全空间封禁时，用显式主体状态/空间 ban 作前置拒绝，不和普通角色优先级混用。
 - restricted 生效前验证操作后的可管理性。建议把空间治理恢复与日常正文访问分离：日常 manager 不自动读 restricted 内容；空间 owner 的恢复操作独立、显式、审计，而非隐形旁路。
 
@@ -357,13 +357,13 @@ allowed = 主体和用户有效
 
 | 数据                   | 核心字段/约束                                                                                                                                                                          |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| auth_resources         | user_id、id、kind(space/catalog/document)、parent_id、inheritance、policy_revision；同一用户复合父 FK、kind check；space 为根，catalog 父为 space/catalog，document 父为 space/catalog |
-| resource_role_bindings | user_id、resource_id、subject_type、subject_id、role、source_type、source_id、granted_by、expires_at；按来源唯一，避免不同链接与直接授予互相覆盖                                       |
+| auth_resources         | tenant_id、id、kind(space/catalog/document)、parent_id、inheritance、policy_revision；同租户复合父 FK、kind check；space 为根，catalog 父为 space/catalog，document 父为 space/catalog |
+| resource_role_bindings | tenant_id、resource_id、subject_type、subject_id、role、source_type、source_id、granted_by、expires_at；按来源唯一，避免不同链接与直接授予互相覆盖                                     |
 | 空间所有权/主体状态    | 显式 owner、账号有效性、成员关系/封禁；created_by 保留审计用途                                                                                                                         |
 | 分享资源               | token hash/不可预测 ID、目标资源、可授角色上限、类型 invite/access、有效期、撤销状态、创建者与授权来源                                                                                 |
 | 授权审计与 outbox      | actor、resource、变更前后、source、requestId、policy revision；审计与通知事件同事务提交                                                                                                |
 
-auth_resources 与现有业务表一对一绑定，使用外键/唯一约束保证资源真实存在及 user 一致。授权层级与业务目录层级必须只有一个权威来源：如果保留两种父关系投影，必须在同事务维护并做一致性校验；优先让公共层级成为权威关系，业务表不另存可独立修改的 parent。
+auth_resources 与现有业务表一对一绑定，使用外键/唯一约束保证资源真实存在及 tenant 一致。授权层级与业务目录层级必须只有一个权威来源：如果保留两种父关系投影，必须在同事务维护并做一致性校验；优先让公共层级成为权威关系，业务表不另存可独立修改的 parent。
 
 防环、父子 kind、最大深度及跨空间变化由事务内服务检查，不能声称普通 FK 能防住所有非法树结构。角色枚举应使用数据库 check/enum；source 的引用有效性需要来源表或受控写入口，不能依赖任意字符串约定。
 
@@ -372,7 +372,7 @@ auth_resources 与现有业务表一对一绑定，使用外键/唯一约束保�
 ### 6.5 统一调用契约
 
 ```ts
-type ResourceRef = { userId: string; id: string; kind: "space" | "catalog" | "document" };
+type ResourceRef = { tenantId: string; id: string; kind: "space" | "catalog" | "document" };
 
 // 示意契约：实际 Action 必须按 kind 约束，Principal 来自可信宿主。
 interface Authorization {
@@ -430,7 +430,7 @@ share/read/edit 不是简单地“写几行永久 ACL”：access link 的派生
 
 附件读取/上传、版本、评论/提及、通知目标可见性、AI sources/落盘和检索重排都调用统一决策。现有附件委托文档权限、AI 检索/提交时复核的方向值得保留，不让搜索索引 payload 取代 PostgreSQL 权威关系。
 
-现有离线缓存以 API/user/identity 隔离，登出清理 Query 与离线账号，401/403/404 有缓存驱逐逻辑，是正向基础。后续补空间/文档级授权版本失效、撤权事件清理、会话失败转只读与草稿隔离。离线用户已经下载的内容无法被远程即时收回；敏感空间可提供禁用正文离线缓存策略。未确认草稿需要保留，但不能未经重新授权自动重放。
+现有离线缓存以 API/tenant/identity 隔离，登出清理 Query 与离线账号，401/403/404 有缓存驱逐逻辑，是正向基础。后续补空间/文档级授权版本失效、撤权事件清理、会话失败转只读与草稿隔离。离线用户已经下载的内容无法被远程即时收回；敏感空间可提供禁用正文离线缓存策略。未确认草稿需要保留，但不能未经重新授权自动重放。
 
 ## 7. 分阶段落地与兼容
 
@@ -445,7 +445,7 @@ share/read/edit 不是简单地“写几行永久 ACL”：access link 的派生
 迁移注意事项：
 
 1. 新增 forward migration，已发布 migration 不回写。先建资源与兼容绑定，再影子读比对，最后切权威读取并移除旧路径；不能长期双事实源。
-2. 空间 admin/editor/viewer 可映射 manager/editor/viewer；个人 owner 显式保留，`system` 创建的默认空间必须明确合法 owner/管理员来源，不把同一用户下所有成员默认提升为 manager。
+2. 空间 admin/editor/viewer 可映射 manager/editor/viewer；个人 owner 显式保留，`system` 创建的默认空间必须明确合法 owner/管理员来源，不把所有租户用户默认提升为 manager。
 3. 文档现有任意 actions **不能粗暴提升为三个角色**：read-only 可转 viewer，但 comment-only、export-only、write+无 export、share-only 等组合不等价。保留有界、明确的 legacy capability grants，逐步由管理员确认迁移；禁止为了映射方便额外授予分享/管理/导出。
 4. 既有 restricted 继续 restricted；目录加入继承能力时也不自动把既有文档改为 inherit，以免批量扩大访问范围。新建文档默认策略另行定义。
 5. createdBy 解耦前回填经过确认的 owner/manager 或兼容来源，校验不会丢失唯一管理者；团队创建者特权收敛是行为改变，需迁移说明与审计。
@@ -454,7 +454,7 @@ share/read/edit 不是简单地“写几行永久 ACL”：access link 的派生
 
 ## 8. 验收矩阵
 
-角色至少覆盖：空间 owner/manager/editor/viewer、非成员、直接分享 viewer/editor/manager、已移除成员、文档创建者、其他用户与匿名。资源覆盖：个人/团队/旧空间、inherit/restricted 目录和文档、重复多层目录、归档/回收站、多个授权来源。
+角色至少覆盖：空间 owner/manager/editor/viewer、非成员、直接分享 viewer/editor/manager、已移除成员、文档创建者、异租户与匿名。资源覆盖：个人/团队/旧空间、inherit/restricted 目录和文档、重复多层目录、归档/回收站、多个授权来源。
 
 | 场景                                              | 必须断言                                                                 |
 | ------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -477,7 +477,7 @@ share/read/edit 不是简单地“写几行永久 ACL”：access link 的派生
 | 缓存/切账号/离线重连                              | 不跨身份读缓存；撤权后不自动恢复可写；未确认草稿不被丢弃或擅自重放       |
 | 模板复制/导出/AI                                  | 满足已确认的数据搬运政策，不能用另一个入口绕开产品承诺                   |
 
-验证分层：纯政策单测覆盖角色/继承真值表；隔离 PostgreSQL API 集成测试验证真实 SQL、复合 FK、事务与跨用户；真实 WebSocket 验证撤权与 durable ack；Playwright 验证多个账号 UI、直达 URL、键盘动作和缓存恢复。不能仅 mock check 返回值后宣称 ACL 已通过。
+验证分层：纯政策单测覆盖角色/继承真值表；隔离 PostgreSQL API 集成测试验证真实 SQL、复合 FK、事务与跨租户；真实 WebSocket 验证撤权与 durable ack；Playwright 验证多个账号 UI、直达 URL、键盘动作和缓存恢复。不能仅 mock check 返回值后宣称 ACL 已通过。
 
 ## 9. 外部调研与取舍
 

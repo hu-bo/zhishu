@@ -35,7 +35,7 @@ try {
   const currentUser = await app.inject({ url: "/api/auth/me", headers: authorization });
   assert.equal(currentUser.statusCode, 200);
   assert.equal(currentUser.json().identityId, "mock-user-001");
-  assert.equal(currentUser.json().userId, "local");
+  assert.equal(currentUser.json().tenantId, "local");
   // Retired legacy AI routes must be gone (404), replaced by the two purpose namespaces.
   for (const legacy of [
     "/api/ai/chat",
@@ -268,14 +268,14 @@ try {
   );
   const reader = {
     identityId: "reader-001",
-    userId: "local",
+    tenantId: "local",
     username: "reader",
     displayName: "Reader",
     email: "reader@example.test",
     globalRoles: ["user"],
     active: true,
   };
-  const foreignReader = { ...reader, userId: "foreign" };
+  const foreignReader = { ...reader, tenantId: "foreign" };
   const externalPrincipals = new Map([
     ["reader-token", reader],
     ["foreign-token", foreignReader],
@@ -402,7 +402,7 @@ try {
   assert.equal((await app.inject({ url: "/api/auth/me", headers: authorization })).statusCode, 401);
   assert.equal((await app.inject({ url: "/missing" })).json().code, "NOT_FOUND");
   console.log(
-    "Smoke passed: health, auth modes, user-scoped ACL, document lifecycle/versions, CRUD, validation, and OpenAPI.",
+    "Smoke passed: health, auth modes, tenant-scoped ACL, document lifecycle/versions, CRUD, validation, and OpenAPI.",
   );
 } finally {
   try {

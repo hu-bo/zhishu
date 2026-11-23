@@ -14,7 +14,7 @@ export type MockPrincipal = Principal & {
 export const mockUsers: readonly MockPrincipal[] = Object.freeze([
   Object.freeze({
     identityId: "mock-user-001",
-    userId: "local",
+    tenantId: "local",
     username: "mock-user",
     displayName: "Mock 测试用户",
     email: "mock-user@example.test",
@@ -24,7 +24,7 @@ export const mockUsers: readonly MockPrincipal[] = Object.freeze([
   }),
   Object.freeze({
     identityId: "mock-admin-001",
-    userId: "local",
+    tenantId: "local",
     username: "mock-admin",
     displayName: "陈序",
     email: "mock-admin@example.test",
@@ -34,7 +34,7 @@ export const mockUsers: readonly MockPrincipal[] = Object.freeze([
   }),
   Object.freeze({
     identityId: "mock-editor-001",
-    userId: "local",
+    tenantId: "local",
     username: "mock-editor",
     displayName: "江予",
     email: "mock-editor@example.test",
@@ -44,7 +44,7 @@ export const mockUsers: readonly MockPrincipal[] = Object.freeze([
   }),
   Object.freeze({
     identityId: "mock-viewer-001",
-    userId: "local",
+    tenantId: "local",
     username: "mock-viewer",
     displayName: "苏棠",
     email: "mock-viewer@example.test",
@@ -54,7 +54,7 @@ export const mockUsers: readonly MockPrincipal[] = Object.freeze([
   }),
   Object.freeze({
     identityId: "mock-guest-001",
-    userId: "local",
+    tenantId: "local",
     username: "mock-guest",
     displayName: "访客",
     email: "mock-guest@example.test",

@@ -35,7 +35,7 @@ export class InvitationService {
       .from(workspaceInvitations)
       .where(
         and(
-          eq(workspaceInvitations.userId, principal.userId),
+          eq(workspaceInvitations.tenantId, principal.tenantId),
           eq(workspaceInvitations.workspaceId, workspaceId),
         ),
       )
@@ -45,13 +45,13 @@ export class InvitationService {
   }
   async create(principal: Principal, workspaceId: string, role: "editor" | "viewer") {
     return this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
       await this.manage(tx, principal, workspaceId);
       const token = randomBytes(32).toString("base64url");
       const [row] = await tx
         .insert(workspaceInvitations)
         .values({
-          userId: principal.userId,
+          tenantId: principal.tenantId,
           workspaceId,
           role,
           tokenHash: digest(token),
@@ -65,14 +65,14 @@ export class InvitationService {
   }
   async revoke(principal: Principal, workspaceId: string, id: string) {
     await this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
       await this.manage(tx, principal, workspaceId);
       const rows = await tx
         .update(workspaceInvitations)
         .set({ revokedAt: new Date() })
         .where(
           and(
-            eq(workspaceInvitations.userId, principal.userId),
+            eq(workspaceInvitations.tenantId, principal.tenantId),
             eq(workspaceInvitations.workspaceId, workspaceId),
             eq(workspaceInvitations.id, id),
           ),
@@ -87,7 +87,7 @@ export class InvitationService {
       .from(workspaceInvitations)
       .where(
         and(
-          eq(workspaceInvitations.userId, principal.userId),
+          eq(workspaceInvitations.tenantId, principal.tenantId),
           eq(workspaceInvitations.tokenHash, digest(token)),
         ),
       )
@@ -110,13 +110,13 @@ export class InvitationService {
   }
   async accept(principal: Principal, token: string) {
     return this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
       const [row] = await tx
         .select()
         .from(workspaceInvitations)
         .where(
           and(
-            eq(workspaceInvitations.userId, principal.userId),
+            eq(workspaceInvitations.tenantId, principal.tenantId),
             eq(workspaceInvitations.tokenHash, digest(token)),
           ),
         )
@@ -132,7 +132,7 @@ export class InvitationService {
         row.workspaceId,
       );
       const memberFilter = and(
-        eq(resourceAcl.userId, principal.userId),
+        eq(resourceAcl.tenantId, principal.tenantId),
         eq(resourceAcl.workspaceId, row.workspaceId),
         eq(resourceAcl.identityId, principal.identityId),
       );
@@ -143,9 +143,9 @@ export class InvitationService {
         return { workspaceId: row.workspaceId };
       }
       if (!existing && workspace.ownerIdentityId !== principal.identityId) {
-        await assertWorkspaceMemberCapacity(tx, principal.userId, row.workspaceId);
+        await assertWorkspaceMemberCapacity(tx, principal.tenantId, row.workspaceId);
         await tx.insert(resourceAcl).values({
-          userId: principal.userId,
+          tenantId: principal.tenantId,
           workspaceId: row.workspaceId,
           identityId: principal.identityId,
           createdBy: row.createdBy,
@@ -153,7 +153,7 @@ export class InvitationService {
         });
         await insertNotifications(tx, [
           {
-            userId: principal.userId,
+            tenantId: principal.tenantId,
             recipientId: principal.identityId,
             actorId: row.createdBy,
             type: "permission",
@@ -162,7 +162,7 @@ export class InvitationService {
             message: "你已加入团队空间",
           },
           {
-            userId: principal.userId,
+            tenantId: principal.tenantId,
             recipientId: row.createdBy,
             actorId: principal.identityId,
             type: "permission",

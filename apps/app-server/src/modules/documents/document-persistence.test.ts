@@ -197,7 +197,7 @@ test(
         await memory.exec(await readFile(`database/migrations/${tag}.sql`, "utf8"));
       const db = drizzle(memory, { schema }) as unknown as Database;
       const principal: Principal = {
-        userId: "persistence",
+        tenantId: "persistence",
         identityId: "owner",
         username: "owner",
         displayName: "Owner",
@@ -207,7 +207,7 @@ test(
       };
       await db.insert(schema.identityProfiles).values({ ...principal });
       await db.insert(schema.workspaces).values({
-        userId: principal.userId,
+        tenantId: principal.tenantId,
         id: "ws_persistence",
         name: "Persistence",
         kind: "personal",
@@ -222,7 +222,7 @@ test(
       const checksum = (data: Uint8Array) => createHash("sha256").update(data).digest("hex");
       const create = (schemaVersion: number = CURRENT_DOCUMENT_SCHEMA_VERSION) =>
         documents.create(
-          principal.userId,
+          principal.tenantId,
           principal.identityId,
           "Persistence",
           { schemaVersion, extensions: [] },
@@ -263,7 +263,7 @@ test(
           assert.deepEqual(revoked, [original.generationId]);
           const stored = await documents.findActiveForAction(
             original.id,
-            principal.userId,
+            principal.tenantId,
             principal.identityId,
             "read",
           );
@@ -295,7 +295,7 @@ test(
         async () => {
           const created = await create();
           const version = await documents.createVersion({
-            userId: principal.userId,
+            tenantId: principal.tenantId,
             identityId: principal.identityId,
             documentId: created.id,
             name: "Checkpoint",
@@ -383,7 +383,7 @@ test(
           assert.equal(await projection.failProjectionJob(first), "stale");
           assert.equal(await projection.processProjectionJob(replacement), true);
           const snapshot = {
-            userId: principal.userId,
+            tenantId: principal.tenantId,
             documentId: created.id,
             generationId: created.generationId,
             durableSeq: 1,
@@ -414,7 +414,7 @@ test(
           assert.equal(
             (
               await documents.findProjectionContentSnapshot(
-                principal.userId,
+                principal.tenantId,
                 created.id,
                 created.generationId,
               )

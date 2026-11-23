@@ -28,7 +28,7 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
 export const workspaces = pgTable(
   "workspaces",
   {
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     id: text("id").notNull(),
     name: text("name").notNull(),
     kind: text("kind")
@@ -45,7 +45,7 @@ export const workspaces = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.userId, table.id] }),
+    primaryKey({ columns: [table.tenantId, table.id] }),
     check("workspaces_kind_check", sql`${table.kind} in ('personal', 'team', 'unclassified')`),
     check(
       "workspaces_personal_owner_check",
@@ -60,7 +60,7 @@ export const workspaces = pgTable(
 export const catalogs = pgTable(
   "catalogs",
   {
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     id: text("id").notNull(),
     workspaceId: text("workspace_id").notNull(),
     parentId: text("parent_id"),
@@ -73,15 +73,15 @@ export const catalogs = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.userId, table.id] }),
+    primaryKey({ columns: [table.tenantId, table.id] }),
     foreignKey({
-      columns: [table.userId, table.workspaceId],
-      foreignColumns: [workspaces.userId, workspaces.id],
+      columns: [table.tenantId, table.workspaceId],
+      foreignColumns: [workspaces.tenantId, workspaces.id],
       name: "catalogs_workspace_fk",
     }),
     foreignKey({
-      columns: [table.userId, table.parentId],
-      foreignColumns: [table.userId, table.id],
+      columns: [table.tenantId, table.parentId],
+      foreignColumns: [table.tenantId, table.id],
       name: "catalogs_parent_fk",
     }),
     check("catalogs_access_mode_check", sql`${table.accessMode} in ('inherit', 'restricted')`),
@@ -92,10 +92,10 @@ export const catalogs = pgTable(
     ),
     // Exactly one root catalog per workspace.
     uniqueIndex("catalogs_workspace_root_uq")
-      .on(table.userId, table.workspaceId)
+      .on(table.tenantId, table.workspaceId)
       .where(sql`${table.parentId} is null`),
     index("catalogs_workspace_parent_idx").on(
-      table.userId,
+      table.tenantId,
       table.workspaceId,
       table.parentId,
       table.position,
@@ -108,7 +108,7 @@ export const catalogs = pgTable(
 export const knowledgePresetInstallations = pgTable(
   "knowledge_preset_installations",
   {
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     identityId: text("identity_id").notNull(),
     workspaceId: text("workspace_id").notNull(),
     presetId: text("preset_id").notNull(),
@@ -116,8 +116,8 @@ export const knowledgePresetInstallations = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.userId, table.identityId, table.workspaceId, table.presetId] }),
-    index("knowledge_preset_installations_document_idx").on(table.userId, table.documentId),
+    primaryKey({ columns: [table.tenantId, table.identityId, table.workspaceId, table.presetId] }),
+    index("knowledge_preset_installations_document_idx").on(table.tenantId, table.documentId),
   ],
 );
 
@@ -125,7 +125,7 @@ export const documents = pgTable(
   "documents",
   {
     id: text("id").primaryKey(),
-    userId: text("user_id").notNull().default("local"),
+    tenantId: text("tenant_id").notNull().default("local"),
     title: text("title").notNull(),
     workspaceId: text("workspace_id").notNull().default("ws_default"),
     catalogId: text("catalog_id").notNull(),
@@ -145,18 +145,18 @@ export const documents = pgTable(
   },
   (table) => [
     foreignKey({
-      columns: [table.userId, table.workspaceId],
-      foreignColumns: [workspaces.userId, workspaces.id],
+      columns: [table.tenantId, table.workspaceId],
+      foreignColumns: [workspaces.tenantId, workspaces.id],
       name: "documents_workspace_fk",
     }),
     foreignKey({
-      columns: [table.userId, table.catalogId],
-      foreignColumns: [catalogs.userId, catalogs.id],
+      columns: [table.tenantId, table.catalogId],
+      foreignColumns: [catalogs.tenantId, catalogs.id],
       name: "documents_catalog_fk",
     }),
     check("documents_position_check", sql`${table.position} >= 0`),
     index("documents_catalog_idx").on(
-      table.userId,
+      table.tenantId,
       table.workspaceId,
       table.catalogId,
       table.position,
@@ -167,12 +167,12 @@ export const documents = pgTable(
       "documents_access_mode_check",
       sql`${table.accessMode} in ('personal', 'workspace-inherited', 'restricted')`,
     ),
-    index("documents_workspace_access_idx").on(table.userId, table.workspaceId, table.accessMode),
+    index("documents_workspace_access_idx").on(table.tenantId, table.workspaceId, table.accessMode),
     check("documents_metadata_revision_check", sql`${table.metadataRevision} > 0`),
-    uniqueIndex("documents_user_id_id_uq").on(table.userId, table.id),
+    uniqueIndex("documents_tenant_id_id_uq").on(table.tenantId, table.id),
     // Supports the qa_site_documents composite FK that proves a document belongs to its source workspace.
-    uniqueIndex("documents_user_workspace_id_uq").on(table.userId, table.workspaceId, table.id),
-    index("documents_user_created_idx").on(table.userId, table.createdAt, table.id),
+    uniqueIndex("documents_tenant_workspace_id_uq").on(table.tenantId, table.workspaceId, table.id),
+    index("documents_tenant_created_idx").on(table.tenantId, table.createdAt, table.id),
   ],
 );
 
@@ -180,7 +180,7 @@ export const documentAuditEvents = pgTable(
   "document_audit_events",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     actorIdentityId: text("actor_identity_id").notNull(),
     action: text("action").notNull(),
     resourceType: text("resource_type").notNull().default("document"),
@@ -196,15 +196,15 @@ export const documentAuditEvents = pgTable(
       sql`${table.action} in ('document.created', 'document.imported', 'document.exported', 'document.content-updated', 'document.collaboration-enabled', 'document.copied', 'document.title-updated', 'document.archived', 'document.trashed', 'document.restored', 'document.permanently-deleted', 'document.version-created', 'document.version-restored', 'document.acl-updated', 'document.acl-removed', 'document.schema-migrated', 'document.block-ids-repaired', 'document.share-created', 'document.share-revoked')`,
     ),
     check("document_audit_events_resource_type_check", sql`${table.resourceType} = 'document'`),
-    index("document_audit_events_user_created_idx").on(table.userId, table.createdAt, table.id),
+    index("document_audit_events_tenant_created_idx").on(table.tenantId, table.createdAt, table.id),
     index("document_audit_events_request_idx").on(
-      table.userId,
+      table.tenantId,
       table.requestId,
       table.createdAt,
       table.id,
     ),
     index("document_audit_events_resource_created_idx").on(
-      table.userId,
+      table.tenantId,
       table.resourceId,
       table.createdAt,
       table.id,
@@ -215,7 +215,7 @@ export const documentAuditEvents = pgTable(
 export const documentMigrationSnapshots = pgTable(
   "document_migration_snapshots",
   {
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     documentId: text("document_id").notNull(),
     migrationId: uuid("migration_id").notNull(),
     stepIndex: integer("step_index").notNull(),
@@ -229,12 +229,12 @@ export const documentMigrationSnapshots = pgTable(
   },
   (table) => [
     primaryKey({
-      columns: [table.userId, table.documentId, table.migrationId, table.stepIndex],
+      columns: [table.tenantId, table.documentId, table.migrationId, table.stepIndex],
     }),
     foreignKey({
-      columns: [table.userId, table.documentId],
-      foreignColumns: [documents.userId, documents.id],
-      name: "document_migration_snapshots_user_document_fk",
+      columns: [table.tenantId, table.documentId],
+      foreignColumns: [documents.tenantId, documents.id],
+      name: "document_migration_snapshots_tenant_document_fk",
     }).onDelete("cascade"),
     check("document_migration_snapshots_step_index_check", sql`${table.stepIndex} >= 0`),
     check(
@@ -242,7 +242,7 @@ export const documentMigrationSnapshots = pgTable(
       sql`${table.fromSchemaVersion} > 0 and ${table.toSchemaVersion} > ${table.fromSchemaVersion}`,
     ),
     index("document_migration_snapshots_document_created_idx").on(
-      table.userId,
+      table.tenantId,
       table.documentId,
       table.createdAt,
     ),
@@ -252,7 +252,7 @@ export const documentMigrationSnapshots = pgTable(
 export const apiIdempotencyRecords = pgTable(
   "api_idempotency_records",
   {
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     subjectId: text("subject_id").notNull(),
     operationId: text("operation_id").notNull(),
     keyHash: text("key_hash").notNull(),
@@ -266,7 +266,7 @@ export const apiIdempotencyRecords = pgTable(
   },
   (table) => [
     primaryKey({
-      columns: [table.userId, table.subjectId, table.operationId, table.keyHash],
+      columns: [table.tenantId, table.subjectId, table.operationId, table.keyHash],
       name: "api_idempotency_records_pk",
     }),
     check("api_idempotency_records_hash_check", sql`${table.keyHash} ~ '^[0-9a-f]{64}$'`),
@@ -283,20 +283,20 @@ export const apiIdempotencyRecords = pgTable(
 export const documentFavorites = pgTable(
   "document_favorites",
   {
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     documentId: text("document_id").notNull(),
     identityId: text("identity_id").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.userId, table.documentId, table.identityId] }),
+    primaryKey({ columns: [table.tenantId, table.documentId, table.identityId] }),
     foreignKey({
-      columns: [table.userId, table.documentId],
-      foreignColumns: [documents.userId, documents.id],
-      name: "document_favorites_user_document_fk",
+      columns: [table.tenantId, table.documentId],
+      foreignColumns: [documents.tenantId, documents.id],
+      name: "document_favorites_tenant_document_fk",
     }).onDelete("cascade"),
     index("document_favorites_identity_created_idx").on(
-      table.userId,
+      table.tenantId,
       table.identityId,
       table.createdAt,
     ),
@@ -306,20 +306,20 @@ export const documentFavorites = pgTable(
 export const documentRecents = pgTable(
   "document_recents",
   {
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     documentId: text("document_id").notNull(),
     identityId: text("identity_id").notNull(),
     lastOpenedAt: timestamp("last_opened_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.userId, table.documentId, table.identityId] }),
+    primaryKey({ columns: [table.tenantId, table.documentId, table.identityId] }),
     foreignKey({
-      columns: [table.userId, table.documentId],
-      foreignColumns: [documents.userId, documents.id],
-      name: "document_recents_user_document_fk",
+      columns: [table.tenantId, table.documentId],
+      foreignColumns: [documents.tenantId, documents.id],
+      name: "document_recents_tenant_document_fk",
     }).onDelete("cascade"),
     index("document_recents_identity_opened_idx").on(
-      table.userId,
+      table.tenantId,
       table.identityId,
       table.lastOpenedAt,
     ),
@@ -332,7 +332,7 @@ export const documentRecents = pgTable(
 export const documentShares = pgTable(
   "document_shares",
   {
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     id: text("id").notNull(),
     documentId: text("document_id").notNull(),
     permission: text("permission").notNull(),
@@ -344,19 +344,19 @@ export const documentShares = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.userId, table.id] }),
-    uniqueIndex("document_shares_resource_uq").on(table.userId, table.documentId, table.id),
+    primaryKey({ columns: [table.tenantId, table.id] }),
+    uniqueIndex("document_shares_resource_uq").on(table.tenantId, table.documentId, table.id),
     check("document_shares_kind_check", sql`${table.kind} in ('invite', 'access')`),
     foreignKey({
-      columns: [table.userId, table.documentId],
-      foreignColumns: [documents.userId, documents.id],
+      columns: [table.tenantId, table.documentId],
+      foreignColumns: [documents.tenantId, documents.id],
       name: "document_shares_document_fk",
     }).onDelete("cascade"),
     check("document_shares_permission_check", sql`${table.permission} in ('read', 'edit')`),
     check("document_shares_expiry_check", sql`${table.expiresAt} > ${table.createdAt}`),
     check("document_shares_join_count_check", sql`${table.joinCount} >= 0`),
     index("document_shares_document_created_idx").on(
-      table.userId,
+      table.tenantId,
       table.documentId,
       table.createdAt,
     ),
@@ -414,7 +414,7 @@ export const documentVersions = pgTable(
   "document_versions",
   {
     id: text("id").primaryKey(),
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     documentId: text("document_id").notNull(),
     generationId: text("generation_id").notNull(),
     name: text("name").notNull(),
@@ -425,9 +425,9 @@ export const documentVersions = pgTable(
   },
   (table) => [
     foreignKey({
-      columns: [table.userId, table.documentId],
-      foreignColumns: [documents.userId, documents.id],
-      name: "document_versions_user_document_fk",
+      columns: [table.tenantId, table.documentId],
+      foreignColumns: [documents.tenantId, documents.id],
+      name: "document_versions_tenant_document_fk",
     }).onDelete("cascade"),
     foreignKey({
       columns: [table.documentId, table.generationId],
@@ -438,12 +438,12 @@ export const documentVersions = pgTable(
     check("document_versions_kind_check", sql`${table.kind} in ('named', 'automatic')`),
     uniqueIndex("document_versions_document_name_uq").on(table.documentId, table.name),
     index("document_versions_document_created_idx").on(
-      table.userId,
+      table.tenantId,
       table.documentId,
       table.createdAt,
     ),
     index("document_versions_generation_kind_created_idx").on(
-      table.userId,
+      table.tenantId,
       table.documentId,
       table.generationId,
       table.kind,
@@ -500,7 +500,7 @@ export const collaborationUpdates = pgTable(
 export const documentProjectionSnapshots = pgTable(
   "document_projection_snapshots",
   {
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     documentId: text("document_id").notNull(),
     generationId: text("generation_id").notNull(),
     durableSeq: bigint("durable_seq", { mode: "number" }).notNull(),
@@ -513,11 +513,11 @@ export const documentProjectionSnapshots = pgTable(
     projectedAt: timestamp("projected_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.userId, table.documentId, table.generationId] }),
+    primaryKey({ columns: [table.tenantId, table.documentId, table.generationId] }),
     foreignKey({
-      columns: [table.userId, table.documentId],
-      foreignColumns: [documents.userId, documents.id],
-      name: "document_projection_snapshots_user_document_fk",
+      columns: [table.tenantId, table.documentId],
+      foreignColumns: [documents.tenantId, documents.id],
+      name: "document_projection_snapshots_tenant_document_fk",
     }).onDelete("cascade"),
     foreignKey({
       columns: [table.documentId, table.generationId],
@@ -537,7 +537,7 @@ export const documentOutbox = pgTable(
   "document_outbox",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     documentId: text("document_id").notNull(),
     generationId: text("generation_id").notNull(),
     durableSeq: bigint("durable_seq", { mode: "number" }).notNull(),
@@ -560,9 +560,9 @@ export const documentOutbox = pgTable(
   },
   (table) => [
     foreignKey({
-      columns: [table.userId, table.documentId],
-      foreignColumns: [documents.userId, documents.id],
-      name: "document_outbox_user_document_fk",
+      columns: [table.tenantId, table.documentId],
+      foreignColumns: [documents.tenantId, documents.id],
+      name: "document_outbox_tenant_document_fk",
     }).onDelete("cascade"),
     foreignKey({
       columns: [table.documentId, table.generationId],
@@ -595,7 +595,7 @@ export const assets = pgTable(
   "assets",
   {
     id: text("id").primaryKey(),
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     documentId: text("document_id").notNull(),
     objectKey: text("object_key").notNull(),
     fileName: text("file_name").notNull(),
@@ -616,7 +616,7 @@ export const assets = pgTable(
       "assets_status_check",
       sql`${table.status} in ('uploading', 'receiving', 'uploaded', 'ready', 'cancelled', 'failed')`,
     ),
-    uniqueIndex("assets_user_document_id_uq").on(table.userId, table.documentId, table.id),
+    uniqueIndex("assets_tenant_document_id_uq").on(table.tenantId, table.documentId, table.id),
     uniqueIndex("assets_object_key_uq").on(table.objectKey),
     index("assets_upload_cleanup_idx").on(table.status, table.uploadExpiresAt),
   ],
@@ -625,7 +625,7 @@ export const assets = pgTable(
 export const assetReferences = pgTable(
   "asset_references",
   {
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     documentId: text("document_id").notNull(),
     generationId: text("generation_id").notNull(),
     assetId: text("asset_id").notNull(),
@@ -636,7 +636,7 @@ export const assetReferences = pgTable(
   (table) => [
     primaryKey({
       columns: [
-        table.userId,
+        table.tenantId,
         table.documentId,
         table.generationId,
         table.durableSeq,
@@ -645,9 +645,9 @@ export const assetReferences = pgTable(
       ],
     }),
     foreignKey({
-      columns: [table.userId, table.documentId],
-      foreignColumns: [documents.userId, documents.id],
-      name: "asset_references_user_document_fk",
+      columns: [table.tenantId, table.documentId],
+      foreignColumns: [documents.tenantId, documents.id],
+      name: "asset_references_tenant_document_fk",
     }).onDelete("cascade"),
     foreignKey({
       columns: [table.documentId, table.generationId],
@@ -660,13 +660,13 @@ export const assetReferences = pgTable(
       name: "asset_references_update_fk",
     }).onDelete("cascade"),
     foreignKey({
-      columns: [table.userId, table.documentId, table.assetId],
-      foreignColumns: [assets.userId, assets.documentId, assets.id],
+      columns: [table.tenantId, table.documentId, table.assetId],
+      foreignColumns: [assets.tenantId, assets.documentId, assets.id],
       name: "asset_references_asset_fk",
     }).onDelete("cascade"),
-    index("asset_references_asset_idx").on(table.userId, table.assetId),
+    index("asset_references_asset_idx").on(table.tenantId, table.assetId),
     index("asset_references_generation_seq_idx").on(
-      table.userId,
+      table.tenantId,
       table.documentId,
       table.generationId,
       table.durableSeq,
@@ -678,21 +678,21 @@ export const assetReferences = pgTable(
 export const identityProfiles = pgTable(
   "identity_profiles",
   {
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     identityId: text("identity_id").notNull(),
     displayName: text("display_name").notNull(),
     email: text("email").notNull(),
     active: boolean("active").notNull().default(true),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [primaryKey({ columns: [t.userId, t.identityId] })],
+  (t) => [primaryKey({ columns: [t.tenantId, t.identityId] })],
 );
 
 export const workspaceInvitations = pgTable(
   "workspace_invitations",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     workspaceId: text("workspace_id").notNull(),
     tokenHash: text("token_hash").notNull(),
     role: text("role").$type<"editor" | "viewer">().notNull(),
@@ -705,10 +705,10 @@ export const workspaceInvitations = pgTable(
   },
   (t) => [
     uniqueIndex("workspace_invitations_token_uq").on(t.tokenHash),
-    index("workspace_invitations_workspace_idx").on(t.userId, t.workspaceId, t.createdAt),
+    index("workspace_invitations_workspace_idx").on(t.tenantId, t.workspaceId, t.createdAt),
     foreignKey({
-      columns: [t.userId, t.workspaceId],
-      foreignColumns: [workspaces.userId, workspaces.id],
+      columns: [t.tenantId, t.workspaceId],
+      foreignColumns: [workspaces.tenantId, workspaces.id],
       name: "workspace_invitations_workspace_fk",
     }).onDelete("cascade"),
     check("workspace_invitations_role_check", sql`${t.role} in ('editor', 'viewer')`),
@@ -719,7 +719,7 @@ export const notifications = pgTable(
   "notifications",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     recipientId: text("recipient_id").notNull(),
     actorId: text("actor_id").notNull(),
     type: text("type")
@@ -734,10 +734,10 @@ export const notifications = pgTable(
     readAt: timestamp("read_at", { withTimezone: true }),
   },
   (t) => [
-    uniqueIndex("notifications_recipient_event_uq").on(t.userId, t.recipientId, t.eventKey),
-    index("notifications_recipient_created_idx").on(t.userId, t.recipientId, t.createdAt, t.id),
+    uniqueIndex("notifications_recipient_event_uq").on(t.tenantId, t.recipientId, t.eventKey),
+    index("notifications_recipient_created_idx").on(t.tenantId, t.recipientId, t.createdAt, t.id),
     index("notifications_unread_idx")
-      .on(t.userId, t.recipientId)
+      .on(t.tenantId, t.recipientId)
       .where(sql`${t.readAt} is null`),
     check(
       "notifications_type_check",
@@ -750,7 +750,7 @@ export const documentComments = pgTable(
   "document_comments",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     documentId: text("document_id").notNull(),
     authorId: text("author_id").notNull(),
     body: text("body").notNull(),
@@ -759,11 +759,11 @@ export const documentComments = pgTable(
   },
   (t) => [
     foreignKey({
-      columns: [t.userId, t.documentId],
-      foreignColumns: [documents.userId, documents.id],
+      columns: [t.tenantId, t.documentId],
+      foreignColumns: [documents.tenantId, documents.id],
       name: "document_comments_document_fk",
     }).onDelete("cascade"),
-    index("document_comments_document_idx").on(t.userId, t.documentId, t.createdAt, t.id),
+    index("document_comments_document_idx").on(t.tenantId, t.documentId, t.createdAt, t.id),
   ],
 );
 
@@ -772,7 +772,7 @@ export const resourceAcl = pgTable(
   "resource_acl",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     workspaceId: text("workspace_id"),
     catalogId: text("catalog_id"),
     documentId: text("document_id"),
@@ -794,43 +794,43 @@ export const resourceAcl = pgTable(
       sql`${t.role} in ('admin','editor','viewer','read','write','comment','share','export','ai','manage','move') and (${t.workspaceId} is null or ${t.role} in ('admin','editor','viewer'))`,
     ),
     foreignKey({
-      columns: [t.userId, t.workspaceId],
-      foreignColumns: [workspaces.userId, workspaces.id],
+      columns: [t.tenantId, t.workspaceId],
+      foreignColumns: [workspaces.tenantId, workspaces.id],
     }).onDelete("cascade"),
     foreignKey({
-      columns: [t.userId, t.catalogId],
-      foreignColumns: [catalogs.userId, catalogs.id],
+      columns: [t.tenantId, t.catalogId],
+      foreignColumns: [catalogs.tenantId, catalogs.id],
     }).onDelete("cascade"),
     foreignKey({
-      columns: [t.userId, t.documentId],
-      foreignColumns: [documents.userId, documents.id],
+      columns: [t.tenantId, t.documentId],
+      foreignColumns: [documents.tenantId, documents.id],
     }).onDelete("cascade"),
     foreignKey({
-      columns: [t.userId, t.documentId, t.sourceShareId],
-      foreignColumns: [documentShares.userId, documentShares.documentId, documentShares.id],
+      columns: [t.tenantId, t.documentId, t.sourceShareId],
+      foreignColumns: [documentShares.tenantId, documentShares.documentId, documentShares.id],
     }).onDelete("cascade"),
     check(
       "resource_acl_source_check",
       sql`${t.sourceShareId} is null or (${t.documentId} is not null and ${t.role} in ('read','write','comment'))`,
     ),
-    uniqueIndex("resource_acl_workspace_subject_uq").on(t.userId, t.workspaceId, t.identityId),
+    uniqueIndex("resource_acl_workspace_subject_uq").on(t.tenantId, t.workspaceId, t.identityId),
     uniqueIndex("resource_acl_catalog_subject_role_uq").on(
-      t.userId,
+      t.tenantId,
       t.catalogId,
       t.identityId,
       t.role,
     ),
     uniqueIndex("resource_acl_document_subject_role_uq")
-      .on(t.userId, t.documentId, t.identityId, t.role)
+      .on(t.tenantId, t.documentId, t.identityId, t.role)
       .where(sql`${t.sourceShareId} is null`),
     uniqueIndex("resource_acl_document_source_role_uq").on(
-      t.userId,
+      t.tenantId,
       t.documentId,
       t.identityId,
       t.role,
       t.sourceShareId,
     ),
-    index("resource_acl_subject_idx").on(t.userId, t.identityId),
+    index("resource_acl_subject_idx").on(t.tenantId, t.identityId),
   ],
 );
 
@@ -840,7 +840,7 @@ export const authorizationEvents = pgTable(
   "authorization_events",
   {
     id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     workspaceId: text("workspace_id").notNull(),
     documentId: text("document_id"),
     actorId: text("actor_id"),
@@ -849,14 +849,14 @@ export const authorizationEvents = pgTable(
     after: jsonb("after").$type<Record<string, unknown> | null>(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("authorization_events_workspace_idx").on(t.userId, t.workspaceId, t.id)],
+  (t) => [index("authorization_events_workspace_idx").on(t.tenantId, t.workspaceId, t.id)],
 );
 
 // Only overrides are stored. Missing row means the versioned built-in role policy.
 export const rolePermissions = pgTable(
   "role_permissions",
   {
-    userId: text("user_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
     workspaceId: text("workspace_id").notNull(),
     resourceType: text("resource_type").$type<"space" | "catalog" | "document">().notNull(),
     role: text("role").$type<"admin" | "editor" | "viewer">().notNull(),
@@ -867,10 +867,10 @@ export const rolePermissions = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.userId, t.workspaceId, t.resourceType, t.role] }),
+    primaryKey({ columns: [t.tenantId, t.workspaceId, t.resourceType, t.role] }),
     foreignKey({
-      columns: [t.userId, t.workspaceId],
-      foreignColumns: [workspaces.userId, workspaces.id],
+      columns: [t.tenantId, t.workspaceId],
+      foreignColumns: [workspaces.tenantId, workspaces.id],
     }).onDelete("cascade"),
     check("role_permissions_kind_check", sql`${t.resourceType} in ('space','catalog','document')`),
     check("role_permissions_role_check", sql`${t.role} in ('admin','editor','viewer')`),

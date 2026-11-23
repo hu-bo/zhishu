@@ -105,7 +105,7 @@ export function policyEnforcer(overrides: readonly PolicyOverride[] = []): Promi
 
 // SQL projection of the same policy data; filtering remains before pagination/counting.
 export function roleActionSql(
-  userId: SQLWrapper | string,
+  tenantId: SQLWrapper | string,
   workspaceId: SQLWrapper | string,
   kind: ResourceType,
   role: SQLWrapper,
@@ -120,5 +120,5 @@ export function roleActionSql(
         sql`, `,
       )})`
     : sql`false`;
-  return sql<boolean>`coalesce((select ${action} = any(rp.actions) from role_permissions rp where rp.user_id = ${userId} and rp.workspace_id = ${workspaceId} and rp.resource_type = ${kind} and rp.role = ${role}), ${defaultAllowed}, false)`;
+  return sql<boolean>`coalesce((select ${action} = any(rp.actions) from role_permissions rp where rp.tenant_id = ${tenantId} and rp.workspace_id = ${workspaceId} and rp.resource_type = ${kind} and rp.role = ${role}), ${defaultAllowed}, false)`;
 }

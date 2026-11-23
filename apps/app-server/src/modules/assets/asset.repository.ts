@@ -26,20 +26,20 @@ export class AssetRepository {
     objectKey: string;
     file: CreateAssetUploadInput;
     maxBytes: number;
-    maxUserBytes: number;
+    maxTenantBytes: number;
     expiresAt: Date;
     idempotency?: { key: string; requestHash: string };
   }): Promise<AssetRecord | null> {
     if (input.file.size > input.maxBytes) return null;
     return this.db.transaction(async (tx) => {
-      await readKnowledgeTree(tx, input.principal.userId);
+      await readKnowledgeTree(tx, input.principal.tenantId);
       const [document] = await tx
         .select({ id: documents.id })
         .from(documents)
         .where(
           and(
             eq(documents.id, input.documentId),
-            eq(documents.userId, input.principal.userId),
+            eq(documents.tenantId, input.principal.tenantId),
             eq(documents.status, "active"),
           ),
         )
@@ -54,7 +54,7 @@ export class AssetRepository {
         : null;
       if (input.idempotency && keyHash) {
         const lockKey = [
-          input.principal.userId,
+          input.principal.tenantId,
           input.principal.identityId,
           "assets.upload.create",
           keyHash,
@@ -65,7 +65,7 @@ export class AssetRepository {
           .from(apiIdempotencyRecords)
           .where(
             and(
-              eq(apiIdempotencyRecords.userId, input.principal.userId),
+              eq(apiIdempotencyRecords.tenantId, input.principal.tenantId),
               eq(apiIdempotencyRecords.subjectId, input.principal.identityId),
               eq(apiIdempotencyRecords.operationId, "assets.upload.create"),
               eq(apiIdempotencyRecords.keyHash, keyHash),
@@ -78,7 +78,7 @@ export class AssetRepository {
             .delete(apiIdempotencyRecords)
             .where(
               and(
-                eq(apiIdempotencyRecords.userId, input.principal.userId),
+                eq(apiIdempotencyRecords.tenantId, input.principal.tenantId),
                 eq(apiIdempotencyRecords.subjectId, input.principal.identityId),
                 eq(apiIdempotencyRecords.operationId, "assets.upload.create"),
                 eq(apiIdempotencyRecords.keyHash, keyHash),
@@ -101,7 +101,7 @@ export class AssetRepository {
             .where(
               and(
                 eq(assets.id, assetId),
-                eq(assets.userId, input.principal.userId),
+                eq(assets.tenantId, input.principal.tenantId),
                 eq(assets.documentId, input.documentId),
                 eq(assets.createdBy, input.principal.identityId),
               ),
@@ -112,21 +112,21 @@ export class AssetRepository {
         }
       }
       await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`user-assets:${input.principal.userId}`}, 718268))`,
+        sql`select pg_advisory_xact_lock(hashtextextended(${`tenant-assets:${input.principal.tenantId}`}, 718268))`,
       );
-      const [userAssetUsage] = await tx
+      const [tenantAssetUsage] = await tx
         .select({ bytes: sql<string>`coalesce(sum(${assets.declaredSize}), 0)::text` })
         .from(assets)
         .where(
           and(
-            eq(assets.userId, input.principal.userId),
+            eq(assets.tenantId, input.principal.tenantId),
             inArray(assets.status, ["uploading", "receiving", "uploaded", "ready", "failed"]),
           ),
         );
-      const usedBytes = Number(userAssetUsage?.bytes ?? 0);
-      if (usedBytes + input.file.size > input.maxUserBytes) {
-        throw new DomainError("RESOURCE_LIMIT", "The user asset storage limit has been reached", {
-          limitBytes: input.maxUserBytes,
+      const usedBytes = Number(tenantAssetUsage?.bytes ?? 0);
+      if (usedBytes + input.file.size > input.maxTenantBytes) {
+        throw new DomainError("RESOURCE_LIMIT", "The tenant asset storage limit has been reached", {
+          limitBytes: input.maxTenantBytes,
           usedBytes,
           requestedBytes: input.file.size,
         });
@@ -135,7 +135,7 @@ export class AssetRepository {
         .insert(assets)
         .values({
           id: `asset_${randomUUID()}`,
-          userId: input.principal.userId,
+          tenantId: input.principal.tenantId,
           documentId: input.documentId,
           objectKey: input.objectKey,
           fileName: input.file.fileName,
@@ -147,7 +147,7 @@ export class AssetRepository {
         .returning();
       if (asset && input.idempotency && keyHash) {
         await tx.insert(apiIdempotencyRecords).values({
-          userId: input.principal.userId,
+          tenantId: input.principal.tenantId,
           subjectId: input.principal.identityId,
           operationId: "assets.upload.create",
           keyHash,
@@ -162,11 +162,11 @@ export class AssetRepository {
 
   async beginUpload(principal: Principal, assetId: string): Promise<AssetRecord | null> {
     return this.db.transaction(async (tx) => {
-      await readKnowledgeTree(tx, principal.userId);
+      await readKnowledgeTree(tx, principal.tenantId);
       const [asset] = await tx
         .select()
         .from(assets)
-        .where(and(eq(assets.id, assetId), eq(assets.userId, principal.userId)))
+        .where(and(eq(assets.id, assetId), eq(assets.tenantId, principal.tenantId)))
         .for("update")
         .limit(1);
       if (!asset || !["uploading", "failed"].includes(asset.status)) return null;
@@ -187,7 +187,7 @@ export class AssetRepository {
   }
 
   async markUploaded(input: {
-    userId: string;
+    tenantId: string;
     assetId: string;
     actualSize: number;
     sha256: string;
@@ -203,7 +203,7 @@ export class AssetRepository {
       .where(
         and(
           eq(assets.id, input.assetId),
-          eq(assets.userId, input.userId),
+          eq(assets.tenantId, input.tenantId),
           eq(assets.status, "receiving"),
         ),
       )
@@ -211,12 +211,12 @@ export class AssetRepository {
     return Boolean(asset);
   }
 
-  async markFailed(userId: string, assetId: string): Promise<void> {
+  async markFailed(tenantId: string, assetId: string): Promise<void> {
     await this.db
       .update(assets)
       .set({ status: "failed" })
       .where(
-        and(eq(assets.id, assetId), eq(assets.userId, userId), eq(assets.status, "receiving")),
+        and(eq(assets.id, assetId), eq(assets.tenantId, tenantId), eq(assets.status, "receiving")),
       );
   }
 
@@ -228,7 +228,7 @@ export class AssetRepository {
     const [asset] = await this.db
       .select()
       .from(assets)
-      .where(and(eq(assets.id, assetId), eq(assets.userId, principal.userId)))
+      .where(and(eq(assets.id, assetId), eq(assets.tenantId, principal.tenantId)))
       .limit(1);
     if (!asset || !(await this.documentActionAllowed(this.db, asset, principal, action)))
       return null;
@@ -237,11 +237,11 @@ export class AssetRepository {
 
   async completeUpload(principal: Principal, assetId: string): Promise<AssetRecord | null> {
     return this.db.transaction(async (tx) => {
-      await readKnowledgeTree(tx, principal.userId);
+      await readKnowledgeTree(tx, principal.tenantId);
       const [asset] = await tx
         .select()
         .from(assets)
-        .where(and(eq(assets.id, assetId), eq(assets.userId, principal.userId)))
+        .where(and(eq(assets.id, assetId), eq(assets.tenantId, principal.tenantId)))
         .for("update")
         .limit(1);
       if (!asset || !(await this.documentActionAllowed(tx, asset, principal, "write"))) return null;
@@ -258,11 +258,11 @@ export class AssetRepository {
 
   async cancelUpload(principal: Principal, assetId: string): Promise<AssetRecord | null> {
     return this.db.transaction(async (tx) => {
-      await readKnowledgeTree(tx, principal.userId);
+      await readKnowledgeTree(tx, principal.tenantId);
       const [asset] = await tx
         .select()
         .from(assets)
-        .where(and(eq(assets.id, assetId), eq(assets.userId, principal.userId)))
+        .where(and(eq(assets.id, assetId), eq(assets.tenantId, principal.tenantId)))
         .for("update")
         .limit(1);
       if (!asset || !(await this.documentActionAllowed(tx, asset, principal, "write"))) return null;
@@ -286,14 +286,14 @@ export class AssetRepository {
     reference: CreateAssetReferenceInput;
   }): Promise<boolean> {
     return this.db.transaction(async (tx) => {
-      await readKnowledgeTree(tx, input.principal.userId);
+      await readKnowledgeTree(tx, input.principal.tenantId);
       const [document] = await tx
         .select({ id: documents.id })
         .from(documents)
         .where(
           and(
             eq(documents.id, input.documentId),
-            eq(documents.userId, input.principal.userId),
+            eq(documents.tenantId, input.principal.tenantId),
             eq(documents.status, "active"),
           ),
         )
@@ -327,7 +327,7 @@ export class AssetRepository {
         .from(assets)
         .where(
           and(
-            eq(assets.userId, input.principal.userId),
+            eq(assets.tenantId, input.principal.tenantId),
             eq(assets.documentId, input.documentId),
             eq(assets.id, input.assetId),
             eq(assets.status, "ready"),
@@ -338,7 +338,7 @@ export class AssetRepository {
       await tx
         .insert(assetReferences)
         .values({
-          userId: input.principal.userId,
+          tenantId: input.principal.tenantId,
           documentId: input.documentId,
           generationId: generation.id,
           durableSeq: input.reference.durableSeq,
@@ -357,14 +357,14 @@ export class AssetRepository {
       .leftJoin(
         assetReferences,
         and(
-          eq(assetReferences.userId, assets.userId),
+          eq(assetReferences.tenantId, assets.tenantId),
           eq(assetReferences.documentId, assets.documentId),
           eq(assetReferences.assetId, assets.id),
         ),
       )
       .leftJoin(
         documents,
-        and(eq(documents.userId, assets.userId), eq(documents.id, assets.documentId)),
+        and(eq(documents.tenantId, assets.tenantId), eq(documents.id, assets.documentId)),
       )
       .where(
         or(
@@ -390,7 +390,7 @@ export class AssetRepository {
 
   private async documentActionAllowed(
     db: DatabaseReader,
-    asset: Pick<AssetRecord, "userId" | "documentId">,
+    asset: Pick<AssetRecord, "tenantId" | "documentId">,
     principal: Principal,
     action: "read" | "write",
   ): Promise<boolean> {
@@ -400,7 +400,7 @@ export class AssetRepository {
       .where(
         and(
           eq(documents.id, asset.documentId),
-          eq(documents.userId, asset.userId),
+          eq(documents.tenantId, asset.tenantId),
           eq(documents.status, "active"),
         ),
       )

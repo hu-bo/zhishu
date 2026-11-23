@@ -8,7 +8,7 @@ type WriteTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
  * ownership-change transactions.
  */
 export interface DocumentPublicLinkage {
-  detachDocuments(tx: WriteTransaction, userId: string, documentIds: string[]): Promise<void>;
+  detachDocuments(tx: WriteTransaction, tenantId: string, documentIds: string[]): Promise<void>;
 }
 
 export type PublicLinkageTransaction = WriteTransaction;

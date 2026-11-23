@@ -22,9 +22,9 @@ export const casdoorAuthEnabled = authMode === 'casdoor';
  * closing the tab clears); the per-app prefix keeps other consoles' sessions apart.
  */
 export const casdoorClientConfig: ClientConfig = {
-  appName: import.meta.env.VITE_AUTH_APP_NAME || 'zhishu',
-  authApiBase: import.meta.env.VITE_AUTH_BASE_URL || '//auth.8and1.cn/api',
+  appName: 'zhishu',
+  authApiBase: '//auth.8and1.cn/api',
   redirectUri: `${window.location.origin}/callback`,
-  storage: { type: 'sessionStorage', prefix: 'zhishu_' },
+  storage: { type: 'localStorage', prefix: 'zhishu_' },
   silentRefresh: true,
 };

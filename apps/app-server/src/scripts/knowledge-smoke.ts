@@ -28,7 +28,7 @@ assert.match(
   /(?:qa|test|smoke)/u,
   "Use a disposable qa/test/smoke database",
 );
-const userId = `knowledge-qa-${randomUUID()}`;
+const tenantId = `knowledge-qa-${randomUUID()}`;
 const tableFixture = {
   type: "doc",
   content: [
@@ -86,9 +86,9 @@ assert.equal(
   false,
   "Changed cell text must remain a content change",
 );
-const principal = (identityId: string, user = userId): Principal => ({
+const principal = (identityId: string, tenant = tenantId): Principal => ({
   identityId,
-  userId: user,
+  tenantId: tenant,
   username: identityId,
   displayName: identityId,
   email: `${identityId}@example.test`,
@@ -99,7 +99,7 @@ const principals = new Map([
   ["owner", principal("owner")],
   ["reader", principal("reader")],
   ["outsider", principal("outsider")],
-  ["other-user", principal("owner", `${userId}-other`)],
+  ["other-tenant", principal("owner", `${tenantId}-other`)],
 ]);
 const app = await buildApp(
   loadConfig({
@@ -206,7 +206,7 @@ const seedStory = async (document: Document, content: unknown) => {
     where document_id = ${document.id} and status = 'active'
   `);
   await repository.backfillProjectionSnapshot({
-    userId,
+    tenantId,
     documentId: document.id,
     generationId: document.generationId,
     durableSeq: 1,
@@ -297,7 +297,7 @@ try {
   for (const id of ["owner", "reader", "outsider"]) {
     await call("GET", "/api/auth/me", undefined, 200, id);
     await app.db.execute(
-      sql`insert into resource_acl (user_id, workspace_id, identity_id, created_by, role) values (${userId}, 'ws_default', ${id}, ${id}, 'editor') on conflict do nothing`,
+      sql`insert into resource_acl (tenant_id, workspace_id, identity_id, created_by, role) values (${tenantId}, 'ws_default', ${id}, ${id}, 'editor') on conflict do nothing`,
     );
   }
 
@@ -386,7 +386,7 @@ try {
     `/api/knowledge/workspaces/ws_default/catalogs/cat_root_ws_default/children`,
     undefined,
     404,
-    "other-user",
+    "other-tenant",
   );
 
   // Locate returns the full root-first catalog path.
@@ -692,7 +692,7 @@ try {
   assert.deepEqual(
     readerSearch.items[0]?.path,
     ["研发专区", "产品文档"],
-    "Catalog structure is user-visible by design",
+    "Catalog structure is tenant-visible by design",
   );
   assert.equal(
     (await call("GET", `/api/knowledge/search?q=needle`, undefined, 200, "reader")).json<{
@@ -707,7 +707,7 @@ try {
     0,
   );
   assert.equal(
-    (await call("GET", `/api/knowledge/search?q=needle`, undefined, 200, "other-user")).json<{
+    (await call("GET", `/api/knowledge/search?q=needle`, undefined, 200, "other-tenant")).json<{
       items: unknown[];
     }>().items.length,
     0,
@@ -945,7 +945,7 @@ try {
     await call("POST", `/api/shares/${editShare.id}/join`, undefined, 200, "reader")
   ).json<JoinResult>();
   assert.equal(readerJoin.joined, false, "Existing readers must not re-join");
-  await call("POST", `/api/shares/${editShare.id}/join`, undefined, 404, "other-user");
+  await call("POST", `/api/shares/${editShare.id}/join`, undefined, 404, "other-tenant");
   const afterJoins = (await call("GET", `/api/documents/${child.id}/shares`)).json<Share[]>();
   assert.equal(
     afterJoins.find((row) => row.id === editShare.id)?.joinCount,
@@ -977,7 +977,7 @@ try {
   await app.db.execute(sql`
     update document_shares
     set expires_at = now() - interval '1 hour', created_at = now() - interval '2 hours'
-    where user_id = ${userId} and id = ${editShare.id}
+    where tenant_id = ${tenantId} and id = ${editShare.id}
   `);
   const expiredDetail = (
     await call("GET", `/api/public/shares/${editShare.id}`, undefined, 200, "missing")
@@ -1070,8 +1070,8 @@ try {
   );
   await setMember("outsider", "admin", "admin", 400);
   await call("DELETE", `${memberUrl}/admin`, undefined, 400, "admin");
-  await call("GET", memberUrl, undefined, 404, "other-user");
-  await setMember("outsider", "viewer", "other-user", 404);
+  await call("GET", memberUrl, undefined, 404, "other-tenant");
+  await setMember("outsider", "viewer", "other-tenant", 404);
 
   const ownedDirectory = await createCatalog(managed.id, {
     name: "共同目录",
@@ -1217,7 +1217,7 @@ try {
 
   // Membership cannot substitute for explicit ownership, even if an old/imported row exists.
   await app.db.execute(
-    sql`insert into resource_acl (user_id, workspace_id, identity_id, created_by, role) values (${userId}, ${personal.id}, 'reader', '读者', 'admin')`,
+    sql`insert into resource_acl (tenant_id, workspace_id, identity_id, created_by, role) values (${tenantId}, ${personal.id}, 'reader', '读者', 'admin')`,
   );
   const otherPersonal = (await call("GET", "/api/knowledge/workspaces", undefined, 200, "reader"))
     .json<ManagedWorkspace[]>()
@@ -1232,11 +1232,11 @@ try {
     personalRoster.map((row) => row.identityId),
     ["owner"],
   );
-  await call("GET", `${personalUrl}/members`, undefined, 404, "other-user");
+  await call("GET", `${personalUrl}/members`, undefined, 404, "other-tenant");
 
   const legacyId = `ws_${randomUUID()}`;
   await app.db.execute(
-    sql`insert into workspaces (user_id, id, name, created_by) values (${userId}, ${legacyId}, '旧单人空间', 'owner')`,
+    sql`insert into workspaces (tenant_id, id, name, created_by) values (${tenantId}, ${legacyId}, '旧单人空间', 'owner')`,
   );
   const legacyWorkspace = (await call("GET", "/api/knowledge/workspaces"))
     .json<ManagedWorkspace[]>()
@@ -1250,7 +1250,7 @@ try {
     Object.entries(legacyWorkspace).filter(([key]) => key !== "kind" && key !== "personalOwnerId"),
   );
   await app.db.insert(apiIdempotencyRecords).values({
-    userId,
+    tenantId,
     subjectId: "owner",
     operationId: "workspaces.create",
     keyHash: createHash("sha256").update(legacyReceiptKey).digest("hex"),
@@ -1278,22 +1278,22 @@ try {
   );
   await assert.rejects(
     app.db.execute(
-      sql`insert into workspaces (user_id, id, name, created_by, kind) values (${userId}, 'ws_bad_owner', '错误所有者', 'owner', 'personal')`,
+      sql`insert into workspaces (tenant_id, id, name, created_by, kind) values (${tenantId}, 'ws_bad_owner', '错误所有者', 'owner', 'personal')`,
     ),
   );
   await assert.rejects(
     app.db.execute(
-      sql`insert into workspaces (user_id, id, name, created_by, kind, personal_owner_id) values (${userId}, 'ws_forged_owner', '错误所有者', 'owner', 'personal', 'reader')`,
+      sql`insert into workspaces (tenant_id, id, name, created_by, kind, personal_owner_id) values (${tenantId}, 'ws_forged_owner', '错误所有者', 'owner', 'personal', 'reader')`,
     ),
   );
   await assert.rejects(
     app.db.execute(
-      sql`insert into workspaces (user_id, id, name, created_by, kind, personal_owner_id) values (${userId}, 'ws_bad_team', '错误团队', 'owner', 'team', 'owner')`,
+      sql`insert into workspaces (tenant_id, id, name, created_by, kind, personal_owner_id) values (${tenantId}, 'ws_bad_team', '错误团队', 'owner', 'team', 'owner')`,
     ),
   );
   await assert.rejects(
     app.db.execute(
-      sql`insert into workspaces (user_id, id, name, created_by, kind) values (${userId}, 'ws_bad_kind', '错误类型', 'owner', 'invalid')`,
+      sql`insert into workspaces (tenant_id, id, name, created_by, kind) values (${tenantId}, 'ws_bad_kind', '错误类型', 'owner', 'invalid')`,
     ),
   );
 
@@ -1302,23 +1302,25 @@ try {
   );
 
   process.stdout.write(
-    "Workspace regression passed: settings, idempotent creation, member roles and removal, owner/admin protection, read-only organization, cross-user denial, explicit ACL preservation, cross-space moves/revision conflicts and safe directory deletion.\n",
+    "Workspace regression passed: settings, idempotent creation, member roles and removal, owner/admin protection, read-only organization, cross-tenant denial, explicit ACL preservation, cross-space moves/revision conflicts and safe directory deletion.\n",
   );
   process.stdout.write(
-    "Knowledge smoke passed: catalogs (CRUD, lazy children, depth ceiling, cascade delete), document moves, locate paths, ACL/user isolation, metadata/revision, formats/history, literal body search, idempotent presets, and the full share lifecycle (mint, anonymous read, tiered join, revoke, expiry). MinIO was not contacted.\n",
+    "Knowledge smoke passed: catalogs (CRUD, lazy children, depth ceiling, cascade delete), document moves, locate paths, ACL/tenant isolation, metadata/revision, formats/history, literal body search, idempotent presets, and the full share lifecycle (mint, anonymous read, tiered join, revoke, expiry). MinIO was not contacted.\n",
   );
 } finally {
   await app.db.execute(
-    sql`delete from documents where user_id in (${userId}, ${`${userId}-other`})`,
-  );
-  await app.db.execute(sql`delete from knowledge_preset_installations where user_id = ${userId}`);
-  await app.db.execute(sql`delete from document_audit_events where user_id = ${userId}`);
-  await app.db.execute(sql`delete from api_idempotency_records where user_id = ${userId}`);
-  await app.db.execute(
-    sql`delete from catalogs where user_id in (${userId}, ${`${userId}-other`})`,
+    sql`delete from documents where tenant_id in (${tenantId}, ${`${tenantId}-other`})`,
   );
   await app.db.execute(
-    sql`delete from workspaces where user_id in (${userId}, ${`${userId}-other`})`,
+    sql`delete from knowledge_preset_installations where tenant_id = ${tenantId}`,
+  );
+  await app.db.execute(sql`delete from document_audit_events where tenant_id = ${tenantId}`);
+  await app.db.execute(sql`delete from api_idempotency_records where tenant_id = ${tenantId}`);
+  await app.db.execute(
+    sql`delete from catalogs where tenant_id in (${tenantId}, ${`${tenantId}-other`})`,
+  );
+  await app.db.execute(
+    sql`delete from workspaces where tenant_id in (${tenantId}, ${`${tenantId}-other`})`,
   );
   await app.close();
 }

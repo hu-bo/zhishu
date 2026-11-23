@@ -91,7 +91,7 @@ export class AiImages {
         observed.push(job);
         const toolCallId = key.slice(key.indexOf(":") + 1);
         await this.pool.query(
-          `insert into ai_image_jobs(id,user_id,conversation_id,run_id,tool_call_id,status,asset_id,provider_result)
+          `insert into ai_image_jobs(id,tenant_id,conversation_id,run_id,tool_call_id,status,asset_id,provider_result)
            values($1,$2,$3,$4,$5,$6,$7,$8)
            on conflict(id) do update set status=excluded.status,
              asset_id=excluded.asset_id,
@@ -99,7 +99,7 @@ export class AiImages {
              updated_at=now()`,
           [
             key,
-            principal.userId,
+            principal.tenantId,
             conversationId,
             runId,
             toolCallId.slice(0, 160),
@@ -227,11 +227,11 @@ export class AiImages {
 
   private objectKey(principal: Principal, id: string, assetId: string) {
     // Storage layout predates the unified assistant; existing objects keep their keys.
-    return `users/${principal.userId}/writing/${id}/${assetId}.png`;
+    return `tenants/${principal.tenantId}/writing/${id}/${assetId}.png`;
   }
 
   async list(
-    userId: string,
+    tenantId: string,
     conversationId: string,
   ): Promise<{ key: string; runId: string; job: ImageJob }[]> {
     const rows = await this.pool.query<{
@@ -242,8 +242,8 @@ export class AiImages {
       provider_result: (ReadyMeta & Partial<BufferedPng>) | null;
     }>(
       `select id,run_id,status,asset_id,provider_result from ai_image_jobs
-       where user_id=$1 and conversation_id=$2 order by updated_at limit 20`,
-      [userId, conversationId],
+       where tenant_id=$1 and conversation_id=$2 order by updated_at limit 20`,
+      [tenantId, conversationId],
     );
     return rows.rows.flatMap<{ key: string; runId: string; job: ImageJob }>((r) => {
       if (r.status === "ready" && r.asset_id && r.provider_result)
@@ -314,8 +314,8 @@ export class AiImages {
   async access(principal: Principal, conversationId: string, assetId: string) {
     const row = await this.pool.query<{ asset_id: string | null; status: string }>(
       `select asset_id,status from ai_image_jobs
-       where conversation_id=$2 and asset_id=$3 and user_id=$1`,
-      [principal.userId, conversationId, assetId],
+       where conversation_id=$2 and asset_id=$3 and tenant_id=$1`,
+      [principal.tenantId, conversationId, assetId],
     );
     const found = row.rows[0];
     if (!found || found.status !== "ready" || !this.storage)
@@ -336,11 +336,11 @@ export class AiImages {
   /** Conversation deletion must also drop job rows (module-owned GC hook). */
   async purgeConversation(
     tx: { query: (sql: string, params?: unknown[]) => Promise<unknown> },
-    userId: string,
+    tenantId: string,
     conversationId: string,
   ) {
-    await tx.query("delete from ai_image_jobs where user_id=$1 and conversation_id=$2", [
-      userId,
+    await tx.query("delete from ai_image_jobs where tenant_id=$1 and conversation_id=$2", [
+      tenantId,
       conversationId,
     ]);
   }

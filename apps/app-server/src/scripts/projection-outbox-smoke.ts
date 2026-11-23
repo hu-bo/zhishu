@@ -27,18 +27,18 @@ const db = createDatabase(pool);
 const repository = new DocumentRepository(db);
 const projections = new DocumentProjectionRepository(db);
 const token = randomUUID();
-const userId = `projection-smoke-${token}`;
+const tenantId = `projection-smoke-${token}`;
 const ownerId = `projection-smoke-${token}`;
 const assetId = `asset_${token.replaceAll("-", "")}`;
 let documentId: string | undefined;
 
 try {
-  const document = await repository.create(userId, ownerId, "Projection outbox smoke");
+  const document = await repository.create(tenantId, ownerId, "Projection outbox smoke");
   documentId = document.id;
   const now = new Date();
   await db.insert(assets).values({
     id: assetId,
-    userId,
+    tenantId,
     documentId,
     objectKey: `projection-smoke/${token}`,
     fileName: "projection.png",
@@ -75,7 +75,7 @@ try {
   const firstReceipt = await repository.persistUpdate({
     documentId,
     generationId: document.generationId,
-    userId,
+    tenantId,
     subjectId: ownerId,
     updateHash: `projection-${token}-1`,
     updateBytes: new Uint8Array([1]),
@@ -131,7 +131,7 @@ try {
   await repository.persistUpdate({
     documentId,
     generationId: document.generationId,
-    userId,
+    tenantId,
     subjectId: ownerId,
     updateHash: `projection-${token}-2`,
     updateBytes: new Uint8Array([2]),
@@ -151,7 +151,7 @@ try {
   await repository.persistUpdate({
     documentId,
     generationId: document.generationId,
-    userId,
+    tenantId,
     subjectId: ownerId,
     updateHash: `projection-${token}-3`,
     updateBytes: new Uint8Array([3]),

@@ -9,7 +9,7 @@ import { documentActionSql } from "../authorization/permissions.js";
 export async function recordBodyMentionNotifications(
   db: Pick<Database, "execute" | "select" | "insert">,
   input: {
-    userId: string;
+    tenantId: string;
     documentId: string;
     workspaceId: string;
     generationId: string;
@@ -27,10 +27,10 @@ export async function recordBodyMentionNotifications(
     input.previousSeq === 0
       ? { rows: [{ content: { type: "doc", content: [] } as DocumentContent }] }
       : await db.execute<{ content: DocumentContent }>(sql`
-    select snapshot_content as content from document_outbox where user_id = ${input.userId}
+    select snapshot_content as content from document_outbox where tenant_id = ${input.tenantId}
       and document_id = ${input.documentId} and generation_id = ${input.generationId}
       and durable_seq = ${input.previousSeq} and snapshot_content is not null
-    union all select content from document_projection_snapshots where user_id = ${input.userId}
+    union all select content from document_projection_snapshots where tenant_id = ${input.tenantId}
       and document_id = ${input.documentId} and generation_id = ${input.generationId} and durable_seq = ${input.previousSeq}
     limit 1
   `);
@@ -59,9 +59,9 @@ export async function recordBodyMentionNotifications(
     .from(identityProfiles)
     .where(
       and(
-        eq(identityProfiles.userId, input.userId),
+        eq(identityProfiles.tenantId, input.tenantId),
         inArray(identityProfiles.identityId, recipients),
-        sql`exists (select 1 from ${documents} where ${documents.id} = ${input.documentId} and ${documentActionSql({ userId: input.userId, identityId: identityProfiles.identityId }, "read")})`,
+        sql`exists (select 1 from ${documents} where ${documents.id} = ${input.documentId} and ${documentActionSql({ tenantId: input.tenantId, identityId: identityProfiles.identityId }, "read")})`,
       ),
     );
   // Imported or retained mentions may reference absent or revoked members. Keep
@@ -69,7 +69,7 @@ export async function recordBodyMentionNotifications(
   await insertNotifications(
     db,
     visible.map((member) => ({
-      userId: input.userId,
+      tenantId: input.tenantId,
       recipientId: member.identityId,
       actorId: input.actorId,
       type: "mention",

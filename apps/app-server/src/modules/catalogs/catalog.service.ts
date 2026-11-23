@@ -59,31 +59,31 @@ type SubtreeRow = { id: string; created_by: string; depth: number };
 
 async function renumberCatalogSiblings(
   db: DbExecutor,
-  userId: string,
+  tenantId: string,
   orderedIds: readonly string[],
 ): Promise<void> {
   if (!orderedIds.length) return;
   await db.execute(
-    sql`update catalogs c set position = ordered.ordinality - 1 from unnest(${sql.param([...orderedIds])}::text[]) with ordinality as ordered(id, ordinality) where c.user_id = ${userId} and c.id = ordered.id`,
+    sql`update catalogs c set position = ordered.ordinality - 1 from unnest(${sql.param([...orderedIds])}::text[]) with ordinality as ordered(id, ordinality) where c.tenant_id = ${tenantId} and c.id = ordered.id`,
   );
 }
 
 async function collectSubtree(
   db: DbExecutor,
-  userId: string,
+  tenantId: string,
   catalogId: string,
 ): Promise<SubtreeRow[]> {
   const result = await db.execute<SubtreeRow>(sql`with recursive subtree as (
-    select id, created_by, 0 as depth, array[id] as visited from catalogs where user_id = ${userId} and id = ${catalogId}
-    union all select c.id, c.created_by, s.depth + 1, s.visited || c.id from catalogs c join subtree s on c.parent_id = s.id where c.user_id = ${userId} and not c.id = any(s.visited) and s.depth < ${MAX_CATALOG_DEPTH + 1}
+    select id, created_by, 0 as depth, array[id] as visited from catalogs where tenant_id = ${tenantId} and id = ${catalogId}
+    union all select c.id, c.created_by, s.depth + 1, s.visited || c.id from catalogs c join subtree s on c.parent_id = s.id where c.tenant_id = ${tenantId} and not c.id = any(s.visited) and s.depth < ${MAX_CATALOG_DEPTH + 1}
   ) select id, created_by, depth from subtree`);
   return result.rows;
 }
 
-async function ancestorDepth(db: DbExecutor, userId: string, catalogId: string): Promise<number> {
+async function ancestorDepth(db: DbExecutor, tenantId: string, catalogId: string): Promise<number> {
   const result = await db.execute<{ depth: number }>(sql`with recursive parents as (
-    select id, parent_id, 0 as depth, array[id] as visited from catalogs where user_id = ${userId} and id = ${catalogId}
-    union all select c.id, c.parent_id, p.depth + 1, p.visited || c.id from catalogs c join parents p on c.id = p.parent_id where c.user_id = ${userId} and not c.id = any(p.visited) and p.depth < ${MAX_CATALOG_DEPTH + 1}
+    select id, parent_id, 0 as depth, array[id] as visited from catalogs where tenant_id = ${tenantId} and id = ${catalogId}
+    union all select c.id, c.parent_id, p.depth + 1, p.visited || c.id from catalogs c join parents p on c.id = p.parent_id where c.tenant_id = ${tenantId} and not c.id = any(p.visited) and p.depth < ${MAX_CATALOG_DEPTH + 1}
   ) select max(depth)::int as depth from parents`);
   return result.rows[0]?.depth ?? 0;
 }
@@ -112,7 +112,7 @@ export class CatalogService {
         canMove: catalogActionSql(principal, "move"),
       })
       .from(catalogs)
-      .where(and(eq(catalogs.userId, principal.userId), eq(catalogs.id, catalogId)))
+      .where(and(eq(catalogs.tenantId, principal.tenantId), eq(catalogs.id, catalogId)))
       .limit(1);
     return row ?? { canManage: false, canWrite: false, canMove: false };
   }
@@ -126,7 +126,7 @@ export class CatalogService {
     const [catalog] = await tx
       .select()
       .from(catalogs)
-      .where(and(eq(catalogs.userId, principal.userId), eq(catalogs.id, catalogId)))
+      .where(and(eq(catalogs.tenantId, principal.tenantId), eq(catalogs.id, catalogId)))
       .for("update")
       .limit(1);
     if (!catalog) throw new DomainError("NOT_FOUND", "目录不存在");
@@ -135,7 +135,7 @@ export class CatalogService {
       .from(catalogs)
       .where(
         and(
-          eq(catalogs.userId, principal.userId),
+          eq(catalogs.tenantId, principal.tenantId),
           eq(catalogs.id, catalogId),
           catalogActionSql(principal, action),
         ),
@@ -161,7 +161,7 @@ export class CatalogService {
       .from(catalogs)
       .where(
         and(
-          eq(catalogs.userId, principal.userId),
+          eq(catalogs.tenantId, principal.tenantId),
           eq(catalogs.id, catalogId),
           catalogActionSql(principal, "read"),
         ),
@@ -172,7 +172,7 @@ export class CatalogService {
     const [workspace] = await this.db
       .select({ id: workspaces.id })
       .from(workspaces)
-      .where(and(eq(workspaces.userId, principal.userId), eq(workspaces.id, workspaceId)))
+      .where(and(eq(workspaces.tenantId, principal.tenantId), eq(workspaces.id, workspaceId)))
       .limit(1);
     if (!workspace) throw new DomainError("NOT_FOUND", "Workspace not found");
     const childCatalogs = await this.db
@@ -186,12 +186,12 @@ export class CatalogService {
         canMove: catalogActionSql(principal, "move"),
         // NOTE: reference the outer table by its literal name — inside a select builder,
         // interpolated ${catalogs.id} renders as bare "id" and would resolve to the subquery alias.
-        hasChildren: sql<boolean>`(exists (select 1 from ${catalogs} c2 where c2.user_id = ${principal.userId} and c2.parent_id = catalogs.id and ${catalogActionSql(principal, "read", { id: sql`c2.id`, userId: sql`c2.user_id`, workspaceId: sql`c2.workspace_id` })}) or exists (select 1 from ${documents} d2 where d2.user_id = ${principal.userId} and d2.catalog_id = catalogs.id and d2.status = 'active' and ${documentActionSql(principal, "read", { id: sql`d2.id`, userId: sql`d2.user_id`, workspaceId: sql`d2.workspace_id`, createdBy: sql`d2.created_by`, accessMode: sql`d2.access_mode` })}))`,
+        hasChildren: sql<boolean>`(exists (select 1 from ${catalogs} c2 where c2.tenant_id = ${principal.tenantId} and c2.parent_id = catalogs.id and ${catalogActionSql(principal, "read", { id: sql`c2.id`, tenantId: sql`c2.tenant_id`, workspaceId: sql`c2.workspace_id` })}) or exists (select 1 from ${documents} d2 where d2.tenant_id = ${principal.tenantId} and d2.catalog_id = catalogs.id and d2.status = 'active' and ${documentActionSql(principal, "read", { id: sql`d2.id`, tenantId: sql`d2.tenant_id`, workspaceId: sql`d2.workspace_id`, createdBy: sql`d2.created_by`, accessMode: sql`d2.access_mode` })}))`,
       })
       .from(catalogs)
       .where(
         and(
-          eq(catalogs.userId, principal.userId),
+          eq(catalogs.tenantId, principal.tenantId),
           eq(catalogs.workspaceId, workspaceId),
           eq(catalogs.parentId, catalogId),
           catalogActionSql(principal, "read"),
@@ -215,7 +215,7 @@ export class CatalogService {
       .from(documents)
       .where(
         and(
-          eq(documents.userId, principal.userId),
+          eq(documents.tenantId, principal.tenantId),
           eq(documents.workspaceId, workspaceId),
           eq(documents.catalogId, catalogId),
           eq(documents.status, "active"),
@@ -254,31 +254,33 @@ export class CatalogService {
       ...input,
     });
     return this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
       const replay = await loadIdempotencyReplay(tx, receipt, catalogSchema);
       if (replay) return replay;
       const [workspace] = await tx
         .select({ id: workspaces.id, createdBy: workspaces.createdBy })
         .from(workspaces)
-        .where(and(eq(workspaces.userId, principal.userId), eq(workspaces.id, workspaceId)))
+        .where(and(eq(workspaces.tenantId, principal.tenantId), eq(workspaces.id, workspaceId)))
         .limit(1);
       if (!workspace) throw new DomainError("NOT_FOUND", "Workspace not found");
       await requireWorkspaceOrganizer(tx, principal, workspaceId);
       const [count] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(catalogs)
-        .where(and(eq(catalogs.userId, principal.userId), eq(catalogs.workspaceId, workspaceId)));
+        .where(
+          and(eq(catalogs.tenantId, principal.tenantId), eq(catalogs.workspaceId, workspaceId)),
+        );
       if ((count?.count ?? 0) >= MAX_CATALOGS_PER_WORKSPACE)
         throw new DomainError("RESOURCE_LIMIT", "空间目录数量已达上限");
       const parentId =
-        input.parentId ?? (await ensureRootCatalog(tx, principal.userId, workspaceId));
+        input.parentId ?? (await ensureRootCatalog(tx, principal.tenantId, workspaceId));
       if (input.parentId) {
         const [parent] = await tx
           .select({ id: catalogs.id })
           .from(catalogs)
           .where(
             and(
-              eq(catalogs.userId, principal.userId),
+              eq(catalogs.tenantId, principal.tenantId),
               eq(catalogs.id, input.parentId),
               eq(catalogs.workspaceId, workspaceId),
               catalogActionSql(principal, "write"),
@@ -286,13 +288,13 @@ export class CatalogService {
           )
           .limit(1);
         if (!parent) throw new DomainError("NOT_FOUND", "父目录不存在");
-        if ((await ancestorDepth(tx, principal.userId, input.parentId)) + 1 > MAX_CATALOG_DEPTH)
+        if ((await ancestorDepth(tx, principal.tenantId, input.parentId)) + 1 > MAX_CATALOG_DEPTH)
           throw new DomainError("VALIDATION_ERROR", "目录层级过深");
       }
       const siblings = await tx
         .select({ id: catalogs.id })
         .from(catalogs)
-        .where(and(eq(catalogs.userId, principal.userId), eq(catalogs.parentId, parentId)))
+        .where(and(eq(catalogs.tenantId, principal.tenantId), eq(catalogs.parentId, parentId)))
         .orderBy(asc(catalogs.position), asc(catalogs.id));
       const insertIndex =
         input.beforeId === null
@@ -312,7 +314,7 @@ export class CatalogService {
         canMove: false,
       };
       await tx.insert(catalogs).values({
-        userId: principal.userId,
+        tenantId: principal.tenantId,
         id,
         workspaceId,
         parentId,
@@ -323,7 +325,7 @@ export class CatalogService {
       });
       const order = siblings.map((sibling) => sibling.id);
       order.splice(insertIndex, 0, id);
-      await renumberCatalogSiblings(tx, principal.userId, order);
+      await renumberCatalogSiblings(tx, principal.tenantId, order);
       Object.assign(row, await this.capabilities(tx, principal, id));
       await storeIdempotencyReceipt(tx, receipt, row, 201);
       return row;
@@ -345,7 +347,7 @@ export class CatalogService {
           ...(input.icon !== undefined ? { icon: input.icon } : {}),
           updatedAt: new Date(),
         })
-        .where(and(eq(catalogs.userId, principal.userId), eq(catalogs.id, catalogId)))
+        .where(and(eq(catalogs.tenantId, principal.tenantId), eq(catalogs.id, catalogId)))
         .returning();
       if (!updated) throw new DomainError("NOT_FOUND", "目录不存在");
       return {
@@ -367,14 +369,14 @@ export class CatalogService {
   ): Promise<CatalogRow> {
     const sessions = await this.subtreeSessions(principal, catalogId);
     const result = await this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
       const catalog = await this.requireCatalogAction(tx, principal, catalogId, "move");
       if (catalog.parentId === null) throw new DomainError("VALIDATION_ERROR", "根目录不可移动");
       if (input.parentId === catalogId) throw new DomainError("VALIDATION_ERROR", "不能移动到自身");
       const [target] = await tx
         .select()
         .from(catalogs)
-        .where(and(eq(catalogs.userId, principal.userId), eq(catalogs.id, input.parentId)))
+        .where(and(eq(catalogs.tenantId, principal.tenantId), eq(catalogs.id, input.parentId)))
         .limit(1);
       if (!target) throw new DomainError("NOT_FOUND", "目标目录不存在");
       const [targetWritable] = await tx
@@ -382,19 +384,19 @@ export class CatalogService {
         .from(catalogs)
         .where(
           and(
-            eq(catalogs.userId, principal.userId),
+            eq(catalogs.tenantId, principal.tenantId),
             eq(catalogs.id, target.id),
             catalogActionSql(principal, "write"),
           ),
         )
         .limit(1);
       if (!targetWritable) throw new DomainError("NOT_FOUND", "目标目录不可编辑");
-      const subtree = await collectSubtree(tx, principal.userId, catalogId);
+      const subtree = await collectSubtree(tx, principal.tenantId, catalogId);
       const subtreeIds = subtree.map((row) => row.id);
       if (subtreeIds.includes(input.parentId))
         throw new DomainError("VALIDATION_ERROR", "不能移动到自身的子目录中");
       const subtreeDepth = Math.max(0, ...subtree.map((row) => row.depth));
-      const targetDepth = await ancestorDepth(tx, principal.userId, input.parentId);
+      const targetDepth = await ancestorDepth(tx, principal.tenantId, input.parentId);
       if (targetDepth + 1 + subtreeDepth > MAX_CATALOG_DEPTH)
         throw new DomainError("VALIDATION_ERROR", "目录层级过深");
       const destination = await workspaceAccess(tx, principal, target.workspaceId);
@@ -408,14 +410,14 @@ export class CatalogService {
         if (preview.token !== input.authorizationPreview)
           throw new DomainError("CONFLICT", "请确认最新的跨空间权限影响预览后再移动");
         await tx.execute(
-          sql`with recursive subtree as (select id from catalogs where user_id=${principal.userId} and id=${catalogId} union all select c.id from catalogs c join subtree s on c.parent_id=s.id where c.user_id=${principal.userId}) update document_shares set revoked_at=statement_timestamp() where user_id=${principal.userId} and document_id in(select d.id from documents d where d.user_id=${principal.userId} and d.catalog_id in(select id from subtree))`,
+          sql`with recursive subtree as (select id from catalogs where tenant_id=${principal.tenantId} and id=${catalogId} union all select c.id from catalogs c join subtree s on c.parent_id=s.id where c.tenant_id=${principal.tenantId}) update document_shares set revoked_at=statement_timestamp() where tenant_id=${principal.tenantId} and document_id in(select d.id from documents d where d.tenant_id=${principal.tenantId} and d.catalog_id in(select id from subtree))`,
         );
         const [blocked] = await tx
           .select({ id: catalogs.id })
           .from(catalogs)
           .where(
             and(
-              eq(catalogs.userId, principal.userId),
+              eq(catalogs.tenantId, principal.tenantId),
               sql`${catalogs.id} = any(${sql.param(subtreeIds)}::text[])`,
               sql`not ${catalogActionSql(principal, "move")}`,
             ),
@@ -427,7 +429,7 @@ export class CatalogService {
           .from(documents)
           .where(
             and(
-              eq(documents.userId, principal.userId),
+              eq(documents.tenantId, principal.tenantId),
               sql`${documents.catalogId} = any(${sql.param(subtreeIds)}::text[])`,
               sql`not ${documentActionSql(principal, "manage")}`,
             ),
@@ -440,13 +442,13 @@ export class CatalogService {
           .from(documents)
           .where(
             and(
-              eq(documents.userId, principal.userId),
+              eq(documents.tenantId, principal.tenantId),
               sql`${documents.catalogId} = any(${sql.param(subtreeIds)}::text[])`,
             ),
           );
         await this.publicLinkage?.detachDocuments(
           tx,
-          principal.userId,
+          principal.tenantId,
           movedDocuments.map((row) => row.id),
         );
       }
@@ -455,7 +457,7 @@ export class CatalogService {
         .from(catalogs)
         .where(
           and(
-            eq(catalogs.userId, principal.userId),
+            eq(catalogs.tenantId, principal.tenantId),
             eq(catalogs.parentId, input.parentId),
             ne(catalogs.id, catalogId),
           ),
@@ -468,7 +470,7 @@ export class CatalogService {
       if (insertIndex < 0) throw new DomainError("CONFLICT", "目标位置已变化");
       const order = siblings.map((row) => row.id);
       order.splice(insertIndex, 0, catalogId);
-      await renumberCatalogSiblings(tx, principal.userId, order);
+      await renumberCatalogSiblings(tx, principal.tenantId, order);
       const [updated] = await tx
         .update(catalogs)
         .set({
@@ -477,7 +479,7 @@ export class CatalogService {
           position: insertIndex,
           updatedAt: new Date(),
         })
-        .where(and(eq(catalogs.userId, principal.userId), eq(catalogs.id, catalogId)))
+        .where(and(eq(catalogs.tenantId, principal.tenantId), eq(catalogs.id, catalogId)))
         .returning();
       if (!updated) throw new DomainError("NOT_FOUND", "目录不存在");
       if (crossWorkspace) {
@@ -486,7 +488,7 @@ export class CatalogService {
           .set({ workspaceId: target.workspaceId })
           .where(
             and(
-              eq(catalogs.userId, principal.userId),
+              eq(catalogs.tenantId, principal.tenantId),
               sql`${catalogs.id} = any(${sql.param(subtreeIds)}::text[])`,
               ne(catalogs.id, catalogId),
             ),
@@ -496,13 +498,13 @@ export class CatalogService {
           .from(documents)
           .where(
             and(
-              eq(documents.userId, principal.userId),
+              eq(documents.tenantId, principal.tenantId),
               sql`${documents.catalogId} = any(${sql.param(subtreeIds)}::text[])`,
             ),
           );
         const oldRecipients = new Map<string, string[]>();
         for (const d of movingDocuments)
-          oldRecipients.set(d.id, await documentRecipients(tx, principal.userId, d.id));
+          oldRecipients.set(d.id, await documentRecipients(tx, principal.tenantId, d.id));
         await tx
           .update(documents)
           .set({
@@ -513,20 +515,20 @@ export class CatalogService {
           })
           .where(
             and(
-              eq(documents.userId, principal.userId),
+              eq(documents.tenantId, principal.tenantId),
               sql`${documents.catalogId} = any(${sql.param(subtreeIds)}::text[])`,
             ),
           );
         for (const d of movingDocuments) {
           const recipients = new Set([
             ...(oldRecipients.get(d.id) ?? []),
-            ...(await documentRecipients(tx, principal.userId, d.id)),
+            ...(await documentRecipients(tx, principal.tenantId, d.id)),
           ]);
           const eventKey = `catalog-move:${randomUUID()}`;
           await insertNotifications(
             tx,
             [...recipients].map((recipientId) => ({
-              userId: principal.userId,
+              tenantId: principal.tenantId,
               actorId: principal.identityId,
               recipientId,
               type: "permission",
@@ -538,7 +540,7 @@ export class CatalogService {
           );
         }
       }
-      await requireWorkspaceDocumentManagers(tx, principal.userId, updated.workspaceId);
+      await requireWorkspaceDocumentManagers(tx, principal.tenantId, updated.workspaceId);
       return {
         id: updated.id,
         name: updated.name,
@@ -558,7 +560,7 @@ export class CatalogService {
     const [catalog] = await this.db
       .select()
       .from(catalogs)
-      .where(and(eq(catalogs.userId, principal.userId), eq(catalogs.id, catalogId)))
+      .where(and(eq(catalogs.tenantId, principal.tenantId), eq(catalogs.id, catalogId)))
       .limit(1);
     if (!catalog) throw new DomainError("NOT_FOUND", "目录不存在");
     const [allowed] = await this.db
@@ -566,7 +568,7 @@ export class CatalogService {
       .from(catalogs)
       .where(
         and(
-          eq(catalogs.userId, principal.userId),
+          eq(catalogs.tenantId, principal.tenantId),
           eq(catalogs.id, catalogId),
           catalogActionSql(principal, "manage"),
         ),
@@ -574,14 +576,14 @@ export class CatalogService {
       .limit(1);
     if (!allowed) throw new DomainError("NOT_FOUND", "目录不存在或无管理权限");
     if (catalog.parentId === null) throw new DomainError("VALIDATION_ERROR", "根目录不可删除");
-    const subtree = await collectSubtree(this.db, principal.userId, catalogId);
+    const subtree = await collectSubtree(this.db, principal.tenantId, catalogId);
     const subtreeIds = subtree.map((row) => row.id);
     const [blockedDocument] = await this.db
       .select({ id: documents.id })
       .from(documents)
       .where(
         and(
-          eq(documents.userId, principal.userId),
+          eq(documents.tenantId, principal.tenantId),
           sql`${documents.catalogId} = any(${sql.param(subtreeIds)}::text[])`,
           sql`not (${documentActionSql(principal, "read")} and ${documentActionSql(principal, "manage")})`,
         ),
@@ -593,7 +595,7 @@ export class CatalogService {
       .from(documents)
       .where(
         and(
-          eq(documents.userId, principal.userId),
+          eq(documents.tenantId, principal.tenantId),
           sql`${documents.catalogId} = any(${sql.param(subtreeIds)}::text[])`,
           ne(documents.status, "trashed"),
         ),
@@ -607,18 +609,18 @@ export class CatalogService {
   async delete(principal: Principal, catalogId: string): Promise<void> {
     const sessions = await this.subtreeSessions(principal, catalogId);
     await this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
       const catalog = await this.requireCatalogAction(tx, principal, catalogId);
       if (catalog.parentId === null) throw new DomainError("VALIDATION_ERROR", "根目录不可删除");
-      const subtree = await collectSubtree(tx, principal.userId, catalogId);
+      const subtree = await collectSubtree(tx, principal.tenantId, catalogId);
       const subtreeIds = subtree.map((row) => row.id);
-      const rootId = await ensureRootCatalog(tx, principal.userId, catalog.workspaceId);
+      const rootId = await ensureRootCatalog(tx, principal.tenantId, catalog.workspaceId);
       const [blocked] = await tx
         .select({ id: catalogs.id })
         .from(catalogs)
         .where(
           and(
-            eq(catalogs.userId, principal.userId),
+            eq(catalogs.tenantId, principal.tenantId),
             sql`${catalogs.id} = any(${sql.param(subtreeIds)}::text[])`,
             sql`not ${catalogActionSql(principal, "manage")}`,
           ),
@@ -630,7 +632,7 @@ export class CatalogService {
         .from(documents)
         .where(
           and(
-            eq(documents.userId, principal.userId),
+            eq(documents.tenantId, principal.tenantId),
             sql`${documents.catalogId} = any(${sql.param(subtreeIds)}::text[])`,
             sql`not ${documentActionSql(principal, "manage")}`,
           ),
@@ -643,7 +645,7 @@ export class CatalogService {
         .from(documents)
         .where(
           and(
-            eq(documents.userId, principal.userId),
+            eq(documents.tenantId, principal.tenantId),
             sql`${documents.catalogId} = any(${sql.param(subtreeIds)}::text[])`,
             ne(documents.status, "trashed"),
           ),
@@ -651,13 +653,13 @@ export class CatalogService {
       const now = new Date();
       if (affectedDocuments.length) {
         const documentIds = affectedDocuments.map((row) => row.id);
-        await this.publicLinkage?.detachDocuments(tx, principal.userId, documentIds);
+        await this.publicLinkage?.detachDocuments(tx, principal.tenantId, documentIds);
         for (const documentId of documentIds) {
-          const recipients = await documentRecipients(tx, principal.userId, documentId);
+          const recipients = await documentRecipients(tx, principal.tenantId, documentId);
           await insertNotifications(
             tx,
             recipients.map((recipientId) => ({
-              userId: principal.userId,
+              tenantId: principal.tenantId,
               actorId: principal.identityId,
               recipientId,
               type: "deleted",
@@ -680,13 +682,13 @@ export class CatalogService {
           })
           .where(
             and(
-              eq(documents.userId, principal.userId),
+              eq(documents.tenantId, principal.tenantId),
               sql`${documents.id} = any(${sql.param(documentIds)}::text[])`,
             ),
           );
         await tx.insert(documentAuditEvents).values(
           documentIds.map((documentId) => ({
-            userId: principal.userId,
+            tenantId: principal.tenantId,
             actorIdentityId: principal.identityId,
             action: "document.trashed",
             resourceId: documentId,
@@ -703,12 +705,12 @@ export class CatalogService {
             .delete(catalogs)
             .where(
               and(
-                eq(catalogs.userId, principal.userId),
+                eq(catalogs.tenantId, principal.tenantId),
                 sql`${catalogs.id} = any(${sql.param(levelIds)}::text[])`,
               ),
             );
       }
-      await requireWorkspaceDocumentManagers(tx, principal.userId, catalog.workspaceId);
+      await requireWorkspaceDocumentManagers(tx, principal.tenantId, catalog.workspaceId);
     });
     for (const session of sessions)
       this.revoker.revokeDocumentSessions(session.document_id, session.generation_id);
@@ -720,8 +722,8 @@ export class CatalogService {
         id: documents.id,
         workspaceId: documents.workspaceId,
         catalogId: sql<string | null>`case when exists (select 1 from catalogs located_catalog
-          where located_catalog.user_id = ${principal.userId} and located_catalog.id = ${documents.catalogId}
-            and ${catalogActionSql(principal, "read", { id: sql`located_catalog.id`, userId: sql`located_catalog.user_id`, workspaceId: sql`located_catalog.workspace_id` })}) then ${documents.catalogId} else null end`,
+          where located_catalog.tenant_id = ${principal.tenantId} and located_catalog.id = ${documents.catalogId}
+            and ${catalogActionSql(principal, "read", { id: sql`located_catalog.id`, tenantId: sql`located_catalog.tenant_id`, workspaceId: sql`located_catalog.workspace_id` })}) then ${documents.catalogId} else null end`,
         workspaceName: workspaceNameSql(principal),
         workspaceIcon: sql<
           string | null
@@ -734,11 +736,11 @@ export class CatalogService {
       .from(documents)
       .innerJoin(
         workspaces,
-        and(eq(workspaces.userId, documents.userId), eq(workspaces.id, documents.workspaceId)),
+        and(eq(workspaces.tenantId, documents.tenantId), eq(workspaces.id, documents.workspaceId)),
       )
       .where(
         and(
-          eq(documents.userId, principal.userId),
+          eq(documents.tenantId, principal.tenantId),
           eq(documents.id, documentId),
           eq(documents.status, "active"),
           readable(principal),
@@ -760,9 +762,9 @@ export class CatalogService {
       document_id: string;
       generation_id: string;
     }>(sql`with recursive subtree as (
-      select c.id from catalogs c where c.user_id = ${principal.userId} and c.id = ${catalogId}
-      union all select c.id from catalogs c join subtree s on c.parent_id = s.id where c.user_id = ${principal.userId}
-    ) select d.id as document_id, g.id as generation_id from documents d join subtree s on d.catalog_id = s.id join document_generations g on g.document_id = d.id and g.status = 'active' where d.user_id = ${principal.userId}`);
+      select c.id from catalogs c where c.tenant_id = ${principal.tenantId} and c.id = ${catalogId}
+      union all select c.id from catalogs c join subtree s on c.parent_id = s.id where c.tenant_id = ${principal.tenantId}
+    ) select d.id as document_id, g.id as generation_id from documents d join subtree s on d.catalog_id = s.id join document_generations g on g.document_id = d.id and g.status = 'active' where d.tenant_id = ${principal.tenantId}`);
     return rows.rows;
   }
 }

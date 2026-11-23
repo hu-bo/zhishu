@@ -16,12 +16,12 @@ import {
 import type { RagDocumentSource, DocumentParseOptions, UploadedImage } from "./inputs.js";
 
 export function deterministicPointId(
-  userId: string,
+  tenantId: string,
   documentId: string,
   indexVersion: string,
   ordinal: number,
 ): string {
-  const hash = digest([userId, documentId, indexVersion, ordinal]);
+  const hash = digest([tenantId, documentId, indexVersion, ordinal]);
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-5${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 }
 export function validateVectors(vectors: number[][], count: number, dimensions: number): void {
@@ -52,7 +52,7 @@ export async function initializeCollection(
   )
     throw new Error("INCOMPATIBLE_COLLECTION");
   for (const key of [
-    "userId",
+    "tenantId",
     "workspaceId",
     "documentId",
     "indexVersion",
@@ -78,7 +78,7 @@ export async function writeDocumentIndex(
     embeddings: Embeddings;
     options: IndexOptions;
     parsing?: DocumentParseOptions;
-    userId: string;
+    tenantId: string;
     workspaceId: string;
     documentTitle: string;
     indexVersion: string;
@@ -103,7 +103,7 @@ export async function writeDocumentIndex(
 }> {
   const { client, options, signal } = input;
   if (
-    !input.userId ||
+    !input.tenantId ||
     !input.workspaceId ||
     !input.indexVersion ||
     !input.documentTitle.trim() ||
@@ -138,7 +138,7 @@ export async function writeDocumentIndex(
       wait: true,
       update_mode: "insert_only",
       points: batch.map((chunk, index) => ({
-        id: deterministicPointId(input.userId, documentId, input.indexVersion, offset + index),
+        id: deterministicPointId(input.tenantId, documentId, input.indexVersion, offset + index),
         vector: vectors[index]!,
         payload: {
           content: chunk.text,
@@ -149,7 +149,7 @@ export async function writeDocumentIndex(
             evidenceId: chunk.evidenceId,
             headingPath: chunk.headingPath,
             documentTitle: input.documentTitle,
-            userId: input.userId,
+            tenantId: input.tenantId,
             workspaceId: input.workspaceId,
             documentId,
             indexVersion: input.indexVersion,
@@ -174,7 +174,7 @@ export async function writeDocumentIndex(
     signal.throwIfAborted();
     const batch = chunks.slice(offset, offset + batchSize);
     const ids = batch.map((_chunk, index) =>
-      deterministicPointId(input.userId, documentId, input.indexVersion, offset + index),
+      deterministicPointId(input.tenantId, documentId, input.indexVersion, offset + index),
     );
     const points = await client.retrieve(options.collectionName, {
       ids,
@@ -188,7 +188,7 @@ export async function writeDocumentIndex(
       if (
         !m ||
         point?.payload?.content !== chunk.text ||
-        m.userId !== input.userId ||
+        m.tenantId !== input.tenantId ||
         m.workspaceId !== input.workspaceId ||
         m.documentId !== documentId ||
         m.indexVersion !== input.indexVersion ||
@@ -221,7 +221,7 @@ export function validAclKeys(keys: readonly string[]): boolean {
 export async function updateIndexPolicy(input: {
   client: QdrantClient;
   options: IndexOptions;
-  userId: string;
+  tenantId: string;
   documentId: string;
   indexVersion: string;
   previousRevision: string;
@@ -231,7 +231,7 @@ export async function updateIndexPolicy(input: {
 }): Promise<void> {
   if (
     !validAclKeys(input.readAclKeys) ||
-    !input.userId ||
+    !input.tenantId ||
     !input.documentId ||
     !input.indexVersion ||
     BigInt(decimal(input.aclRevision)) <= BigInt(decimal(input.previousRevision))
@@ -244,7 +244,7 @@ export async function updateIndexPolicy(input: {
     payload: { readAclKeys: [...input.readAclKeys], aclRevision: input.aclRevision },
     filter: {
       must: [
-        { key: "metadata.userId", match: { value: input.userId } },
+        { key: "metadata.tenantId", match: { value: input.tenantId } },
         { key: "metadata.documentId", match: { value: input.documentId } },
         { key: "metadata.indexVersion", match: { value: input.indexVersion } },
         { key: "metadata.aclRevision", match: { value: input.previousRevision } },

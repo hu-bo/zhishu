@@ -31,7 +31,7 @@ const app = await buildApp(
 const repository = new DocumentRepository(app.db);
 const principal = {
   identityId: "asset-reference-smoke",
-  userId: "asset-reference-smoke",
+  tenantId: "asset-reference-smoke",
 };
 const token = randomUUID();
 let documentId: string | undefined;
@@ -40,7 +40,7 @@ let assetId: string | undefined;
 try {
   await app.ready();
   const document = await repository.create(
-    principal.userId,
+    principal.tenantId,
     principal.identityId,
     "Asset ref smoke",
   );
@@ -66,7 +66,7 @@ try {
   versionDoc.destroy();
   await app.db.insert(assets).values({
     id: assetId,
-    userId: principal.userId,
+    tenantId: principal.tenantId,
     documentId,
     objectKey: `smoke/${token}`,
     fileName: "smoke.png",
@@ -84,7 +84,7 @@ try {
   const first = await repository.persistUpdate({
     documentId,
     generationId: document.generationId,
-    userId: principal.userId,
+    tenantId: principal.tenantId,
     subjectId: principal.identityId,
     updateHash: `asset-reference-${token}-1`,
     updateBytes: new Uint8Array([1]),
@@ -95,7 +95,7 @@ try {
   assert.equal(first.durableSeq, 1);
 
   const namedVersion = await repository.createVersion({
-    userId: principal.userId,
+    tenantId: principal.tenantId,
     documentId,
     identityId: principal.identityId,
     name: `Asset reference ${token}`,
@@ -108,7 +108,7 @@ try {
   const second = await repository.persistUpdate({
     documentId,
     generationId: document.generationId,
-    userId: principal.userId,
+    tenantId: principal.tenantId,
     subjectId: principal.identityId,
     updateHash: `asset-reference-${token}-2`,
     updateBytes: new Uint8Array([2]),
@@ -130,7 +130,7 @@ try {
   assert.equal(historicalReference.length, 1, "A saved version must retain its asset reference");
 
   const restored = await repository.restoreVersion({
-    userId: principal.userId,
+    tenantId: principal.tenantId,
     documentId,
     versionId: namedVersion.version.id,
     identityId: principal.identityId,
@@ -162,7 +162,7 @@ try {
     repository.persistUpdate({
       documentId,
       generationId: newGenerationId,
-      userId: principal.userId,
+      tenantId: principal.tenantId,
       subjectId: principal.identityId,
       updateHash: `asset-reference-${token}-invalid`,
       updateBytes: new Uint8Array([3]),
@@ -204,7 +204,7 @@ try {
   await repository.persistUpdate({
     documentId,
     generationId: newGenerationId,
-    userId: principal.userId,
+    tenantId: principal.tenantId,
     subjectId: principal.identityId,
     updateHash: `asset-reference-${token}-3`,
     updateBytes: new Uint8Array([4]),

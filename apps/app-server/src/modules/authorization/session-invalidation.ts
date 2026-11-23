@@ -10,19 +10,19 @@ export class SessionInvalidator {
     private readonly revoker: CollaborationSessionRevoker,
   ) {}
 
-  document(userId: string, documentId: string) {
-    return this.revoke(userId, eq(documents.id, documentId));
+  document(tenantId: string, documentId: string) {
+    return this.revoke(tenantId, eq(documents.id, documentId));
   }
 
-  inherited(userId: string, workspaceId: string, identityId: string) {
+  inherited(tenantId: string, workspaceId: string, identityId: string) {
     return this.revoke(
-      userId,
+      tenantId,
       and(eq(documents.workspaceId, workspaceId), eq(documents.accessMode, "workspace-inherited"))!,
       identityId,
     );
   }
 
-  private async revoke(userId: string, scope: SQL, identityId?: string): Promise<void> {
+  private async revoke(tenantId: string, scope: SQL, identityId?: string): Promise<void> {
     const sessions = await this.db
       .select({ documentId: documents.id, generationId: documentGenerations.id })
       .from(documents)
@@ -33,7 +33,7 @@ export class SessionInvalidator {
           eq(documentGenerations.status, "active"),
         ),
       )
-      .where(and(eq(documents.userId, userId), scope));
+      .where(and(eq(documents.tenantId, tenantId), scope));
     for (const session of sessions)
       this.revoker.revokeDocumentSessions(session.documentId, session.generationId, identityId);
   }

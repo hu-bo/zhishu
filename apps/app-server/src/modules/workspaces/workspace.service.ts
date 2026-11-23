@@ -44,7 +44,7 @@ export class WorkspaceService {
     await this.db
       .insert(workspaces)
       .values({
-        userId: principal.userId,
+        tenantId: principal.tenantId,
         id: "ws_default",
         name: "团队知识库",
         kind: "team",
@@ -53,10 +53,10 @@ export class WorkspaceService {
       .onConflictDoNothing();
     // Every workspace must expose a root catalog; backfill in bulk instead of per row.
     await this.db
-      .execute(sql`insert into catalogs (user_id, id, workspace_id, parent_id, name, position, created_by)
-      select w.user_id, 'cat_root_' || w.id, w.id, null, '根目录', 0, w.created_by from workspaces w
-      where w.user_id = ${principal.userId}
-        and not exists (select 1 from catalogs c where c.user_id = w.user_id and c.id = 'cat_root_' || w.id)`);
+      .execute(sql`insert into catalogs (tenant_id, id, workspace_id, parent_id, name, position, created_by)
+      select w.tenant_id, 'cat_root_' || w.id, w.id, null, '根目录', 0, w.created_by from workspaces w
+      where w.tenant_id = ${principal.tenantId}
+        and not exists (select 1 from catalogs c where c.tenant_id = w.tenant_id and c.id = 'cat_root_' || w.id)`);
     const rows = await this.db
       .select({
         id: workspaces.id,
@@ -70,18 +70,18 @@ export class WorkspaceService {
         description: workspaces.description,
         createdBy: workspaces.createdBy,
         createdAt: workspaces.createdAt,
-        memberCount: sql<number>`case when ${workspaces.kind} = 'personal' then 1 else (select count(*)::int from resource_acl m where m.user_id = ${principal.userId} and m.workspace_id = workspaces.id) + case when ${workspaces.ownerIdentityId} is null then 0 else 1 end end`,
+        memberCount: sql<number>`case when ${workspaces.kind} = 'personal' then 1 else (select count(*)::int from resource_acl m where m.tenant_id = ${principal.tenantId} and m.workspace_id = workspaces.id) + case when ${workspaces.ownerIdentityId} is null then 0 else 1 end end`,
         memberRole: sql<
           "admin" | "editor" | "viewer" | null
-        >`(select m.role from resource_acl m where m.user_id = ${principal.userId} and m.workspace_id = workspaces.id and m.identity_id = ${principal.identityId})`,
+        >`(select m.role from resource_acl m where m.tenant_id = ${principal.tenantId} and m.workspace_id = workspaces.id and m.identity_id = ${principal.identityId})`,
         canManage: spaceActionSql(principal, "manage"),
         canOrganize: spaceActionSql(principal, "write"),
         rootCatalogId: sql<string>`'cat_root_' || ${workspaces.id}`,
         // Literal workspaces.id: an interpolated column would render bare and bind to the subquery alias.
-        documentCount: sql<number>`(select count(*)::int from ${documents} d where d.user_id = ${principal.userId} and d.workspace_id = workspaces.id and d.status = 'active' and ${documentActionSql(principal, "read", { id: sql`d.id`, userId: sql`d.user_id`, workspaceId: sql`d.workspace_id`, createdBy: sql`d.created_by`, accessMode: sql`d.access_mode` })})`,
+        documentCount: sql<number>`(select count(*)::int from ${documents} d where d.tenant_id = ${principal.tenantId} and d.workspace_id = workspaces.id and d.status = 'active' and ${documentActionSql(principal, "read", { id: sql`d.id`, tenantId: sql`d.tenant_id`, workspaceId: sql`d.workspace_id`, createdBy: sql`d.created_by`, accessMode: sql`d.access_mode` })})`,
       })
       .from(workspaces)
-      .where(and(eq(workspaces.userId, principal.userId), spaceActionSql(principal, "read")))
+      .where(and(eq(workspaces.tenantId, principal.tenantId), spaceActionSql(principal, "read")))
       .orderBy(asc(workspaces.createdAt), asc(workspaces.id))
       .limit(100);
     return rows.map(({ memberRole, createdAt, ...row }) => {
@@ -100,7 +100,7 @@ export class WorkspaceService {
   ) {
     return this.db.transaction(async (tx) => {
       await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`workspace-quota:${principal.userId}`}, 718269))`,
+        sql`select pg_advisory_xact_lock(hashtextextended(${`workspace-quota:${principal.tenantId}`}, 718269))`,
       );
       const receipt = idempotencyScope(principal, "workspaces.create", idempotencyKey, input);
       const replay = await loadIdempotencyReplay(tx, receipt, workspaceSchema);
@@ -108,7 +108,7 @@ export class WorkspaceService {
       await tx
         .insert(workspaces)
         .values({
-          userId: principal.userId,
+          tenantId: principal.tenantId,
           id: "ws_default",
           name: "团队知识库",
           kind: "team",
@@ -118,7 +118,7 @@ export class WorkspaceService {
       const [count] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(workspaces)
-        .where(eq(workspaces.userId, principal.userId));
+        .where(eq(workspaces.tenantId, principal.tenantId));
       if ((count?.count ?? 0) >= 100)
         throw new DomainError("RESOURCE_LIMIT", "Workspace limit reached");
       const id = `ws_${randomUUID()}`;
@@ -126,7 +126,7 @@ export class WorkspaceService {
         .insert(workspaces)
         .values({
           id,
-          userId: principal.userId,
+          tenantId: principal.tenantId,
           name: input.name,
           kind: input.kind,
           personalOwnerId: input.kind === "personal" ? principal.identityId : null,
@@ -149,7 +149,12 @@ export class WorkspaceService {
           createdAt: workspaces.createdAt,
         });
       if (!row) throw new Error("Workspace insert returned no row");
-      const rootCatalogId = await ensureRootCatalog(tx, principal.userId, id, principal.identityId);
+      const rootCatalogId = await ensureRootCatalog(
+        tx,
+        principal.tenantId,
+        id,
+        principal.identityId,
+      );
       const result = {
         ...row,
         createdAt: row.createdAt.toISOString(),
@@ -166,13 +171,13 @@ export class WorkspaceService {
   }
   async updateWorkspace(principal: Principal, workspaceId: string, input: UpdateWorkspaceInput) {
     await this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
       const access = await workspaceAccess(tx, principal, workspaceId);
       if (!access.canManage) throw new DomainError("NOT_FOUND", "空间不存在或无管理权限");
       await tx
         .update(workspaces)
         .set(input)
-        .where(and(eq(workspaces.userId, principal.userId), eq(workspaces.id, workspaceId)));
+        .where(and(eq(workspaces.tenantId, principal.tenantId), eq(workspaces.id, workspaceId)));
     });
     const updated = (await this.listWorkspaces(principal)).find((row) => row.id === workspaceId);
     if (!updated) throw new DomainError("NOT_FOUND", "空间不存在");
@@ -193,12 +198,12 @@ export class WorkspaceService {
       .leftJoin(
         identityProfiles,
         and(
-          eq(identityProfiles.userId, resourceAcl.userId),
+          eq(identityProfiles.tenantId, resourceAcl.tenantId),
           eq(identityProfiles.identityId, resourceAcl.identityId),
         ),
       )
       .where(
-        and(eq(resourceAcl.userId, principal.userId), eq(resourceAcl.workspaceId, workspaceId)),
+        and(eq(resourceAcl.tenantId, principal.tenantId), eq(resourceAcl.workspaceId, workspaceId)),
       )
       .orderBy(asc(resourceAcl.createdAt), asc(resourceAcl.identityId))
       .limit(500);
@@ -207,7 +212,7 @@ export class WorkspaceService {
       .from(identityProfiles)
       .where(
         and(
-          eq(identityProfiles.userId, principal.userId),
+          eq(identityProfiles.tenantId, principal.tenantId),
           eq(identityProfiles.identityId, workspace.ownerIdentityId ?? ""),
         ),
       )
@@ -249,7 +254,7 @@ export class WorkspaceService {
     input: SetWorkspaceMemberInput,
   ) {
     const result = await this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
       const access = await workspaceAccess(tx, principal, workspaceId);
       if (!access.canManage) throw new DomainError("NOT_FOUND", "空间不存在或无管理权限");
       if (access.workspace.kind === "personal")
@@ -261,19 +266,19 @@ export class WorkspaceService {
         .from(identityProfiles)
         .where(
           and(
-            eq(identityProfiles.userId, principal.userId),
+            eq(identityProfiles.tenantId, principal.tenantId),
             eq(identityProfiles.identityId, identityId),
           ),
         )
         .limit(1);
-      if (!profile) throw new DomainError("VALIDATION_ERROR", "请选择同一用户的真实成员");
+      if (!profile) throw new DomainError("VALIDATION_ERROR", "请选择同租户的真实成员");
       const memberInput = { role: input.role, updatedAt: new Date() };
       const [existing] = await tx
         .select()
         .from(resourceAcl)
         .where(
           and(
-            eq(resourceAcl.userId, principal.userId),
+            eq(resourceAcl.tenantId, principal.tenantId),
             eq(resourceAcl.workspaceId, workspaceId),
             eq(resourceAcl.identityId, identityId),
           ),
@@ -281,27 +286,27 @@ export class WorkspaceService {
         .limit(1);
       if (access.role !== "owner" && (input.role === "admin" || existing?.role === "admin"))
         throw new DomainError("VALIDATION_ERROR", "只有空间所有者可以管理管理员");
-      if (!existing) await assertWorkspaceMemberCapacity(tx, principal.userId, workspaceId);
+      if (!existing) await assertWorkspaceMemberCapacity(tx, principal.tenantId, workspaceId);
       const [member] = await tx
         .insert(resourceAcl)
         .values({
-          userId: principal.userId,
+          tenantId: principal.tenantId,
           workspaceId,
           identityId,
           createdBy: principal.identityId,
           ...memberInput,
         })
         .onConflictDoUpdate({
-          target: [resourceAcl.userId, resourceAcl.workspaceId, resourceAcl.identityId],
+          target: [resourceAcl.tenantId, resourceAcl.workspaceId, resourceAcl.identityId],
           set: memberInput,
         })
         .returning();
       if (!member) throw new Error("Member insert returned no row");
-      await requireWorkspaceDocumentManagers(tx, principal.userId, workspaceId);
+      await requireWorkspaceDocumentManagers(tx, principal.tenantId, workspaceId);
       if (!existing || existing.role !== input.role)
         await insertNotifications(tx, [
           {
-            userId: principal.userId,
+            tenantId: principal.tenantId,
             actorId: principal.identityId,
             recipientId: identityId,
             type: "permission",
@@ -318,12 +323,12 @@ export class WorkspaceService {
         createdAt: member.createdAt.toISOString(),
       };
     });
-    await this.sessions.inherited(principal.userId, workspaceId, identityId);
+    await this.sessions.inherited(principal.tenantId, workspaceId, identityId);
     return result;
   }
   async removeMember(principal: Principal, workspaceId: string, identityId: string) {
     await this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
       const access = await workspaceAccess(tx, principal, workspaceId);
       if (!access.canManage) throw new DomainError("NOT_FOUND", "空间不存在或无管理权限");
       if (access.workspace.kind === "personal")
@@ -335,7 +340,7 @@ export class WorkspaceService {
         .from(resourceAcl)
         .where(
           and(
-            eq(resourceAcl.userId, principal.userId),
+            eq(resourceAcl.tenantId, principal.tenantId),
             eq(resourceAcl.workspaceId, workspaceId),
             eq(resourceAcl.identityId, identityId),
           ),
@@ -346,7 +351,7 @@ export class WorkspaceService {
       if (member)
         await insertNotifications(tx, [
           {
-            userId: principal.userId,
+            tenantId: principal.tenantId,
             actorId: principal.identityId,
             recipientId: identityId,
             type: "permission",
@@ -359,13 +364,13 @@ export class WorkspaceService {
         .delete(resourceAcl)
         .where(
           and(
-            eq(resourceAcl.userId, principal.userId),
+            eq(resourceAcl.tenantId, principal.tenantId),
             eq(resourceAcl.workspaceId, workspaceId),
             eq(resourceAcl.identityId, identityId),
           ),
         );
-      await requireWorkspaceDocumentManagers(tx, principal.userId, workspaceId);
+      await requireWorkspaceDocumentManagers(tx, principal.tenantId, workspaceId);
     });
-    await this.sessions.inherited(principal.userId, workspaceId, identityId);
+    await this.sessions.inherited(principal.tenantId, workspaceId, identityId);
   }
 }

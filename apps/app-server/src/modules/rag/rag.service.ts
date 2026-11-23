@@ -27,7 +27,7 @@ export type RetrievalScope =
   | { kind: "principal"; principal: Principal; selection: ScopeSelection }
   | {
       kind: "site";
-      userId: string;
+      tenantId: string;
       /** Approved pairs resolved by qa-sites after continuous delegation validation. */
       approved: readonly { documentId: string; workspaceId: string; publicLabel: string }[];
       /** Optional in-site narrowing chosen by the visitor. */
@@ -95,7 +95,7 @@ export class RagService {
           wait: true,
           filter: {
             must: [
-              { key: "metadata.userId", match: { value: job.userId } },
+              { key: "metadata.tenantId", match: { value: job.tenantId } },
               { key: "metadata.documentId", match: { value: job.documentId } },
             ],
           },
@@ -107,7 +107,7 @@ export class RagService {
         const summary = await writeDocumentIndex({
           ...this.clients,
           options: this.clients.index,
-          userId: job.userId,
+          tenantId: job.tenantId,
           workspaceId: job.workspaceId,
           documentTitle: job.documentTitle ?? job.documentId,
           indexVersion: job.leaseToken,
@@ -152,13 +152,13 @@ export class RagService {
       with_payload: { include: ["metadata.indexVersion"] },
       filter: {
         must: [
-          { key: "metadata.userId", match: { value: job.userId } },
+          { key: "metadata.tenantId", match: { value: job.tenantId } },
           { key: "metadata.documentId", match: { value: job.documentId } },
         ],
       },
     });
     const protectedVersions = new Set(
-      await this.repository.protectedVersions(job.userId, job.documentId),
+      await this.repository.protectedVersions(job.tenantId, job.documentId),
     );
     const obsolete = new Set(
       points.points.flatMap((p) => {
@@ -174,7 +174,7 @@ export class RagService {
         wait: true,
         filter: {
           must: [
-            { key: "metadata.userId", match: { value: job.userId } },
+            { key: "metadata.tenantId", match: { value: job.tenantId } },
             { key: "metadata.documentId", match: { value: job.documentId } },
             { key: "metadata.indexVersion", match: { value: version } },
           ],
@@ -219,7 +219,7 @@ export class RagService {
       )
       .where(
         and(
-          eq(documents.userId, scope.userId),
+          eq(documents.tenantId, scope.tenantId),
           eq(documents.status, "active"),
           inArray(documents.id, [...ids]),
           sql`(${documents.workspaceId}, ${documents.id}) in (${sql.join(
@@ -265,7 +265,7 @@ export class RagService {
   ): Promise<{ totalDocuments: number; readyDocuments: number }> {
     const heads = await this.heads(scope);
     const indexes = await this.repository.indexes(
-      scope.kind === "principal" ? scope.principal.userId : scope.userId,
+      scope.kind === "principal" ? scope.principal.tenantId : scope.tenantId,
       heads.map((h) => h.documentId),
     );
     const ready = heads.filter((h) =>
@@ -284,9 +284,9 @@ export class RagService {
     heads: Head[],
   ): Promise<boolean> {
     if (!items.length) return true;
-    const userId = scope.kind === "principal" ? scope.principal.userId : scope.userId;
+    const tenantId = scope.kind === "principal" ? scope.principal.tenantId : scope.tenantId;
     return this.repository
-      .indexes(userId, [...new Set(items.map((i) => i.sourceId))])
+      .indexes(tenantId, [...new Set(items.map((i) => i.sourceId))])
       .then((indexes) =>
         items.every((item) => {
           const head = heads.find((h) => h.documentId === item.sourceId);
@@ -311,7 +311,7 @@ export class RagService {
   }> {
     const heads = await this.heads(scope);
     const indexes = await this.repository.indexes(
-      scope.kind === "principal" ? scope.principal.userId : scope.userId,
+      scope.kind === "principal" ? scope.principal.tenantId : scope.tenantId,
       heads.map((h) => h.documentId),
     );
     const readyHeads = heads.filter((h) =>
@@ -326,7 +326,7 @@ export class RagService {
     if (!readyHeads.length)
       throw new DomainError("SERVICE_UNAVAILABLE", "资料尚未完成索引，请稍后再试");
     const workspaceNames = await this.workspaceNames(
-      scope.kind === "principal" ? scope.principal.userId : scope.userId,
+      scope.kind === "principal" ? scope.principal.tenantId : scope.tenantId,
       readyHeads,
       scope.kind === "site" ? scope.approved : undefined,
     );
@@ -339,7 +339,7 @@ export class RagService {
         const resolved = await this.heads(s);
         const ids = new Set(resolved.map((h) => h.documentId));
         return {
-          userId: s.kind === "principal" ? s.principal.userId : s.userId,
+          tenantId: s.kind === "principal" ? s.principal.tenantId : s.tenantId,
           workspaceIds: [...new Set(resolved.map((h) => h.workspaceId))],
           documentIds:
             s.kind === "principal" && s.selection.kind === "documents"
@@ -351,7 +351,7 @@ export class RagService {
       authorizeCandidates: async (s, candidates) => {
         const resolved = await this.heads(s);
         const indexesNow = await this.repository.indexes(
-          s.kind === "principal" ? s.principal.userId : s.userId,
+          s.kind === "principal" ? s.principal.tenantId : s.tenantId,
           [...new Set(candidates.map((c) => c.documentId))],
         );
         return candidates
@@ -395,7 +395,7 @@ export class RagService {
 
   /** Labels the current audience may see: internal space names, site public labels. */
   private async workspaceNames(
-    userId: string,
+    tenantId: string,
     heads: Head[],
     approvedSitePairs?: readonly { documentId: string; workspaceId: string; publicLabel: string }[],
   ): Promise<Map<string, string>> {
@@ -407,7 +407,7 @@ export class RagService {
     const rows = await this.db
       .select({ id: workspaces.id, name: workspaces.name })
       .from(workspaces)
-      .where(and(eq(workspaces.userId, userId), inArray(workspaces.id, ids)));
+      .where(and(eq(workspaces.tenantId, tenantId), inArray(workspaces.id, ids)));
     return new Map(rows.map((r) => [r.id, r.name]));
   }
 

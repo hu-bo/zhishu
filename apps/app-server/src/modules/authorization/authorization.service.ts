@@ -40,7 +40,7 @@ export class AuthorizationService {
       .from(workspaces)
       .where(
         and(
-          eq(workspaces.userId, principal.userId),
+          eq(workspaces.tenantId, principal.tenantId),
           eq(workspaces.id, workspaceId),
           spaceActionSql(principal, "manage"),
         ),
@@ -55,11 +55,11 @@ export class AuthorizationService {
 
   async list(principal: Principal, workspaceId: string) {
     await this.requireManager(this.db, principal, workspaceId);
-    const overrides = await loadPolicyOverrides(this.db, principal.userId, workspaceId);
+    const overrides = await loadPolicyOverrides(this.db, principal.tenantId, workspaceId);
     const [space] = await this.db
       .select({ ownerIdentityId: workspaces.ownerIdentityId })
       .from(workspaces)
-      .where(and(eq(workspaces.userId, principal.userId), eq(workspaces.id, workspaceId)))
+      .where(and(eq(workspaces.tenantId, principal.tenantId), eq(workspaces.id, workspaceId)))
       .limit(1);
     return {
       canConfigure: space?.ownerIdentityId === principal.identityId,
@@ -93,12 +93,12 @@ export class AuthorizationService {
     if (actions.length && !actions.includes("read"))
       throw new DomainError("VALIDATION_ERROR", "授予操作权限时必须保留查看权限");
     await this.db.transaction(async (tx) => {
-      await lockKnowledgeTree(tx, principal.userId, principal.identityId);
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
       await this.requireManager(tx, principal, workspaceId, true);
       await tx
         .insert(rolePermissions)
         .values({
-          userId: principal.userId,
+          tenantId: principal.tenantId,
           workspaceId,
           resourceType: kind,
           role,
@@ -108,7 +108,7 @@ export class AuthorizationService {
         })
         .onConflictDoUpdate({
           target: [
-            rolePermissions.userId,
+            rolePermissions.tenantId,
             rolePermissions.workspaceId,
             rolePermissions.resourceType,
             rolePermissions.role,
@@ -119,7 +119,7 @@ export class AuthorizationService {
             updatedAt: new Date(),
           },
         });
-      await requireWorkspaceDocumentManagers(tx, principal.userId, workspaceId);
+      await requireWorkspaceDocumentManagers(tx, principal.tenantId, workspaceId);
     });
     // Persisted policy is immediately authoritative; revoke existing room sessions as well.
     const sessions = await this.db
@@ -132,7 +132,9 @@ export class AuthorizationService {
           eq(documentGenerations.status, "active"),
         ),
       )
-      .where(and(eq(documents.userId, principal.userId), eq(documents.workspaceId, workspaceId)));
+      .where(
+        and(eq(documents.tenantId, principal.tenantId), eq(documents.workspaceId, workspaceId)),
+      );
     for (const s of sessions) this.revoker.revokeDocumentSessions(s.id, s.generationId);
   }
 }

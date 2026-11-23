@@ -23,7 +23,7 @@ export async function previewTransfer(
     .from(catalogs)
     .where(
       and(
-        eq(catalogs.userId, principal.userId),
+        eq(catalogs.tenantId, principal.tenantId),
         eq(catalogs.id, input.targetCatalogId),
         catalogActionSql(principal, "write"),
       ),
@@ -46,7 +46,7 @@ export async function previewTransfer(
       .from(documents)
       .where(
         and(
-          eq(documents.userId, principal.userId),
+          eq(documents.tenantId, principal.tenantId),
           eq(documents.id, input.resourceId),
           eq(documents.status, "active"),
           documentActionSql(principal, "move"),
@@ -62,7 +62,7 @@ export async function previewTransfer(
       .from(catalogs)
       .where(
         and(
-          eq(catalogs.userId, principal.userId),
+          eq(catalogs.tenantId, principal.tenantId),
           eq(catalogs.id, input.resourceId),
           catalogActionSql(principal, "move"),
         ),
@@ -70,7 +70,7 @@ export async function previewTransfer(
       .limit(1);
     if (!source) throw new DomainError("NOT_FOUND", "目录不存在或无移动权限");
     workspaceId = source.workspaceId;
-    const subtree = sql`with recursive subtree as (select id,0 as depth from catalogs where user_id=${principal.userId} and id=${input.resourceId} union all select c.id,s.depth+1 from catalogs c join subtree s on c.parent_id=s.id where c.user_id=${principal.userId} and s.depth<17)`;
+    const subtree = sql`with recursive subtree as (select id,0 as depth from catalogs where tenant_id=${principal.tenantId} and id=${input.resourceId} union all select c.id,s.depth+1 from catalogs c join subtree s on c.parent_id=s.id where c.tenant_id=${principal.tenantId} and s.depth<17)`;
     rows = (
       await db.execute<{
         id: string;
@@ -78,12 +78,12 @@ export async function previewTransfer(
         accessMode: string;
         exportable: boolean;
       }>(
-        sql`${subtree} select documents.id,documents.metadata_revision as "metadataRevision",documents.access_mode as "accessMode",${documentActionSql(principal, "export")} as exportable from documents where documents.user_id=${principal.userId} and documents.catalog_id in(select id from subtree) order by documents.id`,
+        sql`${subtree} select documents.id,documents.metadata_revision as "metadataRevision",documents.access_mode as "accessMode",${documentActionSql(principal, "export")} as exportable from documents where documents.tenant_id=${principal.tenantId} and documents.catalog_id in(select id from subtree) order by documents.id`,
       )
     ).rows;
     tree = (
       await db.execute(
-        sql`${subtree} select c.id,c.parent_id,c.updated_at from catalogs c where c.user_id=${principal.userId} and c.id in(select id from subtree) order by c.id`,
+        sql`${subtree} select c.id,c.parent_id,c.updated_at from catalogs c where c.tenant_id=${principal.tenantId} and c.id in(select id from subtree) order by c.id`,
       )
     ).rows;
   }
@@ -93,14 +93,14 @@ export async function previewTransfer(
   const [sourceSpace] = await db
     .select({ revision: workspaces.authorizationRevision })
     .from(workspaces)
-    .where(and(eq(workspaces.userId, principal.userId), eq(workspaces.id, workspaceId)));
+    .where(and(eq(workspaces.tenantId, principal.tenantId), eq(workspaces.id, workspaceId)));
   const ids = rows.map((row) => row.id);
   const [grants] = await db
     .select({ count: sql<number>`count(distinct ${resourceAcl.identityId})::int` })
     .from(resourceAcl)
     .where(
       and(
-        eq(resourceAcl.userId, principal.userId),
+        eq(resourceAcl.tenantId, principal.tenantId),
         sql`${resourceAcl.documentId} = any(${sql.param(ids)}::text[])`,
       ),
     );

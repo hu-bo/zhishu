@@ -5,7 +5,7 @@ const claimsSchema = z
   .object({
     version: z.literal(1),
     audience: z.literal("document-collaboration"),
-    userId: z.string().min(1).max(128),
+    tenantId: z.string().min(1).max(128),
     documentId: z.string().regex(/^doc_[A-Za-z0-9_-]{1,64}$/),
     generationId: z.string().regex(/^gen_[A-Za-z0-9_-]{1,64}$/),
     schemaVersion: z.number().int().positive(),

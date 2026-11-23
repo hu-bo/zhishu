@@ -351,6 +351,13 @@
       "when": 1795334400000,
       "tag": "0049_rename_tenant_to_user",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1795420800000,
+      "tag": "0050_rename_user_to_tenant",
+      "breakpoints": true
     }
   ]
 }

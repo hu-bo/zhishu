@@ -9,38 +9,38 @@ import type { Principal } from "./identity.types.js";
 /**
  * Project authenticated principals into the directory. The hot path is a lock-free read:
  * unchanged profiles return without a transaction, so ordinary API requests never serialize
- * on the user tree lock. Only a changed projection takes the shared tree lock and upserts,
+ * on the tenant tree lock. Only a changed projection takes the shared tree lock and upserts,
  * which still orders it against exclusive authorization/directory mutations.
  */
 export async function rememberIdentities(db: Database, principals: readonly Principal[]) {
   if (!principals.length) return;
-  const userIds = [...new Set(principals.map((p) => p.userId))];
+  const tenantIds = [...new Set(principals.map((p) => p.tenantId))];
   const existing = await db
     .select({
-      userId: identityProfiles.userId,
+      tenantId: identityProfiles.tenantId,
       identityId: identityProfiles.identityId,
       displayName: identityProfiles.displayName,
       email: identityProfiles.email,
       active: identityProfiles.active,
     })
     .from(identityProfiles)
-    .where(inArray(identityProfiles.userId, userIds));
-  const byKey = new Map(existing.map((row) => [`${row.userId}:${row.identityId}`, row]));
+    .where(inArray(identityProfiles.tenantId, tenantIds));
+  const byKey = new Map(existing.map((row) => [`${row.tenantId}:${row.identityId}`, row]));
   const changed = principals.filter((p) => {
-    const row = byKey.get(`${p.userId}:${p.identityId}`);
+    const row = byKey.get(`${p.tenantId}:${p.identityId}`);
     return (
       !row || row.displayName !== p.displayName || row.email !== p.email || row.active !== p.active
     );
   });
   if (!changed.length) return;
   await db.transaction(async (tx) => {
-    for (const userId of [...new Set(changed.map((p) => p.userId))].sort())
-      await readKnowledgeTree(tx, userId);
+    for (const tenantId of [...new Set(changed.map((p) => p.tenantId))].sort())
+      await readKnowledgeTree(tx, tenantId);
     await tx
       .insert(identityProfiles)
       .values(
         changed.map((p) => ({
-          userId: p.userId,
+          tenantId: p.tenantId,
           identityId: p.identityId,
           displayName: p.displayName,
           email: p.email,
@@ -48,7 +48,7 @@ export async function rememberIdentities(db: Database, principals: readonly Prin
         })),
       )
       .onConflictDoUpdate({
-        target: [identityProfiles.userId, identityProfiles.identityId],
+        target: [identityProfiles.tenantId, identityProfiles.identityId],
         set: {
           displayName: sql`excluded.display_name`,
           email: sql`excluded.email`,
@@ -78,11 +78,11 @@ export async function searchIdentities(
     .from(identityProfiles)
     .where(
       and(
-        eq(identityProfiles.userId, principal.userId),
+        eq(identityProfiles.tenantId, principal.tenantId),
         eq(identityProfiles.active, true),
         or(ilike(identityProfiles.displayName, pattern), ilike(identityProfiles.email, pattern)),
         documentId
-          ? sql`exists (select 1 from ${documents} where ${documents.id} = ${documentId} and ${documents.status} = 'active' and ${documentActionSql({ userId: principal.userId, identityId: identityProfiles.identityId }, "read")})`
+          ? sql`exists (select 1 from ${documents} where ${documents.id} = ${documentId} and ${documents.status} = 'active' and ${documentActionSql({ tenantId: principal.tenantId, identityId: identityProfiles.identityId }, "read")})`
           : undefined,
       ),
     )
