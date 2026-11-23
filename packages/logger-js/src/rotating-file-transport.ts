@@ -24,6 +24,10 @@ function rotatedFileName(base: string, time?: number | Date | null, index?: numb
   return `${base}-${stamp}${suffix}.log`;
 }
 
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function cleanupExpiredLogs(dir: string, prefix: string, retentionDays: number): void {
   if (retentionDays <= 0) return;
   const deadline = Date.now() - retentionDays * DAY_MS;
@@ -46,6 +50,7 @@ function cleanupExpiredLogs(dir: string, prefix: string, retentionDays: number):
  * separators (invalid NDJSON) and whose only JSON-free alternative was hardcoded pino-pretty.
  * With `stdout: true` each line is also mirrored to stdout, which lets the production logger
  * stay a single transport target (multi-target pipelines reject custom level formatters).
+ * The file is never the only sink when it cannot be used, so log records survive a bad LOG_DIR.
  */
 export default function rotatingFileTransport(options: RotatingFileTransportOptions) {
   const {
@@ -56,32 +61,46 @@ export default function rotatingFileTransport(options: RotatingFileTransportOpti
     retentionDays = 30,
     stdout = false,
   } = options;
-  fs.mkdirSync(dir, { recursive: true });
 
-  // immutable: every file keeps its creation timestamp name, so the active file never changes name.
-  const fileStream: RotatingFileStream = createStream(
-    (time, index) => rotatedFileName(filename, time, index),
-    { path: dir, interval, size, immutable: true },
-  );
-  let failed = false;
-  fileStream.on("error", (error: Error) => {
-    // Logging must not crash the worker when the volume fails; pino forwards worker stderr to the main process.
-    failed = true;
-    console.error(`[logger-js] rotating file stream for ${dir} failed:`, error?.message ?? error);
-  });
+  // Setting up the file target must not take the service down: this transport runs in a worker
+  // thread, so a throw here reaches the main thread as an unhandled ThreadStream "error" and exits
+  // the process. An unusable directory (dangling symlink, path component that is a file, stale or
+  // read-only mount) therefore degrades to stdout instead of crashing on startup.
+  let fileStream: RotatingFileStream | null = null;
+  let fileUnavailable = false;
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    // immutable: every file keeps its creation timestamp name, so the active file never changes name.
+    fileStream = createStream((time, index) => rotatedFileName(filename, time, index), {
+      path: dir,
+      interval,
+      size,
+      immutable: true,
+    });
+    fileStream.on("error", (error: Error) => {
+      // Logging must not crash the worker when the volume fails; pino forwards worker stderr to the main process.
+      fileUnavailable = true;
+      console.error(`[logger-js] rotating file stream for ${dir} failed:`, error?.message ?? error);
+    });
+  } catch (error) {
+    fileUnavailable = true;
+    console.error(
+      `[logger-js] cannot use log directory ${dir}: ${describeError(error)}. ` +
+        "Logs go to stdout only; fix LOG_DIR to get the rotating file.",
+    );
+  }
 
-  const cleanup = () => {
-    try {
-      cleanupExpiredLogs(dir, filename, retentionDays);
-    } catch (error) {
-      console.error(
-        `[logger-js] log retention cleanup for ${dir} failed:`,
-        (error as Error)?.message ?? error,
-      );
-    }
-  };
-  cleanup();
-  setInterval(cleanup, DAY_MS).unref();
+  if (fileStream) {
+    const cleanup = () => {
+      try {
+        cleanupExpiredLogs(dir, filename, retentionDays);
+      } catch (error) {
+        console.error(`[logger-js] log retention cleanup for ${dir} failed:`, describeError(error));
+      }
+    };
+    cleanup();
+    setInterval(cleanup, DAY_MS).unref();
+  }
 
   // Transport workers redirect process.stdout, so mirror straight to fd 1 like pino/file does.
   // One line per write stays inside pipe buffer sizes; stdout is best-effort next to the file.
@@ -96,10 +115,11 @@ export default function rotatingFileTransport(options: RotatingFileTransportOpti
   return build(
     async (source) => {
       for await (const line of source) {
-        if (stdout) writeStdoutLine(line);
-        if (!failed) fileStream.write(`${line}\n`);
+        // Without the file nothing else keeps the line, so stdout takes over.
+        if (stdout || fileUnavailable) writeStdoutLine(line);
+        if (fileStream && !fileUnavailable) fileStream.write(`${line}\n`);
       }
-      if (!failed) {
+      if (fileStream && !fileUnavailable) {
         await new Promise<void>((resolve, reject) => {
           fileStream.once("close", resolve);
           fileStream.once("error", reject);
