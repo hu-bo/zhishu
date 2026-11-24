@@ -94,7 +94,7 @@ const environmentSchema = z
       .min(3_600)
       .max(2_592_000)
       .default(86_400),
-    COLLABORATION_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+    COLLABORATION_PORT: z.coerce.number().int().min(1).max(65535).default(9011),
     COLLABORATION_HOST: z.string().min(1).default("0.0.0.0"),
     COLLABORATION_PUBLIC_URL: z.string().url().default("ws://localhost:3001"),
     COLLABORATION_TOKEN_SECRET: z

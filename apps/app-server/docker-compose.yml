@@ -16,23 +16,9 @@ services:
       - .env
     environment:
       NODE_ENV: production
-      # The listeners must bind every interface, otherwise the publishes below are
-      # not reachable from the host.
-      HOST: 0.0.0.0
-      # `environment` overrides `env_file` and interpolation overrides both, so the
-      # listeners are pinned to the exact port the publishes and the healthcheck
-      # resolve: no matter what .env says, the app and the mapping agree. Both values
-      # are required instead of defaulting to 3000, because a missing one would move
-      # the mismatch inside the container rather than fail the deploy. config.ts
-      # still rejects PORT and COLLABORATION_PORT being equal.
-      PORT: ${PORT:?Set PORT in .env}
-      COLLABORATION_PORT: ${COLLABORATION_PORT:?Set COLLABORATION_PORT in .env}
-      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
-    # Loopback-only publishes; the host reverse proxy terminates TLS and serves both
-    # /api and the collaborative websocket from these two fixed host ports.
     ports:
-      - "127.0.0.1:9010:${PORT:?Set PORT in .env}"
-      - "127.0.0.1:9012:${COLLABORATION_PORT:?Set COLLABORATION_PORT in .env}"
+      - "9010:9010"
+      - "9011:9011"
     volumes:
       - .:/data/app/zhishu-app-server:ro
       # The package stays read-only; the log directory is the one writable path inside it and is
