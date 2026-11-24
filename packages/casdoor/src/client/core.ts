@@ -36,7 +36,9 @@ export class CasdoorClient {
     this.storage = new TokenStorage({
       type: config.storage?.type ?? "localStorage",
       ...config.storage,
-      prefix: `${config.storage?.prefix ?? "casdoor_"}${config.appName}_`,
+      // A configured prefix is used verbatim; only the default embeds the app name.
+      // Concatenating both doubled the prefix (zhishu_ + zhishu => zhishu_zhishu_access_token).
+      prefix: config.storage?.prefix ?? `casdoor_${config.appName}_`,
     });
     this.initializeState();
   }

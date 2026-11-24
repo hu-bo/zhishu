@@ -30,6 +30,8 @@ function createClient(
     endPoint: url.hostname,
     port: url.port ? Number(url.port) : defaultPort,
     useSSL,
+    // Unset here means the client asks the bucket for its region and caches it. A wrong pinned
+    // region breaks both API calls and presigned URLs, so only set it when it is known.
     region: config.ASSET_STORAGE_REGION,
     accessKey: credentials.accessKey,
     secretKey: credentials.secretKey,
@@ -51,6 +53,26 @@ function contentDisposition(fileName: string, disposition: "inline" | "attachmen
 function headerValue(metaData: Record<string, unknown>, key: string): string {
   const value = metaData[key];
   return typeof value === "string" ? value : "";
+}
+
+/**
+ * A region redirect reaches us through two fields minio-js fills from the response, not the error
+ * name: `amzBucketRegion` from the `x-amz-bucket-region` header (the only channel a HEAD has, since
+ * its body is dropped) and `region` from an XML error body. The library's own redirect handling
+ * looks for `error.name` + `error.Region`, neither of which its parser ever sets, so it never fires.
+ */
+function redirectRegion(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  const code = "code" in error && typeof error.code === "string" ? error.code : "";
+  const fromHeader =
+    "amzBucketRegion" in error && typeof error.amzBucketRegion === "string"
+      ? error.amzBucketRegion
+      : "";
+  const fromBody = "region" in error && typeof error.region === "string" ? error.region : "";
+  const candidate = fromHeader === code ? "" : fromHeader || (fromBody !== code ? fromBody : "");
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(candidate)) return null;
+  // An unlabelled 400 that still names a bucket region counts: the answer is authoritative either way.
+  return code === "" || code === "AuthorizationHeaderMalformed" ? candidate : null;
 }
 
 // MinIO reports an S3 error code plus message, but a non-S3 answer (proxy, TLS mismatch) leaves the
@@ -86,13 +108,30 @@ export class AssetObjectStorage {
   }
 
   /**
+   * Runs one storage call and, if the server asks for a different signing region, adopts it and
+   * retries once. The region a bucket reports is authoritative for both API calls and presigned
+   * URLs, so it also replaces a configured value that turned out to be wrong.
+   */
+  private async withRegionRedirect<T>(run: () => Promise<T>): Promise<T> {
+    try {
+      return await run();
+    } catch (error) {
+      const region = redirectRegion(error);
+      if (!region) throw error;
+      this.client.region = region;
+      this.signer.region = region;
+      return run();
+    }
+  }
+
+  /**
    * Checks the bucket on boot. A wrong endpoint, credential or region surfaces here as an error;
    * only a confirmed missing bucket may be created here.
    */
   async initialize(): Promise<void> {
     let exists: boolean;
     try {
-      exists = await this.client.bucketExists(this.bucket);
+      exists = await this.withRegionRedirect(() => this.client.bucketExists(this.bucket));
     } catch (error) {
       throw new Error(
         `Asset storage is not usable at ${this.endpoint} (bucket ${this.bucket}): ${describeStorageError(error)}`,
@@ -103,7 +142,7 @@ export class AssetObjectStorage {
     if (!this.config.ASSET_STORAGE_AUTO_CREATE_BUCKET) {
       throw new Error(`Asset storage bucket ${this.bucket} does not exist`);
     }
-    await this.client.makeBucket(this.bucket, this.config.ASSET_STORAGE_REGION);
+    await this.withRegionRedirect(() => this.client.makeBucket(this.bucket));
   }
 
   /**
@@ -112,12 +151,16 @@ export class AssetObjectStorage {
    * and rejects the object unless they match the session, which is what keeps a direct upload honest.
    */
   async createUploadUrl(input: { objectKey: string; expiresIn: number }): Promise<string> {
-    return this.signer.presignedPutObject(this.bucket, input.objectKey, input.expiresIn);
+    return this.withRegionRedirect(() =>
+      this.signer.presignedPutObject(this.bucket, input.objectKey, input.expiresIn),
+    );
   }
 
   /** Reads the first bytes of an object, enough to match a media type against its magic number. */
   async readPrefix(objectKey: string, length: number): Promise<Buffer> {
-    const stream = await this.client.getPartialObject(this.bucket, objectKey, 0, length);
+    const stream = await this.withRegionRedirect(() =>
+      this.client.getPartialObject(this.bucket, objectKey, 0, length),
+    );
     const chunks: Buffer[] = [];
     for await (const chunk of stream) chunks.push(Buffer.from(chunk));
     return Buffer.concat(chunks);
@@ -130,14 +173,18 @@ export class AssetObjectStorage {
     sha256: string;
   }): Promise<void> {
     // `Content-Type` is a supported header and passes through; other keys become x-amz-meta-*.
-    await this.client.putObject(this.bucket, input.objectKey, input.bytes, input.bytes.byteLength, {
-      "Content-Type": input.mediaType,
-      sha256: input.sha256,
-    });
+    await this.withRegionRedirect(() =>
+      this.client.putObject(this.bucket, input.objectKey, input.bytes, input.bytes.byteLength, {
+        "Content-Type": input.mediaType,
+        sha256: input.sha256,
+      }),
+    );
   }
 
   async head(objectKey: string): Promise<StoredObject> {
-    const stat = await this.client.statObject(this.bucket, objectKey);
+    const stat = await this.withRegionRedirect(() =>
+      this.client.statObject(this.bucket, objectKey),
+    );
     return {
       size: stat.size,
       mediaType: headerValue(stat.metaData, "content-type"),
@@ -146,7 +193,7 @@ export class AssetObjectStorage {
   }
 
   async delete(objectKey: string): Promise<void> {
-    await this.client.removeObject(this.bucket, objectKey);
+    await this.withRegionRedirect(() => this.client.removeObject(this.bucket, objectKey));
   }
 
   /**
@@ -168,14 +215,16 @@ export class AssetObjectStorage {
       return { url: `${this.publicBaseUrl}/${this.bucket}/${encodedKey}`, expiresAt: null };
     }
     const ttl = Math.min(input.expiresIn, MAX_SIGNED_URL_TTL_SECONDS);
-    const url = await this.signer.presignedGetObject(this.bucket, input.objectKey, ttl, {
-      "response-content-disposition": contentDisposition(
-        input.fileName,
-        input.mediaType.startsWith("image/") ? "inline" : "attachment",
-      ),
-      "response-content-type": input.mediaType,
-      "response-cache-control": "private, no-store",
-    });
+    const url = await this.withRegionRedirect(() =>
+      this.signer.presignedGetObject(this.bucket, input.objectKey, ttl, {
+        "response-content-disposition": contentDisposition(
+          input.fileName,
+          input.mediaType.startsWith("image/") ? "inline" : "attachment",
+        ),
+        "response-content-type": input.mediaType,
+        "response-cache-control": "private, no-store",
+      }),
+    );
     return { url, expiresAt: new Date(Date.now() + ttl * 1_000).toISOString() };
   }
 }

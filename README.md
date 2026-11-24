@@ -42,7 +42,7 @@ pnpm dev
 
 附件存储已预设为 MinIO `http://minio.8and1.cn:80`（HTTP、80 端口），该地址只够服务端侧读写，不足以支撑浏览器直传。在 `apps/app-server/.env` 填写 `ASSET_STORAGE_ACCESS_KEY_ID` 和 `ASSET_STORAGE_SECRET_ACCESS_KEY`；不要提交密钥。该地址暂不可用，`ASSET_STORAGE_CHECK_ON_STARTUP=false` 跳过启动存储检查，`ASSET_STORAGE_AUTO_CREATE_BUCKET=false` 禁止自动创建桶，`ASSET_ACCESS_URL_TTL_SECONDS=0` 让附件读取地址变成不过期直链（需桶允许匿名读）；须由存储管理员准备私有桶。未填密钥时开发环境仍可启动，附件接口返回可理解的不可用反馈。生产环境仍强制要求完整凭据配置。
 
-需要独立本地存储时可使用可选 Garage 配置与 `pnpm compose:up:storage`；它只用于本地开发。`deploy/garage.toml` 的 `s3_region` 与 `ASSET_STORAGE_REGION`（默认 `us-east-1`）必须一致，区域不符时 S3 会返回 `AuthorizationHeaderMalformed`；浏览器直传还需按 Garage 文档给桶配置 CORS。
+需要独立本地存储时可使用可选 Garage 配置与 `pnpm compose:up:storage`；它只用于本地开发。`ASSET_STORAGE_REGION` 默认留空，由客户端向桶查询区域；显式填写时必须与 `deploy/garage.toml` 的 `s3_region` 一致，否则 S3 返回 `AuthorizationHeaderMalformed`。浏览器直传还需按 Garage 文档给桶配置 CORS。
 
 API 默认地址为 http://localhost:3000，liveness 为 `/health/live`，readiness 为 `/health/ready`，Swagger UI 为 `/documentation`。
 正常启动先确认数据库可用；migration 单独执行。

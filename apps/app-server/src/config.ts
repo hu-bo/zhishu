@@ -69,7 +69,9 @@ const environmentSchema = z
       .url()
       .refine((value) => value.startsWith("http://") || value.startsWith("https://"))
       .optional(),
-    ASSET_STORAGE_REGION: z.string().min(1).default("us-east-1"),
+    // Leave unset to let the bucket report its own region. Pinning a wrong region is not harmless:
+    // S3 answers 400 AuthorizationHeaderMalformed and every presigned URL would carry the wrong scope.
+    ASSET_STORAGE_REGION: z.string().min(1).optional(),
     ASSET_STORAGE_BUCKET: z.string().min(3).max(63).default("zhishu-private-assets"),
     ASSET_STORAGE_ACCESS_KEY_ID: z.string().min(1).optional(),
     ASSET_STORAGE_SECRET_ACCESS_KEY: z.string().min(1).optional(),

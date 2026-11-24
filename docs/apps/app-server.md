@@ -54,7 +54,7 @@ OpenAPI 使用同一 Zod 定义生成 `ErrorResponse` 组件，447 处响应改�
 
 搜索按租户、文档 ACL 和可选工作区过滤标题与已保存正文，使用 PostgreSQL 字面 `ILIKE`，转义 `%`/`_`；普通文档读取 JSON 快照，协同文档读取当前 generation 的投影，结果含匹配片段与可见祖先路径。每次最多 30 项；协同投影存在延迟，暂未提供全文索引排名或附件内搜索。预设初始化是显式事务，同一身份/工作区重复执行跳过已有安装记录；删除后保留安装标记，避免重新播种。内容哈希复用普通保存的规范化算法。
 
-对象存储继续使用 MinIO 官方客户端 `minio@8`（S3 协议、path-style 签名 URL）。附件由服务端只签名、浏览器直传，所以 `ASSET_STORAGE_PUBLIC_ENDPOINT` 是浏览器实际访问的地址：必须与站点同协议（https 页面不能指向 http 端点），存储端还要为站点 origin 配置桶 CORS，放行 `PUT` 与 `x-amz-meta-sha256`。开发参考 endpoint `http://minio.8and1.cn:80`（HTTP、80 端口）只够服务端侧读写，不足以支撑浏览器直传。`ASSET_STORAGE_CHECK_ON_STARTUP=false` 跳过启动连接检查，`ASSET_STORAGE_AUTO_CREATE_BUCKET=false` 禁止自动建桶，`ASSET_ACCESS_URL_TTL_SECONDS=0` 让读取地址变为不过期直链（需桶允许匿名读）。开发环境未填凭据时不构造存储客户端，附件返回 unavailable；生产环境仍要求完整配置。实际密钥须由部署者填写，当前域名暂不可用，本次未连接或测试对象存储。
+对象存储继续使用 MinIO 官方客户端 `minio@8`（S3 协议、path-style 签名 URL）。`ASSET_STORAGE_REGION` 默认为空、由客户端向桶查询区域；填错会让 API 调用和签名 URL 一起失效（`AuthorizationHeaderMalformed`），所以未知就留空、已知就直接写。附件由服务端只签名、浏览器直传，所以 `ASSET_STORAGE_PUBLIC_ENDPOINT` 是浏览器实际访问的地址：必须与站点同协议（https 页面不能指向 http 端点），存储端还要为站点 origin 配置桶 CORS，放行 `PUT` 与 `x-amz-meta-sha256`。开发参考 endpoint `http://minio.8and1.cn:80`（HTTP、80 端口）只够服务端侧读写，不足以支撑浏览器直传。`ASSET_STORAGE_CHECK_ON_STARTUP=false` 跳过启动连接检查，`ASSET_STORAGE_AUTO_CREATE_BUCKET=false` 禁止自动建桶，`ASSET_ACCESS_URL_TTL_SECONDS=0` 让读取地址变为不过期直链（需桶允许匿名读）。开发环境未填凭据时不构造存储客户端，附件返回 unavailable；生产环境仍要求完整配置。实际密钥须由部署者填写，当前域名暂不可用，本次未连接或测试对象存储。
 
 ## 1. 服务定位与部署组合
 

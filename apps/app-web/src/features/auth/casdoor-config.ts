@@ -18,8 +18,9 @@ export const casdoorAuthEnabled = authMode === 'casdoor';
 /**
  * Browser SDK against the shared Auth Service: no Casdoor clientSecret or
  * certificate lives in the app — the Auth Service owns the OAuth handshake.
- * The session is tab-scoped sessionStorage (nova rule: refresh survives,
- * closing the tab clears); the per-app prefix keeps other consoles' sessions apart.
+ * The session is persisted in localStorage so a full page reload after
+ * /callback keeps it; the `zhishu_` prefix is used as-is and keeps other
+ * consoles' sessions apart.
  */
 export const casdoorClientConfig: ClientConfig = {
   appName: 'zhishu',

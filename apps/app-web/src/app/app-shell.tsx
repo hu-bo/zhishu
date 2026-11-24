@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { getCurrentUser, mockLogin, mockLogout, useListMockUsers } from '@/api/generated/identity';
+import { ApiError } from '@/api/api-error';
 import { useCasdoor } from '@nova/casdoor/client/react';
 import { casdoorAuthEnabled } from '@/features/auth/casdoor-config';
 import type { MockLogin200User } from '@/api/generated/app-api.schemas';
@@ -459,8 +460,16 @@ export function AppShell() {
           if (!active) return;
           void rememberAccount(principal, true);
           setUser(principal);
-        } catch {
-          if (active) setAccessToken(undefined);
+        } catch (error) {
+          if (!active) return;
+          // Only a rejected credential ends the session. A transient API or identity-service
+          // failure keeps the bearer token, so reloading after recovery resumes the login
+          // instead of silently dropping the user back to the SSO entry.
+          if (error instanceof ApiError && error.status === 401) {
+            setAccessToken(undefined);
+          } else {
+            setAuthError('暂时无法确认登录状态，服务可能不可用；请稍后刷新页面重试。');
+          }
         }
       } else if (!navigator.onLine) {
         try {
