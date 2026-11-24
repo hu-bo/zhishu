@@ -12,7 +12,7 @@ const environmentSchema = z
     // "header" once it accepts Authorization, and keep query logs masked until then.
     AUTH_SERVICE_TOKEN_TRANSPORT: z.enum(["header", "query"]).default("query"),
     AUTH_SERVICE_TIMEOUT_MS: z.coerce.number().int().min(100).max(30000).default(5000),
-    PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+    PORT: z.coerce.number().int().min(1).max(65535).default(9010),
     HOST: z.string().min(1).default("0.0.0.0"),
     LOG_LEVEL: z
       .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
