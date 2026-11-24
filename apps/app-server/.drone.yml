@@ -112,6 +112,9 @@ steps:
         - cd "$RELEASE_DIR"
         - test -s .env
         - test -s dist/src/server.js
+        # Prepare the log directory on the host: the package itself is bind-mounted read-only, so
+        # the logger cannot create it from inside the container. Compose mounts this path writable.
+        - mkdir -p "$RELEASE_DIR/logs"
         # Validate the environment and run migrations before stopping the current service.
         - docker compose -p zhishu-app-server config --quiet
         - docker compose -p zhishu-app-server run --rm --no-deps -T app-server node dist/src/scripts/run-migrations.js

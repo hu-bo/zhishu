@@ -22,6 +22,9 @@ services:
       - "127.0.0.1:3001:3001"
     volumes:
       - .:/data/app/zhishu-app-server:ro
+      # The package stays read-only; the log directory is the one writable path inside it and is
+      # prepared on the host by the deploy script, so the logger never has to create it.
+      - ./logs:/data/app/zhishu-app-server/logs
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
