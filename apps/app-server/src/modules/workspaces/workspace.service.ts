@@ -14,7 +14,7 @@ import {
   requireWorkspaceDocumentManagers,
 } from "../authorization/permissions.js";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, ne, sql } from "drizzle-orm";
 import type { Database } from "../../../database/index.js";
 import {
   documents,
@@ -34,6 +34,9 @@ import type {
 
 import { workspaceAccess, workspaceRole } from "../authorization/permissions.js";
 import { workspaceSchema } from "./workspace.schema.js";
+import { ensurePersonalWorkspace } from "./personal-workspace.js";
+
+const WORKSPACE_LIMIT = 100;
 
 export class WorkspaceService {
   constructor(
@@ -41,22 +44,16 @@ export class WorkspaceService {
     private readonly sessions: SessionInvalidator,
   ) {}
   async listWorkspaces(principal: Principal) {
-    await this.db
-      .insert(workspaces)
-      .values({
-        tenantId: principal.tenantId,
-        id: "ws_default",
-        name: "团队知识库",
-        kind: "team",
-        createdBy: "system",
-      })
-      .onConflictDoNothing();
+    const personalWorkspaceId = await this.db.transaction((tx) =>
+      ensurePersonalWorkspace(tx, principal),
+    );
     // Every workspace must expose a root catalog; backfill in bulk instead of per row.
     await this.db
       .execute(sql`insert into catalogs (tenant_id, id, workspace_id, parent_id, name, position, created_by)
       select w.tenant_id, 'cat_root_' || w.id, w.id, null, '根目录', 0, w.created_by from workspaces w
       where w.tenant_id = ${principal.tenantId}
-        and not exists (select 1 from catalogs c where c.tenant_id = w.tenant_id and c.id = 'cat_root_' || w.id)`);
+        and not exists (select 1 from catalogs c where c.tenant_id = w.tenant_id and c.id = 'cat_root_' || w.id)
+      on conflict (tenant_id, id) do nothing`);
     const rows = await this.db
       .select({
         id: workspaces.id,
@@ -82,8 +79,12 @@ export class WorkspaceService {
       })
       .from(workspaces)
       .where(and(eq(workspaces.tenantId, principal.tenantId), spaceActionSql(principal, "read")))
-      .orderBy(asc(workspaces.createdAt), asc(workspaces.id))
-      .limit(100);
+      .orderBy(
+        sql`${workspaces.id} = ${personalWorkspaceId} desc`,
+        asc(workspaces.createdAt),
+        asc(workspaces.id),
+      )
+      .limit(WORKSPACE_LIMIT * 2);
     return rows.map(({ memberRole, createdAt, ...row }) => {
       const role = workspaceRole(row, principal.identityId, memberRole);
       return {
@@ -105,21 +106,19 @@ export class WorkspaceService {
       const receipt = idempotencyScope(principal, "workspaces.create", idempotencyKey, input);
       const replay = await loadIdempotencyReplay(tx, receipt, workspaceSchema);
       if (replay) return replay;
-      await tx
-        .insert(workspaces)
-        .values({
-          tenantId: principal.tenantId,
-          id: "ws_default",
-          name: "团队知识库",
-          kind: "team",
-          createdBy: "system",
-        })
-        .onConflictDoNothing();
+      await lockKnowledgeTree(tx, principal.tenantId, principal.identityId);
       const [count] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(workspaces)
-        .where(eq(workspaces.tenantId, principal.tenantId));
-      if ((count?.count ?? 0) >= 100)
+        .where(
+          and(
+            eq(workspaces.tenantId, principal.tenantId),
+            input.kind === "personal"
+              ? eq(workspaces.personalOwnerId, principal.identityId)
+              : ne(workspaces.kind, "personal"),
+          ),
+        );
+      if ((count?.count ?? 0) >= WORKSPACE_LIMIT)
         throw new DomainError("RESOURCE_LIMIT", "Workspace limit reached");
       const id = `ws_${randomUUID()}`;
       const [row] = await tx

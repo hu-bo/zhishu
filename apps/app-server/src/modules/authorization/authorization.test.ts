@@ -16,6 +16,7 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 import * as Y from "yjs";
 import { createCollaborationServer } from "../collaboration/hocuspocus.server.js";
 import { registerIdentityGuard } from "../identity/index.js";
+import { principalFromVerifiedIdentity } from "../identity/auth-service-authenticator.js";
 import { rememberIdentities } from "../identity/identity-directory.js";
 import { and, eq, sql } from "drizzle-orm";
 import Fastify from "fastify";
@@ -159,7 +160,7 @@ test(
         ),
       );
 
-      const principals = new Map(
+      const principals = new Map<string, Principal>(
         ["owner", "admin", "editor", "viewer", "guest", "other"].map((identityId) => [
           identityId,
           {
@@ -237,6 +238,69 @@ test(
         );
         return response;
       }
+      await t.test(
+        "first use gives each Casdoor identity a private document destination",
+        async () => {
+          const alice = "fresh/alice";
+          const bob = "fresh/bob";
+          for (const identityId of [alice, bob]) {
+            const principal = principalFromVerifiedIdentity({
+              identityId,
+              displayName: identityId,
+              roles: ["user"],
+              active: true,
+            });
+            principals.set(identityId, principal);
+            await rememberIdentities(db, [principal]);
+          }
+          const list = async (identityId: string) =>
+            (await call("GET", "/knowledge/workspaces", undefined, identityId)).json<
+              { id: string; kind: string; personalOwnerId: string | null; rootCatalogId: string }[]
+            >();
+          const [firstList, created] = await Promise.all([
+            list(alice),
+            call("POST", "/documents/", { title: "第一篇文档" }, alice, 201),
+          ]);
+          assert.equal(firstList.length, 1);
+          const personal = firstList[0]!;
+          assert.equal(personal.kind, "personal");
+          assert.equal(personal.personalOwnerId, alice);
+          const document = created.json<{
+            id: string;
+            workspaceId: string;
+            catalogId: string;
+            accessMode: string;
+          }>();
+          assert.equal(document.workspaceId, personal.id);
+          assert.equal(document.catalogId, personal.rootCatalogId);
+          assert.equal(document.accessMode, "personal");
+          assert.deepEqual(
+            (await list(alice)).map((row) => row.id),
+            [personal.id],
+          );
+          const [bobSpace] = await list(bob);
+          assert.equal(bobSpace?.personalOwnerId, bob);
+          assert.notEqual(bobSpace?.id, personal.id);
+          await call("GET", `/documents/${document.id}`, undefined, bob, 404);
+          await call("POST", "/documents/", { workspaceId: personal.id }, bob, 404);
+
+          const team = (
+            await call(
+              "POST",
+              "/knowledge/workspaces",
+              { name: "共享知识库", kind: "team" },
+              alice,
+              201,
+            )
+          ).json<{ id: string }>();
+          await call("POST", "/documents/", { workspaceId: team.id }, bob, 404);
+          const teamDocument = (
+            await call("POST", "/documents/", { workspaceId: team.id }, alice, 201)
+          ).json<{ workspaceId: string; accessMode: string }>();
+          assert.equal(teamDocument.workspaceId, team.id);
+          assert.equal(teamDocument.accessMode, "workspace-inherited");
+        },
+      );
       const space = (
         await call(
           "POST",
@@ -261,16 +325,6 @@ test(
         )
       ).json<{ id: string; metadataRevision: number }>();
       const path = `/documents/${doc.id}`;
-      await db
-        .insert(schema.resourceAcl)
-        .values({
-          tenantId: "test",
-          workspaceId: "ws_default",
-          identityId: "owner",
-          role: "admin",
-          createdBy: "owner",
-        })
-        .onConflictDoNothing();
       await t.test(
         "workspace and catalog receipts replay safely across operation, actor and tenant scopes",
         async () => {
@@ -1622,16 +1676,6 @@ test(
       ).json<{ canWrite: boolean; canManage: boolean }>();
       assert.equal(copied.canWrite, true);
       assert.equal(copied.canManage, true);
-      await db
-        .insert(schema.resourceAcl)
-        .values({
-          tenantId: "test",
-          workspaceId: "ws_default",
-          identityId: "owner",
-          role: "admin",
-          createdBy: "owner",
-        })
-        .onConflictDoNothing();
       const imported = (
         await call("POST", "/documents/import", {
           format: "zhishu.document",

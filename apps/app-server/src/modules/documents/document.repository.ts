@@ -29,6 +29,7 @@ import type { DocumentTag } from "./document.schema.js";
 import { DomainError } from "../../shared/domain-error.js";
 import type { DocumentWriteTransaction } from "../collaboration/owner.js";
 import { ensureRootCatalog, workspaceNameSql } from "../catalogs/index.js";
+import { ensurePersonalWorkspace } from "../workspaces/index.js";
 import { requireWorkspaceOrganizer } from "../authorization/permissions.js";
 import {
   assetReferences,
@@ -518,8 +519,7 @@ export class DocumentRepository {
       migrationId: string;
       stepSnapshots: readonly ContentMigrationStepSnapshot[];
     },
-    location: { workspaceId: string; catalogId: string | null } = {
-      workspaceId: "ws_default",
+    location: { workspaceId?: string; catalogId: string | null } = {
       catalogId: null,
     },
   ): Promise<ActiveDocument> {
@@ -561,8 +561,7 @@ export class DocumentRepository {
       migrationId: string;
       stepSnapshots: readonly ContentMigrationStepSnapshot[];
     },
-    location: { workspaceId: string; catalogId: string | null } = {
-      workspaceId: "ws_default",
+    location: { workspaceId?: string; catalogId: string | null } = {
       catalogId: null,
     },
   ): Promise<ActiveDocument> {
@@ -581,47 +580,34 @@ export class DocumentRepository {
         sql`select pg_advisory_xact_lock(hashtextextended(${`document-quota:${tenantId}`}, 718267))`,
       );
       await lockKnowledgeTree(tx, tenantId, ownerId);
-      await tx
-        .insert(workspaces)
-        .values({
-          tenantId,
-          id: "ws_default",
-          name: "团队知识库",
-          kind: "team",
-          createdBy: "system",
-        })
-        .onConflictDoNothing();
-      const [workspace] = await tx
-        .select({ id: workspaces.id, kind: workspaces.kind })
-        .from(workspaces)
-        .where(and(eq(workspaces.tenantId, tenantId), eq(workspaces.id, location.workspaceId)))
-        .limit(1);
-      if (!workspace) throw new DomainError("NOT_FOUND", "Workspace not found");
-      await requireWorkspaceOrganizer(tx, { tenantId, identityId: ownerId }, location.workspaceId);
-      const catalogId =
-        location.catalogId ?? (await ensureRootCatalog(tx, tenantId, location.workspaceId));
+      const owner = { tenantId, identityId: ownerId };
+      let workspaceId = location.workspaceId;
       if (location.catalogId) {
         const [catalog] = await tx
-          .select({ id: catalogs.id })
+          .select({ workspaceId: catalogs.workspaceId })
           .from(catalogs)
           .where(
             and(
               eq(catalogs.tenantId, tenantId),
               eq(catalogs.id, location.catalogId),
-              eq(catalogs.workspaceId, location.workspaceId),
-              catalogActionSql({ tenantId, identityId: ownerId }, "write"),
+              workspaceId ? eq(catalogs.workspaceId, workspaceId) : undefined,
+              catalogActionSql(owner, "write"),
             ),
           )
           .limit(1);
         if (!catalog) throw new DomainError("NOT_FOUND", "Catalog is unavailable");
+        workspaceId = catalog.workspaceId;
       }
+      workspaceId ??= await ensurePersonalWorkspace(tx, owner);
+      const { workspace } = await requireWorkspaceOrganizer(tx, owner, workspaceId);
+      const catalogId = location.catalogId ?? (await ensureRootCatalog(tx, tenantId, workspaceId));
       const [lastPosition] = await tx
         .select({ value: sql<number>`coalesce(max(${documents.position}), -1)::int + 1` })
         .from(documents)
         .where(
           and(
             eq(documents.tenantId, tenantId),
-            eq(documents.workspaceId, location.workspaceId),
+            eq(documents.workspaceId, workspaceId),
             eq(documents.catalogId, catalogId),
             eq(documents.status, "active"),
           ),
@@ -649,7 +635,7 @@ export class DocumentRepository {
               : workspace.kind === "personal"
                 ? "personal"
                 : "restricted",
-          workspaceId: location.workspaceId,
+          workspaceId,
           catalogId,
           position: lastPosition?.value ?? 0,
         })
@@ -857,12 +843,10 @@ export class DocumentRepository {
       const documentId = `doc_${randomUUID()}`;
       const generationId = `gen_${randomUUID()}`;
       const initialDurableSeq = input.initialUpdate ? 1 : 0;
-      const copyCatalogId = await ensureRootCatalog(tx, input.tenantId, "ws_default");
-      await requireWorkspaceOrganizer(
-        tx,
-        { tenantId: input.tenantId, identityId: input.identityId },
-        "ws_default",
-      );
+      const destinationOwner = { tenantId: input.tenantId, identityId: input.identityId };
+      const workspaceId = await ensurePersonalWorkspace(tx, destinationOwner);
+      await requireWorkspaceOrganizer(tx, destinationOwner, workspaceId);
+      const copyCatalogId = await ensureRootCatalog(tx, input.tenantId, workspaceId);
       const [document] = await tx
         .insert(documents)
         .values({
@@ -870,6 +854,7 @@ export class DocumentRepository {
           tenantId: input.tenantId,
           title: input.title,
           createdBy: input.identityId,
+          workspaceId,
           catalogId: copyCatalogId,
         })
         .returning();

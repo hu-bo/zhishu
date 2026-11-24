@@ -2874,7 +2874,10 @@ export type CreateDocumentBody = {
      * @maxLength 200
      */
   title?: string;
-  /** @pattern ^ws_[A-Za-z0-9_-]{1,64}$ */
+  /**
+     * 省略时使用所选目录所属空间或当前用户的个人空间
+     * @pattern ^ws_[A-Za-z0-9_-]{1,64}$
+     */
   workspaceId?: string;
   /** @pattern ^cat_[A-Za-z0-9_-]{1,64}$ */
   catalogId?: string | null;

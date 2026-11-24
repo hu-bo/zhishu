@@ -45,7 +45,9 @@ export type { DocumentTag };
 export const createDocumentBodySchema = z
   .object({
     title: z.string().trim().min(1).max(200).default("未命名文档"),
-    workspaceId: workspaceIdSchema.default("ws_default"),
+    workspaceId: workspaceIdSchema
+      .optional()
+      .describe("省略时使用所选目录所属空间或当前用户的个人空间"),
     catalogId: catalogIdSchema.nullable().default(null),
   })
   .strict();

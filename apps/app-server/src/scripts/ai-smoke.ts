@@ -285,7 +285,10 @@ try {
   assert.ok(caps.body.plugins.includes("rag") && caps.body.plugins.includes("writing"));
 
   // 2. Source document for evidence re-validation and proposal apply.
-  const createdDoc = await json("POST", "/api/documents/", { title: "冒烟来源文档" });
+  const createdDoc = await json("POST", "/api/documents/", {
+    title: "冒烟来源文档",
+    workspaceId: "ws_default",
+  });
   assert.equal(createdDoc.status, 201);
   const documentId = createdDoc.body.id as string;
   const smokeSource = evidence.sources[0];

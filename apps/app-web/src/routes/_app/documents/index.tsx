@@ -105,7 +105,7 @@ export const Route = createFileRoute('/_app/documents/')({
 });
 
 function DocumentsPage() {
-  const { workspaces, identityKey, enabled } = useKnowledgeWorkspace();
+  const { identityKey, enabled } = useKnowledgeWorkspace();
   const search = Route.useSearch();
   const navigate = useNavigate({ from: '/documents/' });
   const queryClient = useQueryClient();
@@ -142,9 +142,11 @@ function DocumentsPage() {
   };
 
   const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['documents'] });
-    await queryClient.invalidateQueries({ queryKey: ['catalog-children'] });
-    await queryClient.invalidateQueries({ queryKey: ['knowledge-workspaces'] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['documents'] }),
+      queryClient.invalidateQueries({ queryKey: ['catalog-children'] }),
+      queryClient.invalidateQueries({ queryKey: ['knowledge-workspaces'] }),
+    ]);
   };
 
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
@@ -154,11 +156,11 @@ function DocumentsPage() {
 
   const submitCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!enabled || busyId === 'create') return;
     setActionError(null);
     setBusyId('create');
     const createInput = {
       title: newTitle.trim() || '未命名文档',
-      ...(workspaces[0] ? { workspaceId: workspaces[0].id } : {}),
     };
     const fingerprint = JSON.stringify(createInput);
     const idempotencyKey = createRequestKeys.current.get(fingerprint) ?? crypto.randomUUID();
@@ -168,6 +170,7 @@ function DocumentsPage() {
         headers: { 'Idempotency-Key': idempotencyKey },
       });
       createRequestKeys.current.delete(fingerprint);
+      await refresh();
       void navigate({
         to: '/spaces/$workspaceId/doc/$documentId',
         params: { workspaceId: created.workspaceId, documentId: created.id },
@@ -198,7 +201,11 @@ function DocumentsPage() {
     <div className="zhishu-page space-y-5">
       <section className="flex items-center justify-between gap-4">
         <h1 className="zhishu-page-heading">我的文档</h1>
-        <Button onClick={() => setCreateOpen(true)} className="h-10 gap-2 px-3 sm:px-4">
+        <Button
+          disabled={!enabled}
+          onClick={() => setCreateOpen(true)}
+          className="h-10 gap-2 px-3 sm:px-4"
+        >
           <Plus aria-hidden="true" />
           新建文档
         </Button>
@@ -337,7 +344,12 @@ function DocumentsPage() {
                   : emptyHints[currentView.value]}
               </p>
               {!search.q && search.view !== 'trash' && search.view !== 'archived' && (
-                <Button variant="outline" className="mt-4" onClick={() => setCreateOpen(true)}>
+                <Button
+                  disabled={!enabled}
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => setCreateOpen(true)}
+                >
                   <Plus aria-hidden="true" /> 创建文档
                 </Button>
               )}
@@ -536,7 +548,7 @@ function DocumentsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>新建文档</DialogTitle>
-            <DialogDescription>给想法起个名字。支持多人协作，内容会自动保存。</DialogDescription>
+            <DialogDescription>文档将保存到你的个人空间。</DialogDescription>
           </DialogHeader>
           <form onSubmit={submitCreate} className="space-y-4">
             <label className="block space-y-2 text-sm font-medium">
@@ -558,7 +570,7 @@ function DocumentsPage() {
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
                 取消
               </Button>
-              <Button type="submit" disabled={busyId === 'create'}>
+              <Button type="submit" disabled={!enabled || busyId === 'create'}>
                 {busyId === 'create' ? '正在创建…' : '创建文档'}
               </Button>
             </DialogFooter>
