@@ -114,22 +114,9 @@ steps:
         # Prepare the log directory on the host: the package itself is bind-mounted
         # read-only, so the logger cannot create it from inside the container.
         - mkdir -p "$APP_DIR/logs"
-        # Validate the environment, run migrations and assemble the full app graph
-        # while the previous service still runs: `compose run` is a one-shot with no
-        # published ports, so it never touches 9010/9011, and the server itself never
-        # auto-migrates. Any failure aborts here, before the service is swapped.
         - docker compose -p zhishu-app-server config --quiet
         - docker compose -p zhishu-app-server run --rm --no-deps -T app-server node dist/src/scripts/run-migrations.js
         - docker compose -p zhishu-app-server run --rm --no-deps -T app-server node dist/src/scripts/startup-probe.js
-        # --force-recreate replaces this project's own container with the compose
-        # stop_grace_period, so no manual stop/rm. A foreign leftover (old-style
-        # deploy, project named after its directory) publishing 9010/9011 would only
-        # surface as "port is already allocated" after the old service is gone,
-        # so name it here and abort while production is still up.
-        -  if ! docker compose -p zhishu-app-server up -d --force-recreate --wait; then
-            docker compose -p zhishu-app-server logs --no-color --tail=100 app-server
-            exit 1
-          fi
-        - docker compose -p zhishu-app-server ps
+        - docker compose -p zhishu-app-server up -d --force-recreate
+        - docker logs zhishu-app-server
         - rm -rf "$RELEASE_ROOT"
-        - echo "$APP_NAME deployment complete."
