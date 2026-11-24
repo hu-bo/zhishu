@@ -121,10 +121,32 @@ steps:
         # Assemble the full app graph (trusted identity provider included) while the
         # previous service still runs, so wiring failures never take production down.
         - docker compose -p zhishu-app-server run --rm --no-deps -T app-server node dist/src/scripts/startup-probe.js
+        # A leftover container from an old `docker-compose up -d --force-recreate`
+        # (project named after its directory, so not found by the exact container
+        # name) or another app holding 9010/9012 only fails the new `up` after the
+        # running service is already gone. Name the holder before stopping anything;
+        # same-project leftovers are removed below.
         - |
+          SELF=$(docker container inspect -f '{{.Id}}' zhishu-app-server 2>/dev/null || true)
+          for id in $(docker ps -q --no-trunc --filter publish=9010 --filter publish=9012); do
+            PROJECT=$(docker container inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$id" 2>/dev/null || true)
+            if [ "$id" != "$SELF" ] && [ "$PROJECT" != "zhishu-app-server" ]; then
+              docker ps --no-trunc --filter id="$id" --format 'Port holder: {{.Names}} {{.Ports}}' >&2
+              echo "Host ports 9010/9012 are the contract of zhishu-app-server; stop and rm the container above (or move that app off these ports), then re-run." >&2
+              exit 1
+            fi
+          done
+        - |
+          # Stop and remove every container this project knows: the running service,
+          # old-named leftovers, and interrupted `compose run` sessions, then fall
+          # back to the exact name for deployments that skipped the compose labels.
+          for id in $(docker ps -aq --filter label=com.docker.compose.project=zhishu-app-server); do
+            docker stop --time 30 "$id" || true
+            docker rm "$id" || true
+          done
           if docker container inspect zhishu-app-server >/dev/null 2>&1; then
-            docker stop --time 30 zhishu-app-server
-            docker rm zhishu-app-server
+            docker stop --time 30 zhishu-app-server || true
+            docker rm zhishu-app-server || true
           fi
         - if [ -e "$APP_DIR" ]; then mv "$APP_DIR" "$BACKUP_DIR/app-server"; fi
         - mv "$RELEASE_DIR" "$APP_DIR"
@@ -132,6 +154,10 @@ steps:
         - |
           if ! docker compose -p zhishu-app-server up -d --force-recreate --wait; then
             docker compose -p zhishu-app-server logs --no-color --tail=100 app-server
+            # Show who currently owns the contract ports so a "port is already
+            # allocated" retry does not have to start with blind investigation.
+            docker ps --filter publish=9010 --filter publish=9012 --format 'Port holder: {{.Names}} {{.Status}} {{.Ports}}' >&2 || true
+            ss -ltnp | grep -E ':(9010|9012)\b' >&2 || true
             echo "Backend readiness failed. Previous files are in $BACKUP_DIR." >&2
             exit 1
           fi
