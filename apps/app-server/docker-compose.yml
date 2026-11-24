@@ -1,6 +1,12 @@
 # Production service definition shipped inside the app-server release package.
 # Infrastructure (PostgreSQL, S3 storage, optional Qdrant) is expected to already
 # exist on the host; DATABASE_URL and ASSET_STORAGE_* in .env point at them.
+# The published host ports stay literal: they are this app's fixed contract with the
+# host reverse proxy (nginx: /api -> host.docker.internal:9010, /collab -> 9012) on a
+# host that runs other apps, so they must never fall back to a generic 3000 and
+# collide. What the app listens on inside the container comes from .env, which
+# .env.production sets to the same 9010 and 9012, so both publishes resolve as
+# 127.0.0.1:9010:9010 and 127.0.0.1:9012:9012.
 services:
   app-server:
     image: node:22-alpine
@@ -10,16 +16,23 @@ services:
       - .env
     environment:
       NODE_ENV: production
+      # The listeners must bind every interface, otherwise the publishes below are
+      # not reachable from the host.
       HOST: 0.0.0.0
-      PORT: 3000
-      # The standalone collaboration listener must differ from the API port.
-      COLLABORATION_PORT: 3001
+      # `environment` overrides `env_file` and interpolation overrides both, so the
+      # listeners are pinned to the exact port the publishes and the healthcheck
+      # resolve: no matter what .env says, the app and the mapping agree. Both values
+      # are required instead of defaulting to 3000, because a missing one would move
+      # the mismatch inside the container rather than fail the deploy. config.ts
+      # still rejects PORT and COLLABORATION_PORT being equal.
+      PORT: ${PORT:?Set PORT in .env}
+      COLLABORATION_PORT: ${COLLABORATION_PORT:?Set COLLABORATION_PORT in .env}
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
-    # Loopback-only publishes; the host reverse proxy terminates TLS and serves
-    # both /api (3000) and the collaborative websocket (3001).
+    # Loopback-only publishes; the host reverse proxy terminates TLS and serves both
+    # /api and the collaborative websocket from these two fixed host ports.
     ports:
-      - "127.0.0.1:3000:3000"
-      - "127.0.0.1:3001:3001"
+      - "127.0.0.1:9010:${PORT:?Set PORT in .env}"
+      - "127.0.0.1:9012:${COLLABORATION_PORT:?Set COLLABORATION_PORT in .env}"
     volumes:
       - .:/data/app/zhishu-app-server:ro
       # The package stays read-only; the log directory is the one writable path inside it and is
@@ -35,7 +48,7 @@ services:
         - CMD
         - node
         - -e
-        - "fetch('http://127.0.0.1:3000/health/ready', { signal: AbortSignal.timeout(4000) }).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+        - "fetch('http://127.0.0.1:${PORT:?Set PORT in .env}/health/ready', { signal: AbortSignal.timeout(4000) }).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
       interval: 10s
       timeout: 5s
       start_period: 20s
