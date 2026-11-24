@@ -41,21 +41,17 @@ export class ShareService {
     if (!this.storage)
       throw new DomainError("SERVICE_UNAVAILABLE", "Private asset storage is not configured");
     const asset = await this.shares.assetForPublic(shareId, assetId);
-    const expiresIn = Math.min(
-      this.options.accessUrlTtlSeconds,
-      Math.floor((asset.shareExpiresAt.getTime() - Date.now()) / 1000),
-    );
-    if (expiresIn < 1) throw new DomainError("NOT_FOUND", "分享链接已失效或已被撤销");
-    const url = await this.storage.createReadUrl({
+    const shareRemaining = Math.floor((asset.shareExpiresAt.getTime() - Date.now()) / 1000);
+    if (shareRemaining < 1) throw new DomainError("NOT_FOUND", "分享链接已失效或已被撤销");
+    // A share's read URL has to die with the share, so the non-expiring mode never applies here.
+    const configured = this.options.accessUrlTtlSeconds;
+    const expiresIn = configured <= 0 ? shareRemaining : Math.min(configured, shareRemaining);
+    return this.storage.createReadUrl({
       objectKey: asset.objectKey,
       fileName: asset.fileName,
       mediaType: asset.mediaType,
       expiresIn,
     });
-    return {
-      url,
-      expiresAt: new Date(Date.now() + expiresIn * 1_000).toISOString(),
-    };
   }
 
   async join(principal: Principal, shareId: string) {

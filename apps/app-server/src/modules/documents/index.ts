@@ -138,7 +138,6 @@ export async function documentsModule(
     !exportMode
       ? new AssetObjectStorage(config)
       : null;
-  if (shareStorage) app.addHook("onClose", async () => shareStorage.close());
   const shares = new ShareService(new ShareRepository(app.db, repository), catalogs, shareStorage, {
     accessUrlTtlSeconds: config.ASSET_ACCESS_URL_TTL_SECONDS,
   });

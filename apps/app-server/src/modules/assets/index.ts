@@ -17,10 +17,7 @@ export async function assetsModule(
     !exportMode
       ? new AssetObjectStorage(config)
       : null;
-  if (storage) {
-    app.addHook("onClose", async () => storage.close());
-    if (config.ASSET_STORAGE_CHECK_ON_STARTUP) await storage.initialize();
-  }
+  if (storage && config.ASSET_STORAGE_CHECK_ON_STARTUP) await storage.initialize();
   const service = new AssetService(new AssetRepository(app.db), storage, {
     maxBytes: config.ASSET_UPLOAD_MAX_BYTES,
     maxTenantBytes: TENANT_MAX_ASSET_BYTES,
@@ -28,5 +25,5 @@ export async function assetsModule(
     accessUrlTtlSeconds: config.ASSET_ACCESS_URL_TTL_SECONDS,
     orphanRetentionSeconds: config.ASSET_ORPHAN_RETENTION_SECONDS,
   });
-  await app.register(async (scope) => assetRoutes(scope, service, config));
+  await app.register(async (scope) => assetRoutes(scope, service));
 }

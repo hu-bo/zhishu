@@ -1738,7 +1738,15 @@ test(
         204,
       );
       assert.ok(revoked.includes(doc.id));
-      assert.equal(await assetRepository.beginUpload(principals.get("editor")!, upload.id), null);
+      assert.equal(
+        await assetRepository.finalizeUpload({
+          principal: principals.get("editor")!,
+          assetId: upload.id,
+          actualSize: 1,
+          sha256: "0".repeat(64),
+        }),
+        null,
+      );
       assert.equal(
         (await call("GET", path, undefined, "editor")).json<{ canWrite: boolean }>().canWrite,
         false,

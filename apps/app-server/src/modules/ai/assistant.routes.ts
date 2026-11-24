@@ -486,7 +486,7 @@ export async function assistantRoutes(app: FastifyInstance, assistant: Assistant
         }),
         response: {
           ...common.response,
-          200: z.strictObject({ url: z.string(), expiresAt: z.string() }),
+          200: z.strictObject({ url: z.string(), expiresAt: z.string().nullable() }),
         },
       },
     },

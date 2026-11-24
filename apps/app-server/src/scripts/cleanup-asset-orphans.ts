@@ -39,6 +39,5 @@ try {
   const result = await service.cleanOrphans();
   process.stdout.write(`Removed ${result.deleted} orphaned asset object(s).\n`);
 } finally {
-  storage.close();
   await pool.end();
 }

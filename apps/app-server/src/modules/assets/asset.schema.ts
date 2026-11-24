@@ -26,10 +26,9 @@ export const documentAssetParamsSchema = assetDocumentParamsSchema.extend({
   assetId: assetIdSchema,
 });
 
-export const assetUploadContentBodySchema = z
-  .object({ dataBase64: z.string().min(4).max(139_810_136) })
+export const completeAssetUploadBodySchema = z
+  .object({ sha256: z.string().regex(/^[A-Fa-f0-9]{64}$/) })
   .strict();
-export const assetContentAcceptedSchema = z.object({ status: z.literal("uploaded") }).strict();
 
 export const assetUploadSchema = z
   .object({
@@ -39,7 +38,9 @@ export const assetUploadSchema = z
     mediaType: z.enum(supportedAssetMediaTypes),
     size: z.number().int().positive(),
     uploadExpiresAt: z.string().datetime(),
-    uploadPath: z.string(),
+    // Presigned PUT straight to the bucket: the bytes never pass through this API. The uploader
+    // must send `x-amz-meta-sha256` with the digest it later reports to `/complete`.
+    uploadUrl: z.string().url(),
     completePath: z.string(),
   })
   .strict();
@@ -56,8 +57,10 @@ export const assetSchema = z
   })
   .strict();
 
+// `expiresAt: null` is the non-expiring mode: an unsigned object URL served straight from the
+// bucket, available once the bucket policy allows anonymous reads.
 export const assetAccessSchema = z
-  .object({ url: z.string().url(), expiresAt: z.string().datetime() })
+  .object({ url: z.string().url(), expiresAt: z.string().datetime().nullable() })
   .strict();
 
 export const createAssetReferenceBodySchema = z

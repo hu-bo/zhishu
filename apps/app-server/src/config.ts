@@ -83,7 +83,9 @@ const environmentSchema = z
       .transform((value) => value === "true"),
     ASSET_UPLOAD_MAX_BYTES: z.coerce.number().int().min(1_024).max(104_857_600).default(10_485_760),
     ASSET_UPLOAD_SESSION_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3_600),
-    ASSET_ACCESS_URL_TTL_SECONDS: z.coerce.number().int().min(15).max(300).default(60),
+    // 0 issues unsigned bucket URLs that never expire (the bucket policy must then allow the read);
+    // a positive value keeps the signed-URL window, which is also what a share URL is clamped to.
+    ASSET_ACCESS_URL_TTL_SECONDS: z.coerce.number().int().min(0).max(300).default(60),
     ASSET_ORPHAN_RETENTION_SECONDS: z.coerce
       .number()
       .int()

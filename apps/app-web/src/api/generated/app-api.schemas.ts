@@ -1989,27 +1989,13 @@ export type CreateAssetUpload201 = {
      */
   size: number;
   uploadExpiresAt: string;
-  uploadPath: string;
+  uploadUrl: string;
   completePath: string;
 };
 
-export type UploadAssetContentBody = {
-  /**
-     * @minLength 4
-     * @maxLength 139810136
-     */
-  dataBase64: string;
-};
-
-export type UploadAssetContent200Status = typeof UploadAssetContent200Status[keyof typeof UploadAssetContent200Status];
-
-
-export const UploadAssetContent200Status = {
-  uploaded: 'uploaded',
-} as const;
-
-export type UploadAssetContent200 = {
-  status: UploadAssetContent200Status;
+export type CompleteAssetUploadBody = {
+  /** @pattern ^[A-Fa-f0-9]{64}$ */
+  sha256: string;
 };
 
 export type CompleteAssetUpload200MediaType = typeof CompleteAssetUpload200MediaType[keyof typeof CompleteAssetUpload200MediaType];
@@ -2071,7 +2057,7 @@ export type CreateAssetReference201 = {
 
 export type GetAssetAccess200 = {
   url: string;
-  expiresAt: string;
+  expiresAt: string | null;
 };
 
 export type ListKnowledgeWorkspaces200ItemKind = typeof ListKnowledgeWorkspaces200ItemKind[keyof typeof ListKnowledgeWorkspaces200ItemKind];
@@ -4050,7 +4036,7 @@ export type GetPublicShareContent200 = {
 
 export type GetPublicShareAssetAccess200 = {
   url: string;
-  expiresAt: string;
+  expiresAt: string | null;
 };
 
 export type JoinShare200CatalogPathItem = {
@@ -4996,7 +4982,7 @@ export type RefreshAiImage200 = {
 
 export type GetAiImageAccess200 = {
   url: string;
-  expiresAt: string;
+  expiresAt: string | null;
 };
 
 export type ListQaSites200ItemAccessMode = typeof ListQaSites200ItemAccessMode[keyof typeof ListQaSites200ItemAccessMode];

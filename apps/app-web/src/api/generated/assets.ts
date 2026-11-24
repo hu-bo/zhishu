@@ -22,14 +22,13 @@ import type {
 import type {
   CancelAssetUpload200,
   CompleteAssetUpload200,
+  CompleteAssetUploadBody,
   CreateAssetReference201,
   CreateAssetReferenceBody,
   CreateAssetUpload201,
   CreateAssetUploadBody,
   ErrorResponse,
-  GetAssetAccess200,
-  UploadAssetContent200,
-  UploadAssetContentBody
+  GetAssetAccess200
 } from './app-api.schemas';
 
 import { apiFetch } from '../transport';
@@ -175,16 +174,16 @@ export function useCreateAssetUpload<TData = Awaited<ReturnType<typeof createAss
 
 
 
-export const getUploadAssetContentUrl = (assetId: string,) => {
+export const getCompleteAssetUploadUrl = (assetId: string,) => {
 
 
 
 
-  return `/api/asset-uploads/${assetId}/content`
+  return `/api/asset-uploads/${assetId}/complete`
 }
 
-export const uploadAssetContent = async (assetId: string,
-    uploadAssetContentBody: UploadAssetContentBody, options?: Parameters<typeof apiFetch>[1]): Promise<UploadAssetContent200> => {
+export const completeAssetUpload = async (assetId: string,
+    completeAssetUploadBody: CompleteAssetUploadBody, options?: Parameters<typeof apiFetch>[1]): Promise<CompleteAssetUpload200> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -200,12 +199,12 @@ export const uploadAssetContent = async (assetId: string,
     }
     return headers;
   };
-return apiFetch<UploadAssetContent200>(getUploadAssetContentUrl(assetId),
+return apiFetch<CompleteAssetUpload200>(getCompleteAssetUploadUrl(assetId),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(uploadAssetContentBody)
+    body: JSON.stringify(completeAssetUploadBody)
   }
 );}
 
@@ -213,123 +212,25 @@ return apiFetch<UploadAssetContent200>(getUploadAssetContentUrl(assetId),
 
 
 
-export const getUploadAssetContentQueryKey = (assetId: string,
-    uploadAssetContentBody?: BodyType<UploadAssetContentBody>,) => {
+export const getCompleteAssetUploadQueryKey = (assetId: string,
+    completeAssetUploadBody?: BodyType<CompleteAssetUploadBody>,) => {
     return [
-    'POST', `/api/asset-uploads/${assetId}/content`, uploadAssetContentBody
+    'POST', `/api/asset-uploads/${assetId}/complete`, completeAssetUploadBody
     ] as const;
     }
 
 
-export const getUploadAssetContentQueryOptions = <TData = Awaited<ReturnType<typeof uploadAssetContent>>, TError = ErrorType<ErrorResponse>>(assetId: string,
-    uploadAssetContentBody: BodyType<UploadAssetContentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof uploadAssetContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getCompleteAssetUploadQueryOptions = <TData = Awaited<ReturnType<typeof completeAssetUpload>>, TError = ErrorType<ErrorResponse>>(assetId: string,
+    completeAssetUploadBody: BodyType<CompleteAssetUploadBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof completeAssetUpload>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getUploadAssetContentQueryKey(assetId,uploadAssetContentBody);
+  const queryKey =  queryOptions?.queryKey ?? getCompleteAssetUploadQueryKey(assetId,completeAssetUploadBody);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof uploadAssetContent>>> = ({ signal }) => uploadAssetContent(assetId,uploadAssetContentBody, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, enabled: assetId !== null && assetId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof uploadAssetContent>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type UploadAssetContentQueryResult = NonNullable<Awaited<ReturnType<typeof uploadAssetContent>>>
-export type UploadAssetContentQueryError = ErrorType<ErrorResponse>
-
-
-export function useUploadAssetContent<TData = Awaited<ReturnType<typeof uploadAssetContent>>, TError = ErrorType<ErrorResponse>>(
- assetId: string,
-    uploadAssetContentBody: BodyType<UploadAssetContentBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof uploadAssetContent>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof uploadAssetContent>>,
-          TError,
-          Awaited<ReturnType<typeof uploadAssetContent>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useUploadAssetContent<TData = Awaited<ReturnType<typeof uploadAssetContent>>, TError = ErrorType<ErrorResponse>>(
- assetId: string,
-    uploadAssetContentBody: BodyType<UploadAssetContentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof uploadAssetContent>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof uploadAssetContent>>,
-          TError,
-          Awaited<ReturnType<typeof uploadAssetContent>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useUploadAssetContent<TData = Awaited<ReturnType<typeof uploadAssetContent>>, TError = ErrorType<ErrorResponse>>(
- assetId: string,
-    uploadAssetContentBody: BodyType<UploadAssetContentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof uploadAssetContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-
-export function useUploadAssetContent<TData = Awaited<ReturnType<typeof uploadAssetContent>>, TError = ErrorType<ErrorResponse>>(
- assetId: string,
-    uploadAssetContentBody: BodyType<UploadAssetContentBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof uploadAssetContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getUploadAssetContentQueryOptions(assetId,uploadAssetContentBody,options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-export const getCompleteAssetUploadUrl = (assetId: string,) => {
-
-
-
-
-  return `/api/asset-uploads/${assetId}/complete`
-}
-
-export const completeAssetUpload = async (assetId: string, options?: Parameters<typeof apiFetch>[1]): Promise<CompleteAssetUpload200> => {
-
-  return apiFetch<CompleteAssetUpload200>(getCompleteAssetUploadUrl(assetId),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getCompleteAssetUploadQueryKey = (assetId: string,) => {
-    return [
-    'POST', `/api/asset-uploads/${assetId}/complete`
-    ] as const;
-    }
-
-
-export const getCompleteAssetUploadQueryOptions = <TData = Awaited<ReturnType<typeof completeAssetUpload>>, TError = ErrorType<ErrorResponse>>(assetId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof completeAssetUpload>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getCompleteAssetUploadQueryKey(assetId);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof completeAssetUpload>>> = ({ signal }) => completeAssetUpload(assetId, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof completeAssetUpload>>> = ({ signal }) => completeAssetUpload(assetId,completeAssetUploadBody, { signal, ...requestOptions });
 
 
 
@@ -343,7 +244,8 @@ export type CompleteAssetUploadQueryError = ErrorType<ErrorResponse>
 
 
 export function useCompleteAssetUpload<TData = Awaited<ReturnType<typeof completeAssetUpload>>, TError = ErrorType<ErrorResponse>>(
- assetId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof completeAssetUpload>>, TError, TData>> & Pick<
+ assetId: string,
+    completeAssetUploadBody: BodyType<CompleteAssetUploadBody>, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof completeAssetUpload>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof completeAssetUpload>>,
           TError,
@@ -353,7 +255,8 @@ export function useCompleteAssetUpload<TData = Awaited<ReturnType<typeof complet
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useCompleteAssetUpload<TData = Awaited<ReturnType<typeof completeAssetUpload>>, TError = ErrorType<ErrorResponse>>(
- assetId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof completeAssetUpload>>, TError, TData>> & Pick<
+ assetId: string,
+    completeAssetUploadBody: BodyType<CompleteAssetUploadBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof completeAssetUpload>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof completeAssetUpload>>,
           TError,
@@ -363,16 +266,18 @@ export function useCompleteAssetUpload<TData = Awaited<ReturnType<typeof complet
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useCompleteAssetUpload<TData = Awaited<ReturnType<typeof completeAssetUpload>>, TError = ErrorType<ErrorResponse>>(
- assetId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof completeAssetUpload>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ assetId: string,
+    completeAssetUploadBody: BodyType<CompleteAssetUploadBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof completeAssetUpload>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
 export function useCompleteAssetUpload<TData = Awaited<ReturnType<typeof completeAssetUpload>>, TError = ErrorType<ErrorResponse>>(
- assetId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof completeAssetUpload>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ assetId: string,
+    completeAssetUploadBody: BodyType<CompleteAssetUploadBody>, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof completeAssetUpload>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getCompleteAssetUploadQueryOptions(assetId,options)
+  const queryOptions = getCompleteAssetUploadQueryOptions(assetId,completeAssetUploadBody,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

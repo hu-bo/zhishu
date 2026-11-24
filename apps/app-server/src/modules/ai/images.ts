@@ -320,17 +320,12 @@ export class AiImages {
     const found = row.rows[0];
     if (!found || found.status !== "ready" || !this.storage)
       throw new DomainError("NOT_FOUND", "图片不可访问");
-    return {
-      url: await this.storage.createReadUrl({
-        objectKey: this.objectKey(principal, conversationId, assetId),
-        fileName: "生成图片.png",
-        mediaType: "image/png",
-        expiresIn: this.config.ASSET_ACCESS_URL_TTL_SECONDS,
-      }),
-      expiresAt: new Date(
-        Date.now() + this.config.ASSET_ACCESS_URL_TTL_SECONDS * 1000,
-      ).toISOString(),
-    };
+    return this.storage.createReadUrl({
+      objectKey: this.objectKey(principal, conversationId, assetId),
+      fileName: "生成图片.png",
+      mediaType: "image/png",
+      expiresIn: this.config.ASSET_ACCESS_URL_TTL_SECONDS,
+    });
   }
 
   /** Conversation deletion must also drop job rows (module-owned GC hook). */

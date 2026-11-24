@@ -6,27 +6,21 @@ import { errorResponseSchema } from "../../shared/error.schema.js";
 import type { AssetService } from "./asset.service.js";
 import {
   assetAccessSchema,
-  assetContentAcceptedSchema,
   assetDocumentParamsSchema,
   assetReferenceSchema,
   assetSchema,
-  assetUploadContentBodySchema,
   assetUploadParamsSchema,
   assetUploadSchema,
   cancelAssetUploadSchema,
+  completeAssetUploadBodySchema,
   createAssetReferenceBodySchema,
   createAssetUploadBodySchema,
   documentAssetParamsSchema,
 } from "./asset.schema.js";
-import type { AppConfig } from "../../config.js";
 
 const bearerSecurity = [{ bearerAuth: [] }];
 
-export async function assetRoutes(
-  app: FastifyInstance,
-  service: AssetService,
-  config: Pick<AppConfig, "ASSET_UPLOAD_MAX_BYTES">,
-): Promise<void> {
+export async function assetRoutes(app: FastifyInstance, service: AssetService): Promise<void> {
   const typed = app.withTypeProvider<ZodTypeProvider>();
   typed.post(
     "/documents/:documentId/asset-uploads",
@@ -62,17 +56,16 @@ export async function assetRoutes(
         ),
   );
   typed.post(
-    "/asset-uploads/:assetId/content",
+    "/asset-uploads/:assetId/complete",
     {
-      bodyLimit: Math.ceil((config.ASSET_UPLOAD_MAX_BYTES * 4) / 3) + 2_048,
       schema: {
-        operationId: "uploadAssetContent",
+        operationId: "completeAssetUpload",
         tags: ["assets"],
         security: bearerSecurity,
         params: assetUploadParamsSchema,
-        body: assetUploadContentBodySchema,
+        body: completeAssetUploadBodySchema,
         response: {
-          200: assetContentAcceptedSchema,
+          200: assetSchema,
           400: errorResponseSchema,
           401: errorResponseSchema,
           404: errorResponseSchema,
@@ -81,34 +74,12 @@ export async function assetRoutes(
         },
       },
     },
-    async (request) => {
-      await service.uploadContent(
+    async (request) =>
+      service.completeUpload(
         requirePrincipal(request.principal),
         request.params.assetId,
-        request.body.dataBase64,
-      );
-      return { status: "uploaded" as const };
-    },
-  );
-  typed.post(
-    "/asset-uploads/:assetId/complete",
-    {
-      schema: {
-        operationId: "completeAssetUpload",
-        tags: ["assets"],
-        security: bearerSecurity,
-        params: assetUploadParamsSchema,
-        response: {
-          200: assetSchema,
-          401: errorResponseSchema,
-          404: errorResponseSchema,
-          409: errorResponseSchema,
-          503: errorResponseSchema,
-        },
-      },
-    },
-    async (request) =>
-      service.completeUpload(requirePrincipal(request.principal), request.params.assetId),
+        request.body.sha256,
+      ),
   );
   typed.delete(
     "/asset-uploads/:assetId",

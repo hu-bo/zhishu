@@ -6,11 +6,22 @@ type AssetUploadSession = {
   assetId: string;
   fileName: string;
   mediaType: string;
-  uploadPath: string;
+  uploadUrl: string;
   completePath: string;
 };
 
 type PendingAssetUpload = { idempotencyKey: string; session?: AssetUploadSession };
+
+// The digest is declared by the uploader and echoed back by the bucket: `PUT` carries it as
+// `x-amz-meta-sha256`, `/complete` re-reads it from the object so a stale or swapped object cannot
+// be confirmed. Subtle crypto needs a secure context (https or localhost).
+async function sha256Hex(file: File): Promise<string> {
+  if (!crypto.subtle) {
+    throw new Error('当前页面不是安全上下文，无法计算文件摘要；请改用 https 或 localhost 访问。');
+  }
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
 
 export function createDocumentAssetServices(documentId: string): {
   hostServices: EditorHostServices;
@@ -54,27 +65,36 @@ export function createDocumentAssetServices(documentId: string): {
           pending.session = session;
         }
 
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        let binary = '';
-        for (let offset = 0; offset < bytes.length; offset += 32_768) {
-          binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
-        }
-        await apiFetch(session.uploadPath, {
-          method: 'POST',
+        const sha256 = await sha256Hex(file);
+        // Bytes go straight to the bucket, so this is a plain fetch without the API credentials.
+        const uploaded = await fetch(session.uploadUrl, {
+          method: 'PUT',
           signal,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dataBase64: btoa(binary) }),
+          body: file,
+          headers: { 'x-amz-meta-sha256': sha256 },
         });
-        const uploaded = await apiFetch<{
+        if (!uploaded.ok) {
+          throw new Error(`附件直传失败（${uploaded.status}），请检查对象存储跨域与证书配置。`);
+        }
+
+        const completed = await apiFetch<{
           assetId: string;
           fileName: string;
           mediaType: string;
-        }>(session.completePath, { method: 'POST', signal });
+        }>(session.completePath, {
+          method: 'POST',
+          signal,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sha256 }),
+        });
 
         pendingUploads.delete(file);
-        return uploaded;
+        return completed;
       } catch (error) {
-        const canResume = error instanceof ApiError && (error.status === 0 || error.status === 503);
+        // A dropped direct upload leaves the session open: retrying re-PUTs the same object key.
+        const canResume =
+          error instanceof TypeError ||
+          (error instanceof ApiError && (error.status === 0 || error.status === 503));
         if (!canResume || disposed) {
           pendingUploads.delete(file);
           if (session) await cancelSession(session);

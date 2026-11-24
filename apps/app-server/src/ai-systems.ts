@@ -131,7 +131,6 @@ export function assembleAiSystems(
       await rag?.close();
       await infra.stop();
       await assistantPool.end();
-      imageStorage?.close();
     },
   };
 }

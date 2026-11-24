@@ -160,66 +160,6 @@ export class AssetRepository {
     });
   }
 
-  async beginUpload(principal: Principal, assetId: string): Promise<AssetRecord | null> {
-    return this.db.transaction(async (tx) => {
-      await readKnowledgeTree(tx, principal.tenantId);
-      const [asset] = await tx
-        .select()
-        .from(assets)
-        .where(and(eq(assets.id, assetId), eq(assets.tenantId, principal.tenantId)))
-        .for("update")
-        .limit(1);
-      if (!asset || !["uploading", "failed"].includes(asset.status)) return null;
-      if (!(await this.documentActionAllowed(tx, asset, principal, "write"))) return null;
-      const [receiving] = await tx
-        .update(assets)
-        .set({
-          status: "receiving",
-          actualSize: null,
-          sha256: null,
-          uploadedAt: null,
-          completedAt: null,
-        })
-        .where(and(eq(assets.id, asset.id), inArray(assets.status, ["uploading", "failed"])))
-        .returning();
-      return receiving ?? null;
-    });
-  }
-
-  async markUploaded(input: {
-    tenantId: string;
-    assetId: string;
-    actualSize: number;
-    sha256: string;
-  }): Promise<boolean> {
-    const [asset] = await this.db
-      .update(assets)
-      .set({
-        status: "uploaded",
-        actualSize: input.actualSize,
-        sha256: input.sha256,
-        uploadedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(assets.id, input.assetId),
-          eq(assets.tenantId, input.tenantId),
-          eq(assets.status, "receiving"),
-        ),
-      )
-      .returning({ id: assets.id });
-    return Boolean(asset);
-  }
-
-  async markFailed(tenantId: string, assetId: string): Promise<void> {
-    await this.db
-      .update(assets)
-      .set({ status: "failed" })
-      .where(
-        and(eq(assets.id, assetId), eq(assets.tenantId, tenantId), eq(assets.status, "receiving")),
-      );
-  }
-
   async getForAction(
     principal: Principal,
     assetId: string,
@@ -235,22 +175,40 @@ export class AssetRepository {
     return asset;
   }
 
-  async completeUpload(principal: Principal, assetId: string): Promise<AssetRecord | null> {
+  /**
+   * Moves a verified direct upload to ready in one step: nothing between create and complete lets
+   * the server observe the bytes. Lock order matches the other asset writes (knowledge tree read
+   * lock, then the asset row, then the ACL re-check inside the transaction).
+   */
+  async finalizeUpload(input: {
+    principal: Principal;
+    assetId: string;
+    actualSize: number;
+    sha256: string;
+  }): Promise<AssetRecord | null> {
     return this.db.transaction(async (tx) => {
-      await readKnowledgeTree(tx, principal.tenantId);
+      await readKnowledgeTree(tx, input.principal.tenantId);
       const [asset] = await tx
         .select()
         .from(assets)
-        .where(and(eq(assets.id, assetId), eq(assets.tenantId, principal.tenantId)))
+        .where(and(eq(assets.id, input.assetId), eq(assets.tenantId, input.principal.tenantId)))
         .for("update")
         .limit(1);
-      if (!asset || !(await this.documentActionAllowed(tx, asset, principal, "write"))) return null;
+      if (!asset) return null;
+      if (!(await this.documentActionAllowed(tx, asset, input.principal, "write"))) return null;
       if (asset.status === "ready") return asset;
-      if (asset.status !== "uploaded" || asset.actualSize === null || !asset.sha256) return null;
+      if (asset.status !== "uploading") return null;
+      const now = new Date();
       const [ready] = await tx
         .update(assets)
-        .set({ status: "ready", completedAt: new Date() })
-        .where(and(eq(assets.id, asset.id), eq(assets.status, "uploaded")))
+        .set({
+          status: "ready",
+          actualSize: input.actualSize,
+          sha256: input.sha256,
+          uploadedAt: now,
+          completedAt: now,
+        })
+        .where(and(eq(assets.id, asset.id), eq(assets.status, "uploading")))
         .returning();
       return ready ?? null;
     });
@@ -267,6 +225,8 @@ export class AssetRepository {
         .limit(1);
       if (!asset || !(await this.documentActionAllowed(tx, asset, principal, "write"))) return null;
       if (asset.status === "cancelled") return asset;
+      // `uploaded` and `failed` are no longer written (the server stopped relaying bytes), but rows
+      // created before direct upload can still sit in them and must stay cancellable.
       if (!new Set(["uploading", "uploaded", "failed"]).has(asset.status)) return null;
       const [cancelled] = await tx
         .update(assets)

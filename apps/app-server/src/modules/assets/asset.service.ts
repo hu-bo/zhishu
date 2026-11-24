@@ -5,7 +5,7 @@ import { AssetRepository } from "./asset.repository.js";
 import type { AssetRecord } from "./asset.repository.js";
 import type { CreateAssetReferenceInput, CreateAssetUploadInput } from "./asset.schema.js";
 import { supportedAssetMediaTypes } from "./asset.schema.js";
-import { AssetObjectStorage } from "./asset-storage.js";
+import { AssetObjectStorage, type StoredObject } from "./asset-storage.js";
 
 const imageMagicChecks: Record<
   (typeof supportedAssetMediaTypes)[number],
@@ -31,20 +31,6 @@ function sanitizeFileName(fileName: string): string {
       .trim()
       .slice(0, 255) || "upload.bin"
   );
-}
-
-function decodeBase64(value: string): Buffer {
-  if (
-    value.length % 4 !== 0 ||
-    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)
-  ) {
-    throw new DomainError("VALIDATION_ERROR", "Upload body is not valid base64");
-  }
-  const bytes = Buffer.from(value, "base64");
-  if (bytes.toString("base64") !== value) {
-    throw new DomainError("VALIDATION_ERROR", "Upload body is not canonical base64");
-  }
-  return bytes;
 }
 
 function presentAsset(asset: AssetRecord) {
@@ -88,7 +74,7 @@ export class AssetService {
     input: CreateAssetUploadInput,
     idempotencyKey?: string,
   ) {
-    this.requireStorage();
+    const storage = this.requireStorage();
     if (input.size > this.options.maxBytes) {
       throw new DomainError("VALIDATION_ERROR", "Asset exceeds the configured upload limit");
     }
@@ -121,95 +107,67 @@ export class AssetService {
       mediaType: asset.mediaType as (typeof supportedAssetMediaTypes)[number],
       size: asset.declaredSize,
       uploadExpiresAt: asset.uploadExpiresAt.toISOString(),
-      uploadPath: `/api/asset-uploads/${asset.id}/content`,
+      // The bytes go straight from the browser to the bucket; only completion comes back here.
+      uploadUrl: await storage.createUploadUrl({
+        objectKey: asset.objectKey,
+        expiresIn: this.options.uploadTtlSeconds,
+      }),
       completePath: `/api/asset-uploads/${asset.id}/complete`,
     };
   }
 
-  async uploadContent(principal: Principal, assetId: string, dataBase64: string): Promise<void> {
+  /**
+   * Verifies an object the browser uploaded itself. The signature cannot constrain the request, so
+   * everything is re-read from storage: the size must match what the session reserved, the stored
+   * media type and magic number must match each other, and the digest claimed here must be the one
+   * written into the object metadata. A mismatch leaves the session open, and the oversized or
+   * broken object is removed by the orphan cleanup once the session expires.
+   */
+  async completeUpload(principal: Principal, assetId: string, sha256: string) {
     const storage = this.requireStorage();
+    if (!/^[A-Fa-f0-9]{64}$/.test(sha256)) {
+      throw new DomainError("VALIDATION_ERROR", "Asset digest is not a sha256 hex string");
+    }
     const current = await this.repository.getForAction(principal, assetId, "write");
     if (!current) throw new DomainError("NOT_FOUND", "Asset upload not found");
-    const bytes = decodeBase64(dataBase64);
-    if (bytes.byteLength !== current.declaredSize || bytes.byteLength > this.options.maxBytes) {
-      throw new DomainError(
-        "VALIDATION_ERROR",
-        "Uploaded file size does not match the upload session",
-      );
+    if (current.status === "ready") {
+      if (current.sha256 !== sha256) {
+        throw new DomainError("CONFLICT", "Asset upload already contains different content");
+      }
+      return presentAsset(current);
     }
-    const mediaType = current.mediaType as (typeof supportedAssetMediaTypes)[number];
-    if (!imageMagicChecks[mediaType]?.(bytes)) {
-      throw new DomainError(
-        "VALIDATION_ERROR",
-        "Uploaded file content does not match its media type",
-      );
-    }
-    const sha256 = createHash("sha256").update(bytes).digest("hex");
-    if (current.status === "uploaded" || current.status === "ready") {
-      if (current.actualSize === bytes.byteLength && current.sha256 === sha256) return;
-      throw new DomainError("CONFLICT", "Asset upload already contains different content");
-    }
-    if (current.status !== "uploading" && current.status !== "failed") {
+    if (current.status !== "uploading") {
       throw new DomainError("CONFLICT", "Asset upload is not open");
     }
     if (current.uploadExpiresAt.getTime() <= Date.now()) {
       throw new DomainError("CONFLICT", "Asset upload session has expired");
     }
-    const receiving = await this.repository.beginUpload(principal, assetId);
-    if (!receiving)
-      throw new DomainError("CONFLICT", "Asset upload is already in progress or closed");
-    try {
-      await storage.put({
-        objectKey: receiving.objectKey,
-        bytes,
-        mediaType,
-        sha256,
-      });
-    } catch (error) {
-      await this.repository.markFailed(principal.tenantId, assetId);
-      throw new DomainError("SERVICE_UNAVAILABLE", "Asset storage is unavailable", undefined, {
-        cause: error,
-      });
-    }
-    if (
-      !(await this.repository.markUploaded({
-        tenantId: principal.tenantId,
-        assetId,
-        actualSize: bytes.byteLength,
-        sha256,
-      }))
-    ) {
-      throw new DomainError("CONFLICT", "Asset upload changed before its object was recorded");
-    }
-  }
-
-  async completeUpload(principal: Principal, assetId: string) {
-    const storage = this.requireStorage();
-    const current = await this.repository.getForAction(principal, assetId, "write");
-    if (!current) throw new DomainError("NOT_FOUND", "Asset upload not found");
-    if (current.status === "ready") return presentAsset(current);
-    if (current.status !== "uploaded" || current.actualSize === null || current.sha256 === null) {
-      throw new DomainError("CONFLICT", "Asset content has not been uploaded");
-    }
-    let object: Awaited<ReturnType<AssetObjectStorage["head"]>>;
+    let object: StoredObject;
+    let prefix: Buffer;
     try {
       object = await storage.head(current.objectKey);
+      prefix = await storage.readPrefix(current.objectKey, 16);
     } catch (error) {
       throw new DomainError("SERVICE_UNAVAILABLE", "Asset storage is unavailable", undefined, {
         cause: error,
       });
     }
-    if (
-      object.ContentLength !== current.actualSize ||
-      object.ContentType !== current.mediaType ||
-      object.Metadata?.sha256 !== current.sha256
-    ) {
+    if (object.size !== current.declaredSize || object.sha256 !== sha256) {
+      throw new DomainError("VALIDATION_ERROR", "Stored object does not match the upload session");
+    }
+    const mediaType = current.mediaType as (typeof supportedAssetMediaTypes)[number];
+    if (object.mediaType !== mediaType || !imageMagicChecks[mediaType]?.(prefix)) {
       throw new DomainError(
         "VALIDATION_ERROR",
-        "Stored object metadata does not match the upload session",
+        "Uploaded file content does not match its media type",
       );
     }
-    const asset = await this.repository.completeUpload(principal, assetId);
+    const asset = await this.repository.finalizeUpload({
+      principal,
+      assetId,
+      actualSize: object.size,
+      sha256,
+    });
     if (!asset) throw new DomainError("CONFLICT", "Asset upload changed before completion");
     return presentAsset(asset);
   }
@@ -226,16 +184,12 @@ export class AssetService {
     const storage = this.requireStorage();
     const asset = await this.repository.getForAction(principal, assetId, "read");
     if (!asset || asset.status !== "ready") throw new DomainError("NOT_FOUND", "Asset not found");
-    const url = await storage.createReadUrl({
+    return storage.createReadUrl({
       objectKey: asset.objectKey,
       fileName: asset.fileName,
       mediaType: asset.mediaType,
       expiresIn: this.options.accessUrlTtlSeconds,
     });
-    return {
-      url,
-      expiresAt: new Date(Date.now() + this.options.accessUrlTtlSeconds * 1_000).toISOString(),
-    };
   }
 
   async addReference(
