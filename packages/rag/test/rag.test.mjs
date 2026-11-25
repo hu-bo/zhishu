@@ -12,7 +12,6 @@ import {
   sourceSnapshotId,
   initializeCollection,
   writeDocumentIndex,
-  updateIndexPolicy,
   deterministicPointId,
   createKnowledgeRetriever,
 } from "../dist/index.js";
@@ -24,6 +23,7 @@ const index = {
   metric: "cosine",
   normalizerVersion: "block-utf16-v1",
   chunkerVersion: "langchain-1.0.2-utf8-v1",
+  aclKeyVersion: "acl-keys-v2",
   targetTokens: 96,
   maxTokens: 160,
   overlapTokens: 16,
@@ -160,7 +160,7 @@ test("empty authorization keys skip query embedding and Qdrant entirely", async 
   assert.equal(embeddings.queries, 0);
 });
 test(
-  "real Qdrant insert_only, conditional nested policy, projection-first authorization, tenant isolation and stale candidate expansion",
+  "real Qdrant insert_only replay, projection-first authorization, tenant isolation and stale candidate expansion",
   { skip: !process.env.QDRANT_TEST_URL },
   async () => {
     const client = new QdrantClient({
@@ -181,7 +181,6 @@ test(
         documentTitle: "测试文档",
         indexVersion: "v1",
         metadataRevision: "1",
-        aclRevision: "1",
         readAclKeys: ["space:space_a"],
         signal,
       };
@@ -190,27 +189,13 @@ test(
       await writeDocumentIndex({ ...base, tenantId: "tenant_b" });
       await writeDocumentIndex({ ...base, indexVersion: "stale" });
       const id = deterministicPointId("tenant_a", "doc_test", "v1", 0);
-      await updateIndexPolicy({
-        ...base,
-        documentId: "doc_test",
-        previousRevision: "1",
-        aclRevision: "3",
-        readAclKeys: ["document:doc_test"],
-      });
-      // A stale full build and stale policy update must never overwrite the newer authorization payload.
+      // An insert_only replay of the same build must not rewrite the published payload.
       await writeDocumentIndex(base);
-      await updateIndexPolicy({
-        ...base,
-        documentId: "doc_test",
-        previousRevision: "1",
-        aclRevision: "2",
-        readAclKeys: ["user:removed"],
-      });
       const point = (
         await client.retrieve(index.collectionName, { ids: [id], with_payload: true })
       )[0];
-      assert.equal(point.payload.metadata.aclRevision, "3");
-      assert.deepEqual(point.payload.metadata.readAclKeys, ["document:doc_test"]);
+      assert.deepEqual(point.payload.metadata.readAclKeys, ["space:space_a"]);
+      assert.equal(point.payload.metadata.metadataRevision, "1");
       assert.equal(point.payload.metadata.durableSeq, String(Number.MAX_SAFE_INTEGER));
       assert.equal(point.payload.content, "中文知识库中的真实原文。");
       const store = new QdrantVectorStore(embeddings, {

@@ -1,4 +1,8 @@
-﻿import { documentActionSql, hasDocumentPermission } from "../authorization/permissions.js";
+﻿import {
+  documentAclKeysSql,
+  documentActionSql,
+  hasDocumentPermission,
+} from "../authorization/permissions.js";
 import { and, eq, inArray } from "drizzle-orm";
 import type { Database } from "../../../database/index.js";
 import { documents, documentGenerations, workspaces } from "../../../database/schema/index.js";
@@ -24,6 +28,15 @@ export class AiDocumentAccess {
         metadataRevision: documents.metadataRevision,
         generationId: documentGenerations.id,
         durableSeq: documentGenerations.durableSeq,
+        // 载荷授权键：与索引 Worker 盖章用同一条 SQL 判定，签发端只需挑组键。
+        aclKeys: documentAclKeysSql(principal.tenantId, {
+          documentId: documents.id,
+          workspaceId: documents.workspaceId,
+          catalogId: documents.catalogId,
+          accessMode: documents.accessMode,
+          workspaceKind: workspaces.kind,
+          personalOwnerId: workspaces.personalOwnerId,
+        }),
       })
       .from(documents)
       .innerJoin(
@@ -32,6 +45,10 @@ export class AiDocumentAccess {
           eq(documentGenerations.documentId, documents.id),
           eq(documentGenerations.status, "active"),
         ),
+      )
+      .innerJoin(
+        workspaces,
+        and(eq(workspaces.tenantId, documents.tenantId), eq(workspaces.id, documents.workspaceId)),
       )
       .where(
         and(

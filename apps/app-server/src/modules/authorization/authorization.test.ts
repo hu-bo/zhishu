@@ -24,7 +24,13 @@ import { serializerCompiler, validatorCompiler } from "fastify-type-provider-zod
 import type { Database } from "../../../database/index.js";
 import * as schema from "../../../database/schema/index.js";
 import { documentsModule } from "../documents/index.js";
-import { documentActionSql, hasDocumentPermission } from "./permissions.js";
+import {
+  documentActionSql,
+  hasDocumentPermission,
+  heldAclGroupKeys,
+  loadDocumentAclKeys,
+  signingAclKeys,
+} from "./permissions.js";
 import { registerErrorHandlers } from "../../plugins/errors.js";
 import { loadConfig } from "../../config.js";
 import type { Principal } from "../identity/identity.types.js";
@@ -296,9 +302,54 @@ test(
           await call("POST", "/documents/", { workspaceId: team.id }, bob, 404);
           const teamDocument = (
             await call("POST", "/documents/", { workspaceId: team.id }, alice, 201)
-          ).json<{ workspaceId: string; accessMode: string }>();
+          ).json<{ id: string; workspaceId: string; accessMode: string }>();
           assert.equal(teamDocument.workspaceId, team.id);
           assert.equal(teamDocument.accessMode, "workspace-inherited");
+
+          // 向量授权键与判权同源：团队继承文档盖空间键、个人文档盖归属主体键，文档键始终兜底。
+          const alicePrincipal = principals.get(alice)!;
+          const personalKeys = await loadDocumentAclKeys(db, alicePrincipal.tenantId, document.id);
+          assert.deepEqual(personalKeys, [`document:${document.id}`, `user:${alice}`]);
+          assert.deepEqual(
+            signingAclKeys(
+              [{ documentId: document.id, aclKeys: personalKeys }],
+              await heldAclGroupKeys(db, alicePrincipal, "read"),
+            ),
+            [`user:${alice}`],
+          );
+          const teamKeys = await loadDocumentAclKeys(db, alicePrincipal.tenantId, teamDocument.id);
+          assert.deepEqual(teamKeys, [`document:${teamDocument.id}`, `space:${team.id}`]);
+          assert.deepEqual(
+            signingAclKeys(
+              [{ documentId: teamDocument.id, aclKeys: teamKeys }],
+              await heldAclGroupKeys(db, alicePrincipal, "read"),
+            ),
+            [`space:${team.id}`],
+          );
+          // 非成员即便被单独授权也只能落到文档键，不会凭目录浏览回退拿到空间键。
+          assert.deepEqual(
+            signingAclKeys(
+              [{ documentId: teamDocument.id, aclKeys: teamKeys }],
+              await heldAclGroupKeys(db, principals.get(bob)!, "read"),
+            ),
+            [`document:${teamDocument.id}`],
+          );
+          // 目录切断空间继承后空间键必须消失，否则该目录内的文档会被成员键漏召回。
+          const teamCatalog = (await list(alice)).find((row) => row.id === team.id);
+          assert.ok(teamCatalog);
+          await db
+            .update(schema.catalogs)
+            .set({ accessMode: "restricted" })
+            .where(
+              and(
+                eq(schema.catalogs.tenantId, alicePrincipal.tenantId),
+                eq(schema.catalogs.id, teamCatalog.rootCatalogId),
+              ),
+            );
+          assert.deepEqual(
+            await loadDocumentAclKeys(db, alicePrincipal.tenantId, teamDocument.id),
+            [`document:${teamDocument.id}`],
+          );
         },
       );
       const space = (

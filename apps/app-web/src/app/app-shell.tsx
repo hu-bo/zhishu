@@ -617,7 +617,7 @@ export function AppShell() {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {
             <header
-              className={`z-20 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-card/90 px-3 backdrop-blur sm:min-h-16 sm:px-5 ${shell.editing && user ? 'lg:hidden' : ''}`}
+              className={`z-20 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-card/75 px-3 backdrop-blur-md sm:min-h-16 sm:px-5 ${shell.editing && user ? 'lg:hidden' : ''}`}
             >
               <div className="flex min-w-0 items-center gap-2">
                 <Button

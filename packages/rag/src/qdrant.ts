@@ -59,7 +59,6 @@ export async function initializeCollection(
     "readAclKeys",
     "configFingerprint",
     "sourceState",
-    "aclRevision",
     "generationId",
     "durableSeq",
     "metadataRevision",
@@ -69,8 +68,8 @@ export async function initializeCollection(
       field_schema: "keyword",
       wait: true,
     });
-  // Revisions are decimal strings to preserve the full database range. Conditional updates use an
-  // exact previous revision, rather than Qdrant's floating point numeric range representation.
+  // Revisions are decimal strings to preserve the full database range, rather than Qdrant's
+  // floating point numeric representation that silently rounds beyond 2^53.
 }
 export async function writeDocumentIndex(
   input: {
@@ -83,7 +82,6 @@ export async function writeDocumentIndex(
     documentTitle: string;
     indexVersion: string;
     metadataRevision: string;
-    aclRevision: string;
     readAclKeys: readonly string[];
     signal: AbortSignal;
     batchSize?: number;
@@ -110,7 +108,6 @@ export async function writeDocumentIndex(
     !validAclKeys(input.readAclKeys)
   )
     throw new Error("INVALID_INDEX_CONTEXT");
-  decimal(input.aclRevision);
   decimal(input.metadataRevision);
   const source = input.snapshot ?? input.source;
   const documentId = "format" in source ? source.sourceId : source.documentId;
@@ -157,7 +154,6 @@ export async function writeDocumentIndex(
             generationId: version.generationId,
             durableSeq: version.durableSeq,
             metadataRevision: input.metadataRevision,
-            aclRevision: input.aclRevision,
             configFingerprint: fingerprint,
             sourceState: "active",
             readAclKeys: [...input.readAclKeys],
@@ -217,41 +213,6 @@ export function decimal(value: string): string {
 }
 export function validAclKeys(keys: readonly string[]): boolean {
   return keys.length > 0 && keys.every((key) => /^(space|user|document):[^\s:]{1,160}$/.test(key));
-}
-export async function updateIndexPolicy(input: {
-  client: QdrantClient;
-  options: IndexOptions;
-  tenantId: string;
-  documentId: string;
-  indexVersion: string;
-  previousRevision: string;
-  aclRevision: string;
-  readAclKeys: readonly string[];
-  signal: AbortSignal;
-}): Promise<void> {
-  if (
-    !validAclKeys(input.readAclKeys) ||
-    !input.tenantId ||
-    !input.documentId ||
-    !input.indexVersion ||
-    BigInt(decimal(input.aclRevision)) <= BigInt(decimal(input.previousRevision))
-  )
-    throw new Error("INVALID_INDEX_POLICY");
-  input.signal.throwIfAborted();
-  await input.client.setPayload(input.options.collectionName, {
-    wait: true,
-    key: "metadata",
-    payload: { readAclKeys: [...input.readAclKeys], aclRevision: input.aclRevision },
-    filter: {
-      must: [
-        { key: "metadata.tenantId", match: { value: input.tenantId } },
-        { key: "metadata.documentId", match: { value: input.documentId } },
-        { key: "metadata.indexVersion", match: { value: input.indexVersion } },
-        { key: "metadata.aclRevision", match: { value: input.previousRevision } },
-      ],
-    },
-  });
-  input.signal.throwIfAborted();
 }
 export function readPointEvidence(
   payload: Record<string, unknown> | null | undefined,

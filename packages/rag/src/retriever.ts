@@ -20,7 +20,6 @@ const fields = [
   "generationId",
   "durableSeq",
   "metadataRevision",
-  "aclRevision",
   "configFingerprint",
   "sourceState",
   "snapshotId",
@@ -36,7 +35,6 @@ type Candidate = {
   generationId: string;
   durableSeq: string;
   metadataRevision: string;
-  aclRevision: string;
   configFingerprint: string;
   sourceState: string;
   snapshotId: string;

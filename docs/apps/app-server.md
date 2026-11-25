@@ -110,7 +110,7 @@ HTTP 每次请求检查权限；WS 在加入与写入处理时检查当前授权
 
 | 数据集合                                                                                 | owner                         | 关键字段与约束                                                                                                                                                                                  |
 | ---------------------------------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| documents                                                                                | documents                     | tenantId/documentId、空间/归属/正文头部与 metadataRevision；待审增加 accessMode 和仅在索引资源键变化时递增的 aclRevision                                                                        |
+| documents                                                                                | documents                     | tenantId/documentId、空间/归属/正文头部与 metadataRevision；待审增加 accessMode，索引资源键变化由 metadataRevision 触发重建，不新增策略修订列                                                   |
 | document_acl / memberships                                                               | authorization / spaces        | 主体、资源、action/角色、策略版本；成员变更可使缓存失效                                                                                                                                         |
 | document_generations                                                                     | collaboration                 | tenantId、documentId、generationId、Schema/扩展集、初始化标记、当前持久化序列                                                                                                                   |
 | document_updates / checkpoints                                                           | collaboration                 | generationId、durableSeq、存储更新 hash、来源帧 hash、二进制增量与带校验和的 generation/version 检查点；序列和去重键唯一                                                                        |
@@ -185,17 +185,17 @@ JSON 导出接口为 `GET /api/documents/:id/export`，输出 `zhishu.document` 
 
 通用索引/授权键设计见 [rag](../packages/rag.md)。知识域复用 workspace，不另建 knowledge_bases、knowledge_sources 或来源快照。2026-10-19 待审优化采用“团队空间默认继承 + 个人空间主体 + 受限文档独立授权”，取代每个切片展开 readIdentityIds。
 
-拟在已有 workspaces 增加 kind=personal/team，documents 增加 accessMode=space/restricted 与索引策略 aclRevision；workspace_members/document_acl 继续是成员和直接授权的权威关系。团队 space 模式按真实空间成员/角色授权，restricted 不继承空间正文权限，个人默认 owner 并允许原文档 ACL 单篇分享。当前代码尚无这些模式，仅有组织角色和显式文档 ACL；必须统一升级业务授权，不能只修改 Qdrant filter。
+拟在已有 workspaces 增加 kind=personal/team，documents 增加 accessMode=space/restricted；workspace_members/document_acl 继续是成员和直接授权的权威关系。团队 space 模式按真实空间成员/角色授权，restricted 不继承空间正文权限，个人默认 owner 并允许原文档 ACL 单篇分享。当前代码尚无这些模式，仅有组织角色和显式文档 ACL；必须统一升级业务授权，不能只修改 Qdrant filter。
 
-Qdrant 每个 point 的 metadata.readAclKeys 存少量稳定键：继承文档为 [space:s1]，个人文档为 [user:u1, document:d1]，受限文档为 [document:d2]。document 键只会被分配给实际 owner/直接授权主体，个人共享不授予其他人的 user 键。空间范围条件与键相交条件分别检查，不能因选择某空间就获得正文权限，详见 [资源授权规则](../packages/rag.md#用户空间与文档分别授权)。
+Qdrant 每个 point 的 metadata.readAclKeys 存少量稳定键：继承文档为 [space:s1, document:d1]，个人文档为 [user:u1, document:d1]，受限文档与目录链被 restricted 切断的文档为 [document:d2]。document 键始终保留，因为跨空间受邀者、仅有目录级授权者只能凭它被召回；空间键与个人键的判定与检索签发使用同一条 SQL 表达式，不会各写一套规则。document 键只会被分配给实际 owner/直接授权主体，个人共享不授予其他人的 user 键。空间范围条件与键相交条件分别检查，不能因选择某空间就获得正文权限，详见 [资源授权规则](../packages/rag.md#用户空间与文档分别授权)。
 
-每次检索由服务端基于当前关系解析自身 user 键、真实成员空间键、可读独立文档键；Qdrant 按 tenant/知识范围/键相交过滤，PostgreSQL 批量复核当前模式、身份、成员/直接权限与正文版本后，才读取切片。当前 workspaceAccess 对非成员的 viewer 回退仅代表目录浏览，绝不能当作可生成 space 键的真实成员证明。查询键多时按请求字节有界拆批并合并去重，不允许无过滤回退。
+每次检索由服务端基于当前关系解析自身 user 键、真实成员空间键、可读独立文档键；覆盖得到的文档只签组键，覆盖不到的逐篇签 document 键，因此“我的全部资料”的键数随空间数而非文档数增长。全部/空间范围不再下推全量 documentId 条件，避免请求体随可读文档数线性膨胀；显式选定文档时仍下推以收窄范围。Qdrant 按 tenant/知识范围/键相交过滤，PostgreSQL 批量复核当前模式、身份、成员/直接权限与正文版本后，才读取切片。当前 workspaceAccess 对非成员的 viewer 回退仅代表目录浏览，绝不能当作可生成 space 键的真实成员证明。查询键多时按请求字节有界拆批并合并去重，键数或请求预算超限明确报“可检索资料过多，请缩小到具体空间或文档”，不降级为无过滤回退。
 
-向量阶段仅新增 PostgreSQL document_indexes 与一个 Qdrant collection。普通空间成员、文档分享成员和角色/action 变化只提交原关系与审计、定向失效权限/协同/生成上下文；不递增索引策略修订、不更新 document_indexes，也不修改 Qdrant points。只有访问模式、个人归属主体、空间归属等使稳定键变化时才递增 aclRevision 并登记策略同步。
+向量阶段仅新增 PostgreSQL document_indexes 与一个 Qdrant collection。普通空间成员、文档分享成员和角色/action 变化只提交原关系与审计、定向失效权限/协同/生成上下文；不更新 document_indexes，也不修改 Qdrant points。只有访问模式、个人归属主体、空间归属或目录切断状态使稳定键变化时，才由已递增的 metadataRevision 推进 document_indexes 并登记重建；键语义本身变更递增 authorization 模块的 ACL_KEY_VERSION，它进入索引配置指纹并使全部旧载荷判定过期。
 
 正文增量流程：projection 成功事务内推进 document_indexes → Worker 领取并分配新 buildingIndexVersion → 固定可信投影和稳定键 → 事务外分块/Embedding → 以确定 point ID、insert_only 写 Qdrant → 条件发布 activeIndexVersion。RAG 不竞争 projection 原 outbox；状态、租约、重试、片段摘要和删除 tombstone 合并在同一索引行，不另建 jobs/generations/Qdrant outbox。
 
-Qdrant 与 PostgreSQL 没有跨服务事务。只交付 activeIndexVersion 和当前 generationId/durableSeq/metadataRevision/配置一致的正文；策略修订仅跟踪键同步，不能代替当前关系授权。模式/归属变化可在同一活动构建上按单调 aclRevision 条件修改 readAclKeys，正文初始写入使用 insert_only 防止旧写入回退策略。普通成员增删无需 payload 同步，下一次关系读取即生效；已有索引未发生其他内容变化时，新授权也无需等待向量任务。
+Qdrant 与 PostgreSQL 没有跨服务事务。只交付 activeIndexVersion 和当前 generationId/durableSeq/metadataRevision/配置一致的正文；已发布切片载荷的 readAclKeys 不就地修改，不能代替当前关系授权。模式/归属变化通过新 indexVersion 重建收敛，旧构建在新版本发布前继续可检索；正文初始写入使用 insert_only 防止旧写入回退已发布载荷。普通成员增删无需 payload 同步，下一次关系读取即生效；已有索引未发生其他内容变化时，新授权也无需等待向量任务。
 
 热点关系仍有 PostgreSQL 锁竞争，采用短事务、有界准入、no-op/幂等和有界批量接口；失效按受影响主体定向传播，不反复踢掉整篇文档的无关协作者。旧文档按 restricted 回填以保留显式授权，团队继承通过显式选择启用；当前代码升级与历史数据回填前不自动扩权。移出空间撤销继承权限，独立分享单独管理；“撤销全部访问”还须收回直接授权并处理文档 owner 的隐式权利，普通关系调整不修改稳定 document 键。完整容量/迁移验收见 [rag](../packages/rag.md#43-容量与迁移验收)。
 

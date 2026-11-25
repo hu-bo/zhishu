@@ -221,7 +221,7 @@ contracts/core/react 首期维护一致的兼容发布组合，collaboration/ui/
 
 LangGraph 随 Deep Agents 作为底层运行依赖保留；首期启用官方 PostgresSaver checkpoint，应用创建并注入，知书不自定义 StateGraph、不部署独立 LangGraph 服务。每个 requestId 对应一个隔离 thread，明确中断后可使用原任务恢复；业务归属与最终提案仍由 ai_runs 管理。
 
-数据库规划为两张业务表加四张 SDK 内部表，以及一个 Qdrant collection；AI/关键词研究阶段新增五张 SQL 表，向量 RAG 阶段累计六张 SQL 表。拟在已有 workspaces 增加 personal/team 类型，documents 增加 accessMode 和索引策略 aclRevision；成员关系复用现有表：
+数据库规划为两张业务表加四张 SDK 内部表，以及一个 Qdrant collection；AI/关键词研究阶段新增五张 SQL 表，向量 RAG 阶段累计六张 SQL 表。拟在已有 workspaces 增加 personal/team 类型，documents 增加 accessMode；索引授权键变化由 metadataRevision 触发重建，不新增策略修订列；成员关系复用现有表：
 
 | 阶段                           | 新增存储                              | 作用                                                          |
 | ------------------------------ | ------------------------------------- | ------------------------------------------------------------- |

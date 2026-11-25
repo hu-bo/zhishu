@@ -4,6 +4,12 @@ import type { ScopeSelection } from "@zhishu/ai-contracts";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Database } from "../../../database/index.js";
 import { documentGenerations, documents, workspaces } from "../../../database/schema/index.js";
+import {
+  documentAclKeysSql,
+  heldAclGroupKeys,
+  loadDocumentAclKeys,
+  signingAclKeys,
+} from "../authorization/permissions.js";
 import type { AiDocumentAccess } from "../documents/index.js";
 import type { Principal } from "../identity/identity.types.js";
 import { DomainError } from "../../shared/domain-error.js";
@@ -12,6 +18,24 @@ import type { createRagClients } from "./rag.config.js";
 import { RagRepository, type IndexJob, type PublishedIndex } from "./rag.repository.js";
 
 type Clients = NonNullable<ReturnType<typeof createRagClients>>;
+/**
+ * 检索请求预算。readAclKeys 按请求字节分批，外层每轮把所有批次各查一次，轮数 =
+ * maxCandidates / candidateLimit，因此三者必须一起满足 轮数 × 批次数 ≤ maxQueryCalls。
+ * 65,536 字节约容纳 1,260 个文档键，40,000 个键即最多 32 批，4 轮共 128 次查询。
+ */
+const RETRIEVAL_LIMITS = {
+  candidateLimit: 16,
+  maxCandidates: 64,
+  maxAclKeys: 40_000,
+  maxAclBatchBytes: 65_536,
+  maxQueryCalls: 512,
+} as const;
+/** 向量侧授权键或请求预算超限不是服务故障，提示缩小范围而不是检查配置。 */
+const ACL_LIMIT_ERRORS = {
+  INVALID_AUTHORIZATION_SCOPE: true,
+  AUTHORIZATION_KEY_TOO_LARGE: true,
+  RETRIEVAL_BUDGET_EXCEEDED: true,
+} as const;
 const INDEX_FAILURE_CODES = {
   RAG_ENDPOINT_NOT_FOUND: true,
   EMBEDDING_AUTH_FAILED: true,
@@ -22,6 +46,7 @@ type IndexFailureCode = keyof typeof INDEX_FAILURE_CODES;
 function isIndexFailureCode(code: unknown): code is IndexFailureCode {
   return typeof code === "string" && Object.hasOwn(INDEX_FAILURE_CODES, code);
 }
+/** 检索头部；aclKeys 是该文档载荷的盖章授权键，与索引 Worker 同源。 */
 type Head = {
   documentId: string;
   workspaceId: string;
@@ -29,6 +54,7 @@ type Head = {
   metadataRevision: number;
   generationId: string;
   durableSeq: number;
+  aclKeys: string[];
 };
 export type WorkspaceLabel = { workspaceId: string; name: string };
 
@@ -122,8 +148,8 @@ export class RagService {
           documentTitle: job.documentTitle ?? job.documentId,
           indexVersion: job.leaseToken,
           metadataRevision: String(job.metadataRevision),
-          aclRevision: "1",
-          readAclKeys: [`document:${job.documentId}`],
+          // 授权键由授权模块统一判定；发布条件会复核归属，移动或改模式晚到的构建发不出去。
+          readAclKeys: await loadDocumentAclKeys(this.db, job.tenantId, job.documentId),
           signal,
           batchSize: this.config.AI_EMBEDDING_BATCH_SIZE,
           snapshot: {
@@ -218,6 +244,14 @@ export class RagService {
         metadataRevision: documents.metadataRevision,
         generationId: documentGenerations.id,
         durableSeq: documentGenerations.durableSeq,
+        aclKeys: documentAclKeysSql(scope.tenantId, {
+          documentId: documents.id,
+          workspaceId: documents.workspaceId,
+          catalogId: documents.catalogId,
+          accessMode: documents.accessMode,
+          workspaceKind: workspaces.kind,
+          personalOwnerId: workspaces.personalOwnerId,
+        }),
       })
       .from(documents)
       .innerJoin(
@@ -226,6 +260,10 @@ export class RagService {
           eq(documentGenerations.documentId, documents.id),
           eq(documentGenerations.status, "active"),
         ),
+      )
+      .innerJoin(
+        workspaces,
+        and(eq(workspaces.tenantId, documents.tenantId), eq(workspaces.id, documents.workspaceId)),
       )
       .where(
         and(
@@ -246,6 +284,7 @@ export class RagService {
       metadataRevision: r.metadataRevision,
       generationId: r.generationId,
       durableSeq: Number(r.durableSeq),
+      aclKeys: r.aclKeys,
     }));
   }
 
@@ -266,6 +305,7 @@ export class RagService {
       metadataRevision: h.metadataRevision,
       generationId: h.generationId,
       durableSeq: Number(h.durableSeq),
+      aclKeys: h.aclKeys,
     }));
   }
 
@@ -350,22 +390,29 @@ export class RagService {
       readyHeads,
       scope.kind === "site" ? scope.approved : undefined,
     );
+    // 组键只与主体有关：判权仍然每次重读关系，这里只为让继承文档不必逐篇签文档键。
+    // 站点访客不持有任何组键，因此仍按批准文档的文档键召回。
+    const heldGroupKeys =
+      scope.kind === "principal"
+        ? await heldAclGroupKeys(this.db, scope.principal, "ai")
+        : new Set<string>();
     const retriever = createKnowledgeRetriever<RetrievalScope>({
       ...this.clients,
       index: this.clients.index,
-      candidateLimit: 16,
-      maxCandidates: 64,
+      ...RETRIEVAL_LIMITS,
       resolveScope: async (s) => {
         const resolved = await this.heads(s);
         const ids = new Set(resolved.map((h) => h.documentId));
+        let narrowed: readonly string[] | undefined;
+        if (s.kind === "principal" && s.selection.kind === "documents")
+          narrowed = s.selection.documentIds;
+        else if (s.kind === "site") narrowed = s.documentIds;
         return {
           tenantId: s.kind === "principal" ? s.principal.tenantId : s.tenantId,
           workspaceIds: [...new Set(resolved.map((h) => h.workspaceId))],
-          documentIds:
-            s.kind === "principal" && s.selection.kind === "documents"
-              ? s.selection.documentIds.filter((id) => ids.has(id))
-              : [...ids],
-          readAclKeys: resolved.map((h) => `document:${h.documentId}`),
+          // 全部/空间范围的文档级约束已经由授权键表达，再下推全量 id 会让请求体随可读文档数线性膨胀。
+          documentIds: narrowed ? narrowed.filter((id) => ids.has(id)) : undefined,
+          readAclKeys: signingAclKeys(resolved, heldGroupKeys),
         };
       },
       authorizeCandidates: async (s, candidates) => {
@@ -406,6 +453,9 @@ export class RagService {
       return { evidence, coverage };
     } catch (error) {
       if (error instanceof DomainError) throw error;
+      const code = error instanceof Error && /^[A-Z_]+$/.test(error.message) ? error.message : "";
+      if (code in ACL_LIMIT_ERRORS)
+        throw new DomainError("VALIDATION_ERROR", "可检索资料过多，请缩小到具体空间或文档后重试");
       throw new DomainError(
         "SERVICE_UNAVAILABLE",
         "知识检索暂不可用，请检查向量模型与 Qdrant 配置后重试",

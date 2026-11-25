@@ -20,6 +20,7 @@ const index = {
   metric: "cosine",
   normalizerVersion: "v2",
   chunkerVersion: "v2",
+  aclKeyVersion: "acl-keys-v2",
   targetTokens: 240,
   maxTokens: 400,
   overlapTokens: 24,
@@ -335,7 +336,6 @@ test("CSV and uploaded image text reaches the same Qdrant indexing path with a t
     documentTitle: "导入文档",
     indexVersion: "v_import",
     metadataRevision: "1",
-    aclRevision: "1",
     readAclKeys: ["space:space_a"],
     signal: AbortSignal.timeout(5_000),
     parsing: {

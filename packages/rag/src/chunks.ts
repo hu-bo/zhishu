@@ -22,6 +22,8 @@ export interface IndexOptions {
   metric: "cosine";
   normalizerVersion: string;
   chunkerVersion: string;
+  /** ACL payload scheme version; changing it invalidates published readAclKeys and forces rebuilds. */
+  aclKeyVersion: string;
   targetTokens: number;
   maxTokens: number;
   overlapTokens: number;
@@ -38,6 +40,7 @@ export function validateIndexOptions(options: IndexOptions): void {
     !options.embeddingFingerprint ||
     !options.normalizerVersion ||
     !options.chunkerVersion ||
+    !options.aclKeyVersion ||
     options.metric !== "cosine" ||
     !Number.isSafeInteger(options.dimensions) ||
     options.dimensions < 1 ||
@@ -61,6 +64,7 @@ export function configurationFingerprint(options: IndexOptions): string {
     options.metric,
     options.normalizerVersion,
     options.chunkerVersion,
+    options.aclKeyVersion,
     options.targetTokens,
     options.maxTokens,
     options.overlapTokens,

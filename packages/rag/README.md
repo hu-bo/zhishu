@@ -18,11 +18,10 @@ const summary = await writeDocumentIndex({
   workspaceId,
   indexVersion,
   metadataRevision: "1",
-  aclRevision: "1",
   readAclKeys: ["space:space_1"],
   signal,
 });
-// 按租约、正文/策略目标、summary 和已同步 payload 复核后才能发布。
+// 按租约、正文/配置目标、summary 和已核对 payload 复核后才能发布。
 
 const retriever = createKnowledgeRetriever({
   client,
@@ -88,12 +87,12 @@ UTF-16 半开区间指向 `prepared.blocks` 的对应规范化文本。原生表
 
 Qdrant 1.17.1 实测通过。collection 使用 dense Cosine；显式初始化核对已有维度与距离并建立 payload 索引。payload.content 存原文，metadata 存嵌套 locator、版本、摘要和稳定 space/user/document 键，兼容 LangChain QdrantVectorStore 默认载荷。point ID 由 tenant/document/indexVersion/ordinal 确定。写入使用 insert_only，等待每批完成，验证向量数量/维度/有限数值，返回前复核实际 point 的不可变来源与 Embedding 输入摘要。
 
-`updateIndexPolicy` 只向 metadata 子路径写 readAclKeys/aclRevision，以 tenant/document/indexVersion/previousRevision 精确匹配。新旧修订均为无损十进制字符串；旧更新不会覆盖已更新的修订。应用需要枚举并追赶中间修订、核对所有 point 的键/修订与数量后才提交已同步状态。普通成员增删不调用该函数或重新 Embedding，只改变 resolveScope 的查询键。新文档模式必须先由应用统一授权和安全回填，不能从 viewer 回退签发 space 键。
+稳定授权键随正文构建一起写入，构建完成后不变；本包不提供就地改写 payload 的通道，键组合变化时重建该文档。键的内容与语义由应用决定：应用用同一条判定同时完成盖章与签发（团队继承文档用 space 键、个人空间文档用 user 键、其余用 document 键），并按“能覆盖就用组键”签发查询键，避免逐篇文档签键；`aclKeyVersion` 进入配置指纹，更改键语义后旧载荷自动判定过期。新文档模式必须先由应用统一授权和安全回填，不能从 viewer 回退签发 space 键。
 
 检索先取得 ID、分数和最小版本字段，首轮不读取正文、标题或 ACL 名单。应用批准候选后才批量读取精确 point ID；再次核对字段、摘要、来源与上下文预算后形成 EvidenceBundle。授权键按请求字节拆批、固定 tenant/范围，按 point ID 去重，同分候选通过排除已处理 ID 扩查。候选数、查询调用数与键数量均有硬上限；超限明确报错，空键不调用 Embedding/Qdrant，不降级为无 ACL 过滤。
 
-Scope 和三个授权回调只能由应用在服务端构造。包不把 ACL payload 视为权限事实，不根据用户提交的 spaceId、JWT 旧成员声明或模型输入生成授权键。候选回调必须同时检查 activeIndexVersion、generationId、durableSeq、metadataRevision、配置、删除状态及当前读取权限；aclRevision 仅表示稳定键策略修订。
+Scope 和三个授权回调只能由应用在服务端构造。包不把 ACL payload 视为权限事实，不根据用户提交的 spaceId、JWT 旧成员声明或模型输入生成授权键。候选回调必须同时检查 activeIndexVersion、generationId、durableSeq、metadataRevision、配置、删除状态及当前读取权限。
 
 SDK 的 Embeddings 和 Qdrant 方法没有统一 AbortSignal 参数。应用需给客户端配置有限超时和 provider 的取消机制；包在每个调用边界检查 signal 并抑制取消后的结果，不能撤销已经发送的外部请求或费用。
 
-运行 `pnpm test:ai`，设置 `QDRANT_TEST_URL` 启用真实实例集成。测试使用随机 collection 并在 finally 删除，覆盖与 LangChain QdrantVectorStore 的兼容读取、旧构建晚到、条件策略、租户过滤、旧候选扩查和授权后正文读取。语义模型使用确定性测试 Embeddings；这不代表 Recall@K、生产容量或 2,000 人负载已验收。document_indexes、租约 Worker、tombstone、备份恢复与 SQL 发布条件属于 [app-server 集成设计](../../docs/packages/rag.md)。
+运行 `pnpm test:ai`，设置 `QDRANT_TEST_URL` 启用真实实例集成。测试使用随机 collection 并在 finally 删除，覆盖与 LangChain QdrantVectorStore 的兼容读取、旧构建晚到、insert_only 重放不覆盖已发布载荷、租户过滤、旧候选扩查和授权后正文读取。语义模型使用确定性测试 Embeddings；这不代表 Recall@K、生产容量或 2,000 人负载已验收。document_indexes、租约 Worker、tombstone、备份恢复与 SQL 发布条件属于 [app-server 集成设计](../../docs/packages/rag.md)。

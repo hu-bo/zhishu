@@ -16,6 +16,11 @@ export {
   requireDocumentManager,
   hasDocumentPermission,
   requireWorkspaceDocumentManagers,
+  ACL_KEY_VERSION,
+  documentAclKeysSql,
+  loadDocumentAclKeys,
+  signingAclKeys,
+  heldAclGroupKeys,
 } from "./document-access.js";
 export {
   workspaceAccess,

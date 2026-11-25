@@ -12,11 +12,11 @@
 
 状态：2026-10-19 已按用户编码指令实现 `@zhishu/rag`，目录 `packages/rag`；[返回文档地图](../README.md)。本包只适配知书内容与成熟检索组件；应用索引调度和授权模式迁移仍由 app-server 负责。
 
-消费说明见 [包 README](../../packages/rag/README.md)。已验证真实 LangChain 分块、Qdrant 1.17.1 的 insert_only、nested 条件 payload 更新、LangChain QdrantVectorStore 兼容读取、候选投影、授权后读取正文、租户隔离与过期构建候选扩查。Embedding 使用 LangChain 确定性测试实现，真实语义召回质量和 RG-LOAD 尚未验收。
+消费说明见 [包 README](../../packages/rag/README.md)。已验证真实 LangChain 分块、Qdrant 1.17.1 的 insert_only 重放、LangChain QdrantVectorStore 兼容读取、候选投影、授权后读取正文、租户隔离与过期构建候选扩查。Embedding 使用 LangChain 确定性测试实现，真实语义召回质量和 RG-LOAD 尚未验收。
 
-实现增加官方客户端的显式初始化/写入/策略更新函数；写入返回前复核不可变正文与 Embedding 输入摘要。SDK 的空分隔符会拆开 UTF-16 代理对，因此只适配这个分隔动作以按 Unicode 码点切分，分块与合并仍交给 LangChain。默认以 UTF-8 字节数作保守 token 上界，可注入与模型匹配的 tokenizer 并更新 chunkerVersion。超出 document-contracts 安全整数范围的 durableSeq 明确拒绝，已接受序列号按十进制字符串存储。
+实现增加官方客户端的显式初始化与写入函数；写入返回前复核不可变正文与 Embedding 输入摘要。SDK 的空分隔符会拆开 UTF-16 代理对，因此只适配这个分隔动作以按 Unicode 码点切分，分块与合并仍交给 LangChain。默认以 UTF-8 字节数作保守 token 上界，可注入与模型匹配的 tokenizer 并更新 chunkerVersion。超出 document-contracts 安全整数范围的 durableSeq 明确拒绝，已接受序列号按十进制字符串存储；不使用 Qdrant 浮点 range 比较这类序列号。Qdrant 同分分页使用排除已读取 point ID 的过滤，避免 offset 的不稳定排序丢失候选。
 
-aclRevision 使用十进制字符串；当前策略更新 API 按 previousRevision 精确匹配，阻止旧修订覆盖新修订，部分更新可幂等重试。应用必须核对全部 points 并追赶中间修订后才能发布同步完成；不使用浮点 range 比较 bigint。Qdrant 同分分页使用排除已读取 point ID 的过滤，避免 offset 的不稳定排序丢失候选。
+切片载荷的 readAclKeys 随构建写入且构建后不可变，本包不提供就地改写 payload 的通道；键组合变化只能重建该文档的新 indexVersion。键方案本身由应用的 `aclKeyVersion` 声明并进入配置指纹，应用更改键语义时无需手工清理旧载荷，指纹不一致即判定过期重建。
 
 本文第 2、4、6 节的 SQL 元数据、document_indexes、租约 Worker、事务推进、tombstone 清理、授权模式统一与迁移属于 app-server 集成，尚未修改应用权限或创建 SQL 表。应用必须注入真实当前关系解析、候选批量授权/版本检查及证据交付复核；包不根据 viewer 回退或客户端参数签发授权键。
 
@@ -35,32 +35,33 @@ aclRevision 使用十进制字符串；当前策略更新 API 按 previousRevisi
 
 ## 2. 一张 SQL 表、一个 collection 与稳定授权键
 
-| 存储/字段                       | 内容                                                                                                                                 |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| PostgreSQL `workspace_members`  | 复用 tenant/workspace/identity/role，维护真实团队成员关系                                                                            |
-| PostgreSQL `document_acl`       | 复用 tenant/document/identity/action，维护独立文档分享和动作授权                                                                     |
-| 现有表新增业务列                | workspaces.kind=personal/team；documents.accessMode=space/restricted；documents.aclRevision 仅表示索引访问策略修订                   |
-| PostgreSQL `document_indexes`   | 每租户/文档一行，保存正文/策略目标与已同步版本、active/buildingIndexVersion、状态、片段数/摘要、租约和重试；不存主体名单、切片或向量 |
-| Qdrant，例如 `zhishu_chunks_v1` | 每个 point 保存一个版本中的切片、向量、来源定位和少量 readAclKeys，所有租户共享 collection 并强制租户过滤                            |
-| `IndexOptions`                  | collection、模型/维度/距离、分块版本与预算，派生配置指纹；不新增配置表                                                               |
+| 存储/字段                       | 内容                                                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| PostgreSQL `workspace_members`  | 复用 tenant/workspace/identity/role，维护真实团队成员关系                                                                       |
+| PostgreSQL `document_acl`       | 复用 tenant/document/identity/action，维护独立文档分享和动作授权                                                                |
+| 现有表新增业务列                | workspaces.kind=personal/team；documents.accessMode=space/restricted                                                            |
+| PostgreSQL `document_indexes`   | 每租户/文档一行，保存正文目标与已发布版本、active/buildingIndexVersion、状态、片段数/摘要、租约和重试；不存主体名单、切片或向量 |
+| Qdrant，例如 `zhishu_chunks_v1` | 每个 point 保存一个版本中的切片、向量、来源定位和少量 readAclKeys，所有租户共享 collection 并强制租户过滤                       |
+| `IndexOptions`                  | collection、模型/维度/距离、分块版本与预算，派生配置指纹；不新增配置表                                                          |
 
-普通成员增删修改已有关系表，改变的是服务端查询授权键，不改变文档的稳定键，不推进该文档的索引目标。accessMode、个人空间归属主体、文档所在空间等使键本身变化时，才在业务事务中递增 aclRevision 并推进 document_indexes。该修订不再随每次成员操作递增；成员读取与撤权不能仅依赖它。
+普通成员增删修改已有关系表，改变的是服务端查询授权键，不改变文档的稳定键，不推进该文档的索引目标。accessMode、个人空间归属主体、文档所在空间等使键本身变化时，推进 document_indexes 目标并重建该文档的新 indexVersion；成员读取与撤权不能依赖索引侧状态。
 
 这些是待审的新业务语义。当前代码尚无 kind/accessMode，空间角色仅管组织，不能把新规则标记为已经生效。字段属于应用元数据，不是 DocumentContent 的节点属性，不新增权限、来源、profile 或主体展开表。
 
-document_indexes 主键为 tenantId/documentId，每篇文档一个目标配置。正文构建分配新 indexVersion，point ID 根据 tenant/document/indexVersion/chunkOrdinal 生成确定 UUID；已发布正文和向量不可变。仅稳定授权键变化时沿用 activeIndexVersion，受策略修订保护更新 payload。
+document_indexes 主键为 tenantId/documentId，每篇文档一个目标配置。正文构建分配新 indexVersion，point ID 根据 tenant/document/indexVersion/chunkOrdinal 生成确定 UUID；已发布正文、向量和授权键载荷不可变。授权键变化同样分配新 indexVersion 并重建，不就地改写已发布 points。
 
 ### 用户、空间与文档分别授权
 
 把“空间默认继承”和“独立文档授权”显式分开，首期不引入 deny 规则或父目录 ACL 继承：
 
-| 场景                                    | 业务读取规则                                                            | point 的 readAclKeys         |
-| --------------------------------------- | ----------------------------------------------------------------------- | ---------------------------- |
-| 团队空间、accessMode=space              | 当前真实空间成员按空间角色读取；组织者/编辑者的写权限按统一业务策略计算 | `["space:s1"]`               |
-| 个人空间文档                            | 默认 owner 可读；单篇分享使用原 document_acl                            | `["user:u1", "document:d1"]` |
-| 团队空间受限文档、accessMode=restricted | 不接受空间默认授权，沿用文档 owner 与显式 document_acl                  | `["document:d2"]`            |
+| 场景                                     | 业务读取规则                                                            | point 的 readAclKeys          |
+| ---------------------------------------- | ----------------------------------------------------------------------- | ----------------------------- |
+| 团队空间、accessMode=workspace-inherited | 当前真实空间成员按空间角色读取；组织者/编辑者的写权限按统一业务策略计算 | `["space:s1", "document:d1"]` |
+| 个人空间文档                             | 默认 owner 可读；单篇分享使用原 document_acl                            | `["user:u1", "document:d1"]`  |
+| 团队空间受限文档、accessMode=restricted  | 不接受空间默认授权，沿用文档 owner 与显式 document_acl                  | `["document:d2"]`             |
+| 目录链被 restricted 切断的继承文档       | 只能靠目录级或文档级授权读取，成员身份不足以覆盖该子树                  | `["document:d3"]`             |
 
-document 键只是“已获权读取这篇文档”的资源标识，不是一个凭 ID 即可加入的组。个人文档预置 document 键，因此第一次分享、后续增删分享成员均不改 points；没有授权的人不会获得这个查询键。个人 user 键取自已校验的归属 owner；个人空间的 owner/文档归属须保持一致，不能把分享者或任意创建者误作 owner。单篇受邀不允许列出整个个人空间或其他文档目录。同一文档的所有切片使用同一组键，不按用户复制向量。
+document 键只是“已获权读取这篇文档”的资源标识，不是一个凭 ID 即可加入的组。所有场景都预置 document 键：团队继承文档除成员外还可能有跨空间受邀者或仅有目录级授权者，他们只能凭这个键被召回，因此即使已有 space 键也不能省略它。检索侧按“能覆盖就只用组键”签发：成员持有的 space 键覆盖整个空间的继承文档，个人归属主体键覆盖自己的个人空间，覆盖不到的文档才逐篇签 document 键，使“我的全部资料”这类范围的键数从 O(文档) 降到 O(空间)。个人 user 键取自已校验的归属 owner；个人空间的 owner/文档归属须保持一致，不能把分享者或任意创建者误作 owner。单篇受邀不允许列出整个个人空间或其他文档目录。同一文档的所有切片使用同一组键，不按用户复制向量。空间键只授给真实 owner 或空间级授权行，目录浏览的 viewer 回退不构成成员证明。
 
 团队 space 模式的空间成员默认可读，文档创建者身份本身不绕过当前成员检查；restricted 模式的空间 admin/editor 不自动获得正文权限。space 模式下删除某人的直接文档授权不会消除其空间继承权限；如果要求只允许部分人读取，应把该文档改成 restricted。针对不同人的只读/编辑/导出/AI 等差异仍由业务授权计算，readAclKeys 只表示读取，不能赋予其他 action。
 
@@ -89,10 +90,10 @@ document 键只是“已获权读取这篇文档”的资源标识，不是一�
 | id / vector          | 构建内稳定 UUID，一个首期 dense 向量空间，维度/Cosine 由 collection 配置确定                                                           |
 | payload.content      | 切片原文，检索前缀与摘录区间分开                                                                                                       |
 | metadata 来源字段    | tenantId、workspaceId、documentId、indexVersion、snapshotId、chunkOrdinal、blockId、UTF-16 区间、原文/Embedding 输入摘要和有限标题路径 |
-| metadata 版本字段    | generationId、durableSeq、metadataRevision、aclRevision、configFingerprint、sourceState                                                |
+| metadata 版本字段    | generationId、durableSeq、metadataRevision、configFingerprint、sourceState                                                             |
 | metadata.readAclKeys | space/user/document 三类稳定键，首期每 point 通常一至两个；没有键默认拒绝                                                              |
 
-collection 创建时先建立 tenantId、workspaceId、documentId、indexVersion、readAclKeys、configFingerprint、sourceState 的 keyword 索引；策略修订使用与序列化一致的类型，durableSeq 使用无损十进制字符串。不再保存 readIdentityIds 或切片级用户 action 名单。旧载荷必须重建/显式迁移，不把空键或旧 viewer 角色回退成全空间可读。
+collection 创建时先建立 tenantId、workspaceId、documentId、indexVersion、readAclKeys、configFingerprint、sourceState、generationId、durableSeq、metadataRevision 的 keyword 索引；durableSeq 与 metadataRevision 使用无损十进制字符串。不再保存 readIdentityIds、切片级用户 action 名单或切片级策略修订号。旧载荷必须重建/显式迁移，不把空键或旧 viewer 角色回退成全空间可读。
 
 ### 对象也保持精简
 
@@ -109,6 +110,7 @@ export interface IndexOptions {
   metric: "cosine";
   normalizerVersion: string;
   chunkerVersion: string;
+  aclKeyVersion: string;
   targetTokens: number;
   maxTokens: number;
   overlapTokens: number;
@@ -149,11 +151,11 @@ SourceReference 的 sourceId 对应 documentId，snapshotId 可以由文档 gene
 
 当前 document_outbox 属于 DocumentProjectionWorker，完成后清空载荷；RAG 不竞争原消费者。projection 成功时在同一事务推进 document_indexes；文档正文/元数据、访问模式、资源键、删除状态的变更同样推进目标。普通 workspace_members/document_acl 成员变更不进入索引队列。
 
-Worker 用 SELECT FOR UPDATE SKIP LOCKED 和租约领取同一索引行。正文/配置目标变化使旧构建无法发布；策略键更新不要求重新 Embedding。策略视图与正文版本由同一可信视图固定，发布时再次核对。
+Worker 用 SELECT FOR UPDATE SKIP LOCKED 和租约领取同一索引行。正文/配置/授权键目标变化都使旧构建无法发布，一律走新构建。策略视图与正文版本由同一可信视图固定，发布时再次核对。
 
 1. 正文构建领取新 buildingIndexVersion/leaseToken，加载最新可信投影；投影滞后则退避。
-2. 事务外分块/Embedding，使用新 point ID 和锁定版本支持的 insert_only 写入完整切片、初始资源键，等待完成并核对摘要。重传忽略已有 ID，禁止旧普通 upsert 覆盖更新后的策略，见[官方 Update Mode](https://qdrant.tech/documentation/manage-data/points/?q=batch)。
-3. PostgreSQL 重新核对文档有效性、正文/配置目标和 leaseToken/buildingIndexVersion，才发布 activeIndexVersion 与实际写入修订；策略未追上则保留 pending，不覆盖新目标。
+2. 事务外分块/Embedding，使用新 point ID 和锁定版本支持的 insert_only 写入完整切片与初始资源键，等待完成并核对摘要。重传忽略已有 ID，禁止旧普通 upsert 覆盖已发布载荷，见[官方 Update Mode](https://qdrant.tech/documentation/manage-data/points/?q=batch)。
+3. PostgreSQL 重新核对文档有效性、正文/配置目标和 leaseToken/buildingIndexVersion，才发布 activeIndexVersion；目标已再次变化则保留 pending，不覆盖新目标。
 4. 失败重试留在原行。旧 Worker 无法发布；按明确废弃 indexVersion 清理，先核对当前 active/building，不能删除其他仍可能发布的构建。
 
 空文档允许零片段。删除/撤出索引保留 tombstone，文档硬删除后不级联丢失清理责任；确认旧 Worker 结束、Qdrant 清理完成才删除该记录。跨服务没有原子事务；Qdrant wait/ordering 不能代替业务版本条件，见[一致性说明](https://qdrant.tech/documentation/scaling/consistency-guarantees/)。
@@ -164,24 +166,24 @@ Worker 用 SELECT FOR UPDATE SKIP LOCKED 和租约领取同一索引行。正文
 
 相同内容的 no-op/幂等重放不反复触发失效；批量操作使用有大小上限的业务命令。不同文档可并行，同一热点关系仍受 PostgreSQL 行锁约束，需有界准入/排队，不能为 2,000 名员工创建 2,000 个数据库连接，也不能让热点锁等待占满连接池。新增权限不踢无关会话，撤权定向通知并由每次受保护操作重新检查；通知不能是唯一安全依据，多实例传播失效的要求仍需落实。
 
-只有 accessMode、个人归属主体或空间归属等使稳定键变化时，才需要 Qdrant 同步。可按文档短窗口合并最新策略，窗口/最大等待与失败退避分开；它不再用于每次成员修改。参数与完成时延经过测试确定，不预先承诺 SLA。
+只有 accessMode、个人归属主体或空间归属等使稳定键变化时，才需要 Qdrant 同步。同步方式是重建该文档，不是修改已发布 points；因此这里要控制的是重建的合并窗口与并发，而不是 payload 追平。可按文档短窗口合并最新的键目标，窗口/最大等待与失败退避分开；它不用于每次成员修改。参数与完成时延经过测试确定，不预先承诺 SLA。
 
-### 4.2 策略键变化的条件 payload 更新
+### 4.2 授权键变化通过重建收敛
 
-正文/metadata/模型配置不变而仅策略键变化时，沿用 activeIndexVersion：
+正文与模型配置不变而仅稳定授权键变化时，应用推进 document_indexes 目标，Worker 领取新 indexVersion 重新构建该文档：
 
-1. 固定 activeIndexVersion 和最新策略修订 r，从当前业务规则编译少量 readAclKeys，不枚举空间/文档全部成员。
-2. 通过官方 [set payload](https://api.qdrant.tech/api-reference/points/set-payload)，以 tenant/document/indexVersion 及 metadata.aclRevision < r 限定，向 metadata 子路径一并写 readAclKeys/aclRevision。不覆盖正文、向量、其他来源字段或整个 metadata。
-3. 等待完成并核对预期 points 的目标修订/键摘要；超时和部分完成同目标幂等重试，旧修订不覆盖新修订。
-4. PostgreSQL 以 leaseToken、活动版本和目标条件提交已同步策略；来源/配置变化时不能标记完成，改走新构建或继续同步最新目标。
+1. 从当前业务规则编译少量 readAclKeys，不枚举空间/文档全部成员；应用侧盖章与签发使用同一条判定，不会各写一套规则。
+2. 新 indexVersion 按 insert_only 一次性写入正文、向量与这组键；旧 activeIndexVersion 在新版本发布前继续可检索，因此不存在改了一半的中间载荷。
+3. PostgreSQL 以 leaseToken、活动版本和头部条件发布新版本；旧 indexVersion 由清理流程删除，先核对当前 active/building。
+4. 跨空间移动与 accessMode 切换都已递增 documents.metadataRevision，当前实现由同一条脏检测触发重建，不需要额外的策略修订号；键语义本身变更递增 aclKeyVersion，配置指纹随之改变，全部旧载荷自动判定过期。
 
-锁定版本必须验证条件修改、nested key、insert_only、多副本及旧写入晚到。只有模式/归属变更才承担切片数相关的 payload 成本；普通成员关系变更的 Qdrant point 更新数为零。正文重建时可复用向量的前提仍是分块、前缀、实际 Embedding 输入摘要和模型完全一致，标题前缀变化不能只比较原文。
+锁定版本必须验证 insert_only、多副本及旧写入晚到。只有模式/归属变更才承担与该文档切片数成正比的重建成本；普通成员关系变更的 Qdrant point 更新数为零。重建可复用向量的前提仍是分块、前缀、实际 Embedding 输入摘要和模型完全一致，标题前缀变化不能只比较原文。
 
 ### 4.3 容量与迁移验收
 
 2,000 人在线、2,000 个同时在途请求、持续 2,000 次写入/秒是不同负载。当前无相应实测；默认单实例连接池上限 10 不是容量结论。分别测试分散文档、同一空间/文档热点、持续阶梯负载，并固定员工/空间/文档数、切片数、直接授权数量和硬件，同时运行编辑与检索。
 
-记录成功吞吐、接纳/拒绝数、P95/P99、连接池/锁等待、授权键解析与过滤字节、撤权拦截、重连数，以及模式变化的策略同步追平时间。普通成员增删须验证 Qdrant points/vector/Embedding 更新为零；429/超时单列，不算成功吞吐。容量目标通过测试前约定的场景与结果确认。
+记录成功吞吐、接纳/拒绝数、P95/P99、连接池/锁等待、授权键解析与过滤字节、撤权拦截、重连数，以及模式变化的重建追平时延。普通成员增删须验证 Qdrant points/vector/Embedding 更新为零；429/超时单列，不算成功吞吐。容量目标通过测试前约定的场景与结果确认。
 
 旧文档统一按 restricted 回填，保留原文档 owner/显式授权，不因增加 kind/accessMode 自动开放给所有空间成员。团队 space 继承由显式选择启用；个人空间分类和 owner 一致性也需确认，不能按“某用户创建了空间”自动认定为个人。所有 HTTP/WS/搜索/协同写入/导出/AI 共用同一新授权策略，不能仅把 Qdrant 改成继承而其他接口继续旧规则。未完成模式回填、payload 重建和越权验收前，不启用新检索键。
 
@@ -193,9 +195,7 @@ Worker 用 SELECT FOR UPDATE SKIP LOCKED 和租约领取同一索引行。正文
 
 不能用浏览器传入的 spaceId 列表或长效 JWT 的旧成员声明直接生成键。第一阶段按请求读取当前关系；若以后缓存，必须处理可靠失效与撤权一致性，最终复核仍走主库或能证明已追上变更的一致性读，不使用固定 TTL 的旧允许缓存。批量复核避免每个切片单独查询 SQL。
 
-普通成员变更不改变稳定键，因此已有索引下新授权可在下一次关系读取后参与搜索，撤权者下一次解析不再获得对应键；定向通知停止其在途后续交付。已经交付的文本无法收回，模型使用前、最终结果和引用打开仍复核。仅模式/归属变化涉及 payload 延迟；旧键偶尔召回也须被当前业务检查拦截，新增键尚未同步时允许少结果。
-
-策略 aclRevision 跟踪投影同步和乱序保护，不是成员版本或对所有用户停搜的开关。切片策略修订可落后但不得异常超前；当前用户始终按实际最新规则授权，模式变化不能绕过该检查。
+普通成员变更不改变稳定键，因此已有索引下新授权可在下一次关系读取后参与搜索，撤权者下一次解析不再获得对应键；定向通知停止其在途后续交付。已经交付的文本无法收回，模型使用前、最终结果和引用打开仍复核。仅模式/归属变化涉及重建时延；旧键偶尔召回也须被当前业务检查拦截，新版本尚未发布时允许少结果。
 
 旧构建/候选可能占 Top-K，允许有界扩大候选、排除已处理 ID；达到时间/数量上限返回不足，禁止放宽 tenant、范围或资源键。关键词、混合召回与重排遵守相同授权。删除/移动/新 generation 先由当前业务状态排除，后异步清理。全文/历史回看走原文档能力，不承诺保留任意旧来源独立快照。
 
@@ -217,7 +217,7 @@ Qdrant 可独立备份以缩短恢复时间，切片/向量/ACL payload 都按�
 
 RG-01：真实 LangChain 分块/Embedding、Qdrant point 和 Block 定位，覆盖中文、代码/表格、重复标题、空文档和无损序列号。
 
-RG-02：一张索引表和一个 collection 验证租约/条件发布、部分写入、旧 Worker 晚到、insert_only、策略键更新、Top-K 挤占、tombstone、清理竞争和恢复后的重核。
+RG-02：一张索引表和一个 collection 验证租约/条件发布、部分写入、旧 Worker 晚到、insert_only 重放不覆盖已发布载荷、Top-K 挤占、tombstone、清理竞争和恢复后的重核。
 
 RG-ACL：验证团队继承、个人单篇分享、restricted 文档、不同空间的不同角色、同租户直接分享、跨租户同名 ID、非成员 viewer 回退、空查询键、客户端伪造键、模式切换与移动、在途撤权/缓存来源恢复。禁止把个人单篇分享变成 owner 的整个个人空间权限，旧文档回填不能扩大访问。
 

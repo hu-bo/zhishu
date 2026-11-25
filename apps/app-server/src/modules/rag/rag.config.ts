@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { configurationFingerprint, type IndexOptions } from "@zhishu/rag";
+import { ACL_KEY_VERSION } from "../authorization/permissions.js";
 import type { AppConfig } from "../../config.js";
 
 export function ragConfiguration(config: AppConfig) {
@@ -27,6 +28,7 @@ export function ragConfiguration(config: AppConfig) {
     metric: "cosine",
     normalizerVersion: "rag-v2",
     chunkerVersion: "native-v1",
+    aclKeyVersion: ACL_KEY_VERSION,
     targetTokens: 1500,
     maxTokens: 2400,
     overlapTokens: 180,
