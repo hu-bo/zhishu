@@ -12,6 +12,16 @@ import type { createRagClients } from "./rag.config.js";
 import { RagRepository, type IndexJob, type PublishedIndex } from "./rag.repository.js";
 
 type Clients = NonNullable<ReturnType<typeof createRagClients>>;
+const INDEX_FAILURE_CODES = {
+  RAG_ENDPOINT_NOT_FOUND: true,
+  EMBEDDING_AUTH_FAILED: true,
+  INDEX_TIMEOUT: true,
+  INDEX_PROVIDER_FAILED: true,
+} as const;
+type IndexFailureCode = keyof typeof INDEX_FAILURE_CODES;
+function isIndexFailureCode(code: unknown): code is IndexFailureCode {
+  return typeof code === "string" && Object.hasOwn(INDEX_FAILURE_CODES, code);
+}
 type Head = {
   documentId: string;
   workspaceId: string;
@@ -323,8 +333,18 @@ export class RagService {
     );
     const coverage = { totalDocuments: heads.length, readyDocuments: readyHeads.length };
     if (!heads.length) throw new DomainError("VALIDATION_ERROR", "所选范围内没有可用资料");
-    if (!readyHeads.length)
+    if (!readyHeads.length) {
+      const lastErrorCode = heads
+        .map((head) => indexes.find((index) => index.documentId === head.documentId)?.lastErrorCode)
+        .find((code): code is string => !!code && code !== "DOCUMENT_REMOVED");
+      if (lastErrorCode) {
+        const indexErrorCode = isIndexFailureCode(lastErrorCode)
+          ? lastErrorCode
+          : "INDEX_PROVIDER_FAILED";
+        throw new DomainError(indexErrorCode, "资料索引失败，请管理员检查向量服务配置后重试");
+      }
       throw new DomainError("SERVICE_UNAVAILABLE", "资料尚未完成索引，请稍后再试");
+    }
     const workspaceNames = await this.workspaceNames(
       scope.kind === "principal" ? scope.principal.tenantId : scope.tenantId,
       readyHeads,

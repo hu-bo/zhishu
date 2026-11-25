@@ -17,6 +17,10 @@ const DOMAIN_ERROR_STATUS = {
   AI_WRITE_PERSONAL_ONLY: 403,
   AI_ACCESS_REVOKED: 403,
   IDEMPOTENCY_KEY_REUSED: 409,
+  RAG_ENDPOINT_NOT_FOUND: 503,
+  EMBEDDING_AUTH_FAILED: 503,
+  INDEX_TIMEOUT: 503,
+  INDEX_PROVIDER_FAILED: 503,
 } satisfies Record<DomainErrorCode, number>;
 
 export function registerErrorHandlers(app: FastifyInstance): void {

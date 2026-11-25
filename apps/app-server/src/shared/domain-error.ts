@@ -8,7 +8,11 @@ export type DomainErrorCode =
   | "FORBIDDEN"
   | "AI_WRITE_PERSONAL_ONLY"
   | "AI_ACCESS_REVOKED"
-  | "IDEMPOTENCY_KEY_REUSED";
+  | "IDEMPOTENCY_KEY_REUSED"
+  | "RAG_ENDPOINT_NOT_FOUND"
+  | "EMBEDDING_AUTH_FAILED"
+  | "INDEX_TIMEOUT"
+  | "INDEX_PROVIDER_FAILED";
 
 export class DomainError extends Error {
   constructor(

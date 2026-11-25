@@ -55,6 +55,20 @@ import { AssistantEmpty } from './assistant-empty';
 import { ImageArtifacts } from './image-artifacts';
 import { toolLabel } from './tool-labels';
 
+const assistantFailureDetails: Record<string, string> = {
+  RAG_ENDPOINT_NOT_FOUND: '向量索引接口返回 404。请管理员检查向量化服务地址、Qdrant 地址和集合名。',
+  EMBEDDING_AUTH_FAILED: '向量索引认证失败。请管理员检查向量化服务和 Qdrant 的访问凭据。',
+  INDEX_TIMEOUT: '向量索引处理超时，请稍后重试；如果持续发生，请检查向量服务状态。',
+  INDEX_PROVIDER_FAILED: '向量索引服务请求失败，请检查向量服务和 Qdrant 是否可用。',
+  KNOWLEDGE_NOT_READY: '资料索引尚未就绪，请稍后重试。',
+};
+
+function assistantFailureMessage(code?: string): string {
+  if (!code) return '生成失败。';
+  const details = assistantFailureDetails[code];
+  return details ? `${details}（错误码：${code}）` : `生成失败（错误码：${code}）`;
+}
+
 export interface AssistantEditorContext {
   documentId: string;
   selectionBlockIds: string[];
@@ -396,7 +410,7 @@ export function AssistantChat({
       setDraftCard({
         ...draftCard,
         phase: 'failed',
-        error: run.errorCode ? `生成失败（${run.errorCode}）` : '生成失败。',
+        error: assistantFailureMessage(run.errorCode),
       });
     else if (run.status === 'cancelled')
       setDraftCard({ ...draftCard, phase: 'local', runId: null });
@@ -679,7 +693,7 @@ export function AssistantChat({
                 <span>
                   {lastFailed.status === 'interrupted'
                     ? '执行中断，结果可能需要核对。'
-                    : '生成失败。'}
+                    : assistantFailureMessage(lastFailed.errorCode)}
                 </span>
                 <button
                   type="button"
