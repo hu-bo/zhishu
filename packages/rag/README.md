@@ -91,7 +91,7 @@ Qdrant 1.17.1 实测通过。collection 使用 dense Cosine；显式初始化核
 
 检索先取得 ID、分数和最小版本字段，首轮不读取正文、标题或 ACL 名单。应用批准候选后才批量读取精确 point ID；再次核对字段、摘要、来源与上下文预算后形成 EvidenceBundle。授权键按请求字节拆批、固定 tenant/范围，按 point ID 去重，同分候选通过排除已处理 ID 扩查。候选数、查询调用数与键数量均有硬上限；超限明确报错，空键不调用 Embedding/Qdrant，不降级为无 ACL 过滤。
 
-Scope 和三个授权回调只能由应用在服务端构造。包不把 ACL payload 视为权限事实，不根据用户提交的 spaceId、JWT 旧成员声明或模型输入生成授权键。候选回调必须同时检查 activeIndexVersion、generationId、durableSeq、metadataRevision、配置、删除状态及当前读取权限。
+Scope 和三个授权回调只能由应用在服务端构造。包不把 ACL payload 视为权限事实，不根据用户提交的 spaceId、JWT 旧成员声明或模型输入生成授权键。候选回调必须同时检查 activeIndexVersion、generationId、durableSeq、metadataRevision、配置及当前读取权限；文档是否已删除、归档或移出范围按 SQL 当前关系判定，切片载荷不承载可见性标记。
 
 SDK 的 Embeddings 和 Qdrant 方法没有统一 AbortSignal 参数。应用需给客户端配置有限超时和 provider 的取消机制；包在每个调用边界检查 signal 并抑制取消后的结果，不能撤销已经发送的外部请求或费用。
 

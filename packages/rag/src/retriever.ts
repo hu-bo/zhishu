@@ -21,7 +21,6 @@ const fields = [
   "durableSeq",
   "metadataRevision",
   "configFingerprint",
-  "sourceState",
   "snapshotId",
   "documentTitle",
 ] as const;
@@ -36,7 +35,6 @@ type Candidate = {
   durableSeq: string;
   metadataRevision: string;
   configFingerprint: string;
-  sourceState: string;
   snapshotId: string;
   documentTitle: string;
 };
@@ -146,12 +144,13 @@ export function createKnowledgeRetriever<Scope>(options: {
           signal.throwIfAborted();
           if (++queryCalls > (options.maxQueryCalls ?? 128))
             throw new Error("RETRIEVAL_BUDGET_EXCEEDED");
+          // 下架与删除是物理删点（应用按 tenant/document 或废弃 indexVersion 删除），
+          // 因此载荷不再携带可见性标记；正文是否可交付由服务端当前关系判定。
           const must: Schemas["Condition"][] = [
             { key: "metadata.tenantId", match: { value: scope.tenantId } },
             { key: "metadata.workspaceId", match: { any: [...scope.workspaceIds] } },
             { key: "metadata.readAclKeys", match: { any: keys } },
             { key: "metadata.configFingerprint", match: { value: fingerprint } },
-            { key: "metadata.sourceState", match: { value: "active" } },
           ];
           if (scope.documentIds)
             must.push({ key: "metadata.documentId", match: { any: [...scope.documentIds] } });
@@ -174,8 +173,7 @@ export function createKnowledgeRetriever<Scope>(options: {
               m.tenantId !== scope.tenantId ||
               !scope.workspaceIds.includes(String(m.workspaceId)) ||
               (scope.documentIds && !scope.documentIds.includes(String(m.documentId))) ||
-              m.configFingerprint !== fingerprint ||
-              m.sourceState !== "active"
+              m.configFingerprint !== fingerprint
             )
               continue;
             const candidate = { ...m, pointId: point.id, score: point.score } as Candidate;

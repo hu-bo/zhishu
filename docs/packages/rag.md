@@ -90,10 +90,10 @@ document 键只是“已获权读取这篇文档”的资源标识，不是一�
 | id / vector          | 构建内稳定 UUID，一个首期 dense 向量空间，维度/Cosine 由 collection 配置确定                                                           |
 | payload.content      | 切片原文，检索前缀与摘录区间分开                                                                                                       |
 | metadata 来源字段    | tenantId、workspaceId、documentId、indexVersion、snapshotId、chunkOrdinal、blockId、UTF-16 区间、原文/Embedding 输入摘要和有限标题路径 |
-| metadata 版本字段    | generationId、durableSeq、metadataRevision、configFingerprint、sourceState                                                             |
+| metadata 版本字段    | generationId、durableSeq、metadataRevision、configFingerprint                                                                          |
 | metadata.readAclKeys | space/user/document 三类稳定键，首期每 point 通常一至两个；没有键默认拒绝                                                              |
 
-collection 创建时先建立 tenantId、workspaceId、documentId、indexVersion、readAclKeys、configFingerprint、sourceState、generationId、durableSeq、metadataRevision 的 keyword 索引；durableSeq 与 metadataRevision 使用无损十进制字符串。不再保存 readIdentityIds、切片级用户 action 名单或切片级策略修订号。旧载荷必须重建/显式迁移，不把空键或旧 viewer 角色回退成全空间可读。
+collection 创建时先建立 tenantId、workspaceId、documentId、indexVersion、readAclKeys、configFingerprint、generationId、durableSeq、metadataRevision 的 keyword 索引；durableSeq 与 metadataRevision 使用无损十进制字符串。不再保存 readIdentityIds、切片级用户 action 名单、切片级策略修订号或切片可见性标记——文档下架与删除走物理删点，载荷不承载需要事后纠正的状态。旧载荷必须重建/显式迁移，不把空键或旧 viewer 角色回退成全空间可读。
 
 ### 对象也保持精简
 
