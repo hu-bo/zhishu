@@ -1,6 +1,6 @@
 # ai-plugins：问答、research 与写作插件设计
 
-状态：2026-11-13 新目标。当前有效工具/编译器位于 ai-writing，下一轮迁入本包。产品流程、数据库和前端布局以 [主技术文档](../apps/ai-assistant-and-public-qa.md) 为准。
+本包为统一助手提供 scope、rag、research、writing、image 与草稿/提案编译入口。导出以 [package.json](../../packages/ai-plugins/package.json) 为准，宿主流程见 [统一助手](../apps/ai-assistant-and-public-qa.md#当前入口)。
 
 ## 插件能力
 

@@ -1,6 +1,6 @@
 # chat-ui 设计规划
 
-状态：2026-10-24 已实现受控 Chat、消息/内容块、Composer、附件、滚动、状态、审批/产物与独立 CSS，并由 WritingChat、RagChat 共用。实际导出见 [包 README](../../packages/chat-ui/README.md)，目标清单中的其他细分组件不自动视为完成。验收见 [实施记录](ai-chat-implementation.md)。
+当前包提供受控消息、Composer、滚动、过程状态、审批/产物及独立 CSS。知书通过统一助手宿主接入。实际导出见 [包 README](../../packages/chat-ui/README.md)，应用见 [统一助手](../apps/ai-assistant-and-public-qa.md#当前入口)。以下段落记录早期 Chat 组件设计及历史验收。
 
 **原设计时状态（已由上方实施更新覆盖）**：2026-10-24 更新方案，尚未创建 `packages/chat-ui`。拟定包名 `@zhishu/chat-ui`，为 RAG Chat 与协作 AI 写作 Chat 共用的前端基础组件包。[总方案](ai-chat-architecture.md)聚焦写作 AI；协议见 [chat-contracts](chat-contracts.md)，两个业务封装见 [app-web](../apps/app-web.md#ai-chat-业务组件库)。[返回文档地图](../README.md)。
 

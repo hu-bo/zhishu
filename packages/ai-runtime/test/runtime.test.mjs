@@ -4,7 +4,11 @@ import test from "node:test";
 import { LlmAdapter, ToolCallId } from "@deepseek-ai/dsh-llm";
 import { createAssistantRuntime, INSUFFICIENT_EVIDENCE_TEXT } from "../dist/index.js";
 import { createArgumentTextExtractor, withAssistantPreviewHost } from "../dist/preview.js";
-import { createMemoryPersistencePlugin, createRecordingHost, turnRequest } from "./helpers.mjs";
+import {
+  createMemoryPersistencePlugin,
+  createRecordingHost,
+  turnRequest,
+} from "../../dsh-agent/test/helpers.mjs";
 
 const textOf = (m) =>
   m.content
@@ -291,38 +295,6 @@ test("plugin composition changes visible tools, not just prompts", async () => {
   }
 });
 
-test("restart settles the durable turn without new model calls", async () => {
-  const memory = createMemoryPersistencePlugin();
-  const model = new Model();
-  const f = await fixture({ memory, model });
-  const session = await f.attach();
-  const executed = await session.execute(
-    request({ inputText: "first" }),
-    createRecordingHost().host,
-    new AbortController().signal,
-  );
-  assert.equal(executed.status, "completed");
-  const calls = model.calls.length;
-  await f.runtime.dispose();
-  const restored = await fixture({ memory, model });
-  try {
-    const settledSession = await restored.attach({ restore: true });
-    const settled = await settledSession.settle(
-      request({
-        inputText: "first",
-        plannedNativeMessageId: executed.nativeMessageId,
-        deliveryConfirmed: true,
-      }),
-      createRecordingHost().host,
-      new AbortController().signal,
-    );
-    assert.equal(settled.status, "completed");
-    assert.equal(model.calls.length, calls);
-  } finally {
-    await restored.runtime.dispose();
-  }
-});
-
 test("allowed product history initializes a fresh native context as data", async () => {
   const f = await fixture();
   try {
@@ -454,17 +426,15 @@ test("preview host merges text deltas and streamed tool arguments into one dense
   });
 });
 
-test("streamed answer arguments type out as text previews before the durable result", async () => {
+test("a streamed answer produces text previews and recovers the trusted result after restart", async () => {
   const f = await fixture();
+  const turn = request({ inputText: "answerstream" });
+  let executed;
   try {
     const session = await f.attach();
     const recorder = createRecordingHost();
-    const result = await session.execute(
-      request({ inputText: "answerstream" }),
-      recorder.host,
-      new AbortController().signal,
-    );
-    assert.equal(result.status, "completed");
+    executed = await session.execute(turn, recorder.host, new AbortController().signal);
+    assert.equal(executed.status, "completed");
     assert.equal(f.answers.length, 1);
     const previews = recorder.calls.previews;
     assert.ok(!previews.some((p) => p.channel === "tool-args"), "raw args stay internal");
@@ -482,5 +452,21 @@ test("streamed answer arguments type out as text previews before the durable res
     );
   } finally {
     await f.runtime.dispose();
+  }
+
+  const calls = f.model.calls.length;
+  const restored = await fixture({ memory: f.memory, model: f.model });
+  try {
+    const session = await restored.attach({ restore: true });
+    const settled = await session.settle(
+      { ...turn, plannedNativeMessageId: executed.nativeMessageId, deliveryConfirmed: true },
+      createRecordingHost().host,
+      new AbortController().signal,
+    );
+    assert.equal(settled.status, "completed");
+    assert.equal(settled.resultText, f.answers[0].text);
+    assert.equal(f.model.calls.length, calls);
+  } finally {
+    await restored.runtime.dispose();
   }
 });

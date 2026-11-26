@@ -1,5 +1,7 @@
 # editor-ai-bridge 设计规划
 
+> 历史提案。仓库未创建此包。当前提案审阅和提交入口在 [助手应用](../apps/ai-assistant-and-public-qa.md#当前入口)。
+
 > 2026-10-24 适配边界：本包只衔接协作 AI 写作与文档，写作对话状态由 [app-web 的 WritingChat](../apps/app-web.md#ai-chat-业务组件库)维护，执行由 [dsh-agent](dsh-agent.md)负责。RAG Chat 继续由 LangChain 与 RagChat 管理；二者共用 chat-ui 基础组件，RAG 转写作时创建独立请求。bridge 聚焦目标捕获、产物预览、用户接受与协同提交，复用 ai-plugins/ai-contracts，不维护第二份聊天状态。
 
 状态：待用户审核，尚未创建工作区包，审核通过后再实施。拟定名称 `@zhishu/editor-ai-bridge`，目录 `packages/editor-ai-bridge`；[返回文档地图](../README.md)。依赖 [ai-contracts](ai-contracts.md) 与内容合约，通过宿主接入生成服务和编辑器；与 [ai-runtime](ai-runtime.md)、[rag](rag.md) 独立消费。

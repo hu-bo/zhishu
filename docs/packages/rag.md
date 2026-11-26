@@ -1,24 +1,38 @@
-# rag 设计规划
+# 知识索引与授权检索
 
-> 2026-11-13 最新目标见 [主技术文档](../apps/ai-assistant-and-public-qa.md)：本包继续负责索引、分块、Embedding、Qdrant 和可信检索。RAG 问答/research 的指令与工具归 ai-plugins，由同一 DSH Agent 使用，不在本包另建问答执行器或 DSH 状态。当前双流程已实施，以下旧阶段规划仅作迁移背景。
+知书用 Embedding 和 Qdrant 检索当前获准的文档切片。统一助手的问答、调研和写作共享检索端口。包的独立用法见 [rag README](../../packages/rag/README.md)，助手入口见 [统一助手](../apps/ai-assistant-and-public-qa.md#当前入口)。
 
-> 平台资料和网页共用纯证据/Citation；研究和写作需要资料时使用同一检索端口。来源必须可定位，公开入口固定为站点批准资料，不因插件可组合而扩大权限。
+## 启用知识索引
 
-> 2026-10-30 应用已接入 `modules/rag`、`document_indexes`（migration 0036）、独立 Embedding 配置、自动索引 Worker、空间/文档范围向量问答、索引状态及来源文档链接。当前沿用显式文档 ACL，以 `document:<id>` 稳定键过滤；未实施下文规划的 space/user 继承权限迁移。真实 `qwen3.8-flash` 写作 → `qwen3.7-text-embedding-flash` 1024 维索引 → 空间/文档问答已通过，覆盖引用、权限隔离、正文更新与删除。部署和验收说明见 [AI 知识问答验收记录](../ai-knowledge-verification.md)。下面保留的规划条目不代表全部已交付。
+1. 准备 PostgreSQL 和已迁移的数据库。开发环境可运行 `pnpm compose:up:ai` 启动 PostgreSQL 和本地 Qdrant。
+2. 在后端 `.env` 设置 `AI_EMBEDDING_MODEL`、`QDRANT_URL`（本地默认映射至 `http://127.0.0.1:6333`）。私有 Qdrant 另外配置 `QDRANT_API_KEY`。
+3. 对独立的 OpenAI 兼容 Embedding 服务设置 `AI_EMBEDDING_BASE_URL` 和 `AI_EMBEDDING_API_KEY`。兼容聊天服务可复用聊天地址和密钥。Anthropic 聊天接口使用独立的 Embedding 配置。将 `AI_EMBEDDING_DIMENSIONS` 设置为模型实际返回的维度，默认 1024。集合名 `QDRANT_COLLECTION` 默认 `zhishu_documents`。
+4. 构建服务端依赖后，运行 `pnpm --dir apps/app-server ai:setup`。命令显式创建或核对集合和 payload 索引，普通请求使用已有集合。随后启动后端，由索引 Worker 处理待索引文档。
 
-> 2026-10-24 应用更新：RagChat 在 app-web 独立维护问答状态与草稿，共用 chat-ui，通过原 LangChain 问答 API 保留历史、取消与 checkpoint 恢复。检索包自身不持有 checkpoint；问答执行仍使用 LangGraph。当前页面基于授权所选资料，不将检索包能力等同于全库向量问答已接入。见 [实施记录](ai-chat-implementation.md)。
+## 索引与授权边界
 
-> 2026-10-24 两条消费链路：RAG Chat 继续使用 LangChain 驱动问答并组合本包的检索/来源能力；协作 AI 写作的 [research 插件](ai-plugins.md)也可通过宿主注入本包端口。两者分别编排，写作中的 DSH Agent 不接管 RAG Chat。rag 包保持检索职责，不依赖 chat-ui 或 DSH；前端分别封装 RagChat/WritingChat，共用基础组件。
+- PostgreSQL 的 `document_indexes` 跟踪目标正文代次、序列、配置指纹与已发布索引。Worker 领取任务，从已持久化投影构建切片，再核对租约和版本后发布。默认轮询 10 秒，正文安静 30 秒后可构建，持续编辑时最长等待 10 分钟后可领取任务。
+- 向量查询使用租户、`metadata.workspaceId`、授权键与适用的文档范围预筛。团队继承文档和个人空间文档可分别用 space、user 键覆盖，其他范围通过文档键表达。公开问答只在站点当前批准的文档中检索。
+- 服务端按当前权限、正文代次、版本和索引配置逐批批准候选，再读取精确 point 的正文。发出证据前重新校验当前授权和正文版本。文档归档、删除、移动等可见性由 PostgreSQL 当前状态决定。
+- 检索使用当前已就绪的资料。没有就绪资料时区分尚在索引与已记录的索引失败。模型及客户端消费受校验的证据和引用。
 
-状态：2026-10-19 已按用户编码指令实现 `@zhishu/rag`，目录 `packages/rag`；[返回文档地图](../README.md)。本包只适配知书内容与成熟检索组件；应用索引调度和授权模式迁移仍由 app-server 负责。
+配置与指纹见 [rag.config.ts](../../apps/app-server/src/modules/rag/rag.config.ts)，发布和检索见 [rag.service.ts](../../apps/app-server/src/modules/rag/rag.service.ts)。
 
-消费说明见 [包 README](../../packages/rag/README.md)。已验证真实 LangChain 分块、Qdrant 1.17.1 的 insert_only 重放、LangChain QdrantVectorStore 兼容读取、候选投影、授权后读取正文、租户隔离与过期构建候选扩查。Embedding 使用 LangChain 确定性测试实现，真实语义召回质量和 RG-LOAD 尚未验收。
+## 索引排错
 
-实现增加官方客户端的显式初始化与写入函数；写入返回前复核不可变正文与 Embedding 输入摘要。SDK 的空分隔符会拆开 UTF-16 代理对，因此只适配这个分隔动作以按 Unicode 码点切分，分块与合并仍交给 LangChain。默认以 UTF-8 字节数作保守 token 上界，可注入与模型匹配的 tokenizer 并更新 chunkerVersion。超出 document-contracts 安全整数范围的 durableSeq 明确拒绝，已接受序列号按十进制字符串存储；不使用 Qdrant 浮点 range 比较这类序列号。Qdrant 同分分页使用排除已读取 point ID 的过滤，避免 offset 的不稳定排序丢失候选。
+| 现象                   | 检查                                                                     |
+| ---------------------- | ------------------------------------------------------------------------ |
+| 知识检索未启用         | Embedding 模型、密钥、地址和 `QDRANT_URL`                                |
+| 集合不存在或维度不匹配 | 运行 `ai:setup` 核对集合。更换向量维度时准备新的兼容集合并重建索引       |
+| 资料尚未完成索引       | 确认正文已持久化、投影已推进、Worker 在运行，并等待索引安静窗口          |
+| 资料索引失败           | 查看服务端索引日志，检查 Embedding 响应、Qdrant 可达性及配置，修复后重试 |
+| 检索返回部分资料       | 看所选范围内文档的索引就绪情况及当前 AI 权限                             |
 
-切片载荷的 readAclKeys 随构建写入且构建后不可变，本包不提供就地改写 payload 的通道；键组合变化只能重建该文档的新 indexVersion。键方案本身由应用的 `aclKeyVersion` 声明并进入配置指纹，应用更改键语义时无需手工清理旧载荷，指纹不一致即判定过期重建。
+`ai:setup --rebuild` 会重置当前配置指纹对应的索引状态，让 Worker 重建。执行前确认数据库和集合属于目标环境。
 
-本文第 2、4、6 节的 SQL 元数据、document_indexes、租约 Worker、事务推进、tombstone 清理、授权模式统一与迁移属于 app-server 集成，尚未修改应用权限或创建 SQL 表。应用必须注入真实当前关系解析、候选批量授权/版本检查及证据交付复核；包不根据 viewer 回退或客户端参数签发授权键。
+## 早期设计与验收
+
+下文保留早期选型、字段草案及容量目标。历史模型与 Qdrant 的真实验证见 [2026-10-30 验收记录](../ai-knowledge-verification.md)，现行运行配置以上文和源码为准。
 
 ## 1. 选型与首期范围
 

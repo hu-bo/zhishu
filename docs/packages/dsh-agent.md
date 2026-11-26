@@ -1,6 +1,6 @@
 # dsh-agent：DSH 原生接入设计
 
-状态：2026-11-13 新目标，尚未在主工程恢复此 package。当前有效接入位于 ai-writing/runtime，下一轮迁入本包。完整产品设计及验收以 [主技术文档](../apps/ai-assistant-and-public-qa.md) 为准。
+本包是统一助手的原生执行层，公开入口为 `createDshRuntime`。见 [源码](../../packages/dsh-agent/src/index.ts) 和 [统一助手](../apps/ai-assistant-and-public-qa.md)。
 
 ## 职责
 
@@ -18,9 +18,9 @@
 - 公开入口按实际消费需要设计，不把全部 SDK API 批量重导出为包装层。
 - 预览帧向宿主转发公开过程事实：text 与 thinking 各为连续 delta 流，工具参数以 tool-args 通道透传、工具生命周期（running/completed/failed）由原生会话事件补发；本包不理解知书工具语义，怎么呈现由 ai-runtime 与宿主决定（见 [ai-runtime](ai-runtime.md)）。
 
-## 代码迁移
+## 迁移背景
 
-优先从当前主工程的 ai-writing/runtime 迁移有效实现，剥离 WritingRunContext、WritingProposalPayload 和应用数据库的强耦合，将实际业务动作留在 runtime/插件或宿主。不得仅重命名目录而保留写作专属产品协议。
+统一助手从旧写作运行时提取了 SDK 装配与原生会话，实际业务动作归运行时、插件和宿主。迁移证据见 [实施记录](../apps/ai-assistant-and-public-qa.md#141-本轮实施记录2026-11-13)。
 
 参考归档中的同名包只提供 SDK 接入背景；不恢复 ChatStore/ChatLease/ChatRecord 的旧产品快照协议、旧 DshChatSession 产品生命周期或兼容 exports。使用新包名下的当前接口，不为旧消费者保留别名。
 

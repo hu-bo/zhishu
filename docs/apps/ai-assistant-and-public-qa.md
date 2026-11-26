@@ -1,5 +1,16 @@
 # DSH 插件化助手、独立创作与对外问答技术设计
 
+## 当前入口
+
+工作台 `/ai` 的问答、调研和创作共用一个助手会话。明确提交创建草稿命令后，服务端在同一事务创建文档并绑定会话，页面展开编辑器。后续建议通过正文提案与协同结构操作提交，通过 durable ack 确认保存。
+
+- 内部 HTTP/SSE 使用 `/api/ai`。前端应用在 `features/assistant/` 装配受控 Chat，服务端 `modules/ai/` 维护会话、命令、事件与产物。请求与响应见 [OpenAPI](../../apps/app-server/openapi.json)。
+- 在 `/qa-sites` 管理问答站点，访客通过 `/ask/:slug` 访问激活站点。公开会话只使用 scope 与 rag，资料范围来自站点当前批准的文档，公开 API 位于 `/api/public/qa-sites`。
+- 模型启用需要服务端 `AI_MODEL` 和 `AI_API_KEY`。兼容服务按需设置 `AI_BASE_URL` 与 `AI_API_FORMAT=openai|anthropic`。修改模型或协议后，应重新生成依赖旧配置的任务。
+- 文档资料检索需要 Embedding 和 Qdrant。可选联网研究使用 `TAVILY_API_KEY`；可选图片生成使用 `AI_IMAGE_MODEL`、`AI_IMAGE_API_KEY` 与已配置的对象存储，兼容服务可设置 `AI_IMAGE_BASE_URL`。见 [知识索引配置](../packages/rag.md#启用知识索引) 和 [对象存储配置](../../apps/app-server/README.md#附件对象存储)。
+
+## 迁移与设计记录
+
 状态：2026-11-13 已实施统一 DSH 插件化助手。ai-qa/ai-writing 双流程已退役，dsh-agent/ai-runtime/ai-plugins 三包按本文职责落地，0046 向前迁移删除 purpose 分叉并将 writing_sessions/writing_image_jobs 重命名为 ai_sessions/ai_image_jobs（业务表仍为 37 张）。独立创作页改为先 Chat、用户受理 create-draft 并原子绑定后展开左编辑器右 Chat。验证结果见第 14 节末尾的实施记录；本文其余部分仍为目标设计来源。
 
 本版保留现有权限、证据、计量、产品表和协同能力。目标是同一 conversationId 内持续问答、调研和写作；用户决定创建草稿前只显示 Chat，创建成功后进入左侧编辑器、右侧 Chat。旧参考目录只供比较，不作为工作区依赖或整包回滚来源。
@@ -8,19 +19,21 @@
 
 ### 1.1 本轮扫描
 
+以下是统一前双流程的源码路径。可用 `git show e9d4ddd:<路径>` 查看当时的实现。
+
 在主工程 apps、packages、examples、scripts 中按 TypeScript AST 检查导入和 pgTable 声明，枚举到 20 个 workspace：2 个 app、12 个 package、6 个 example；解析 384 个代码文件，发现 37 张 Drizzle 业务表。排除 node_modules、dist、生成客户端、路由生成文件、output、submodule 和 zhishu-master 参考目录。另行读取用户指定的三个参考 package。
 
-| 当前事实                                                                   | 源码依据                                                                                                                                                                    | 新设计需要改变的部分                                                           |
-| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| ai-qa 是有界问答流程，ai-writing 内有 DSH runtime、写作和检索工具          | [问答流程](../../packages/ai-qa/src/flow.ts)、[写作 runtime](../../packages/ai-writing/src/runtime/kernel.ts)                                                               | 统一模型与工具编排，迁移有效校验和恢复逻辑，不再保留两个产品执行器             |
-| 写作已经能检索平台知识库，不是缺少 RAG 接入                                | [平台工具](../../packages/ai-writing/src/tools/platform.ts)、[写作服务](../../apps/app-server/src/modules/writing/writing.service.ts)                                       | 将检索和引用作为同一 Agent 可组合的插件能力                                    |
-| 根装配分别构造问答模型、写作服务和调度；产品存储已共享                     | [根装配](../../apps/app-server/src/ai-systems.ts)、[共享存储](../../apps/app-server/src/modules/ai/ai.service.ts)、[调度](../../apps/app-server/src/modules/ai/dispatch.ts) | 一个产品调度和 Agent 接入，继续复用 repository、预算、事件及授权               |
-| purpose=qa/writing 进入会话、Run、产物和原生日志外键，qa 只能产生 evidence | [AI 表](../../apps/app-server/database/schema/ai.table.ts)、[原生日志表](../../apps/app-server/database/schema/writing.table.ts)                                            | 删除用途分叉及其约束，保留租户、会话外键和公开入口限制                         |
-| 创作页一直预留左侧区域，右侧切换两个 Chat；问答转写作会新建会话            | [创作页](../../apps/app-web/src/features/writing/creation-page.tsx)                                                                                                         | 初始完整 Chat，意图切换不换会话，用户创建草稿后才展开编辑器                    |
-| 自由草稿是页面 draftText 及 Markdown 预览，创建文档后离开工作台            | [草稿预览](../../apps/app-web/src/features/writing/writing-draft.tsx)                                                                                                       | 草稿绑定服务端真实文档，在原页面、原对话继续编辑；不以本地字符串决定已创建状态 |
-| 已有文档导入会校验内容、构建协同初始状态并幂等创建文档                     | [文档服务](../../apps/app-server/src/modules/documents/document.service.ts)                                                                                                 | 复用初始化能力，补上与会话绑定联合提交的真实事务边界                           |
-| 站点、来源批准、访客和引用投影已实施                                       | [站点服务](../../apps/app-server/src/modules/qa-sites/qa-site.service.ts)                                                                                                   | 使用同一个 Agent，公开策略固定为只读批准资料                                   |
-| 0042–0045 已完成上一轮旧表归档、退役、建表和回填                           | [迁移目录](../../apps/app-server/database/migrations/)                                                                                                                      | 新增向前 migration，不能修改或重新执行旧版本回滚来换架构                       |
+| 当前事实                                                                   | 源码依据                                                                                                                          | 新设计需要改变的部分                                                           |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| ai-qa 是有界问答流程，ai-writing 内有 DSH runtime、写作和检索工具          | `packages/ai-qa/src/flow.ts`、`packages/ai-writing/src/runtime/kernel.ts`                                                         | 统一模型与工具编排，迁移有效校验和恢复逻辑，不再保留两个产品执行器             |
+| 写作已经能检索平台知识库，不是缺少 RAG 接入                                | `packages/ai-writing/src/tools/platform.ts`、`apps/app-server/src/modules/writing/writing.service.ts`                             | 将检索和引用作为同一 Agent 可组合的插件能力                                    |
+| 根装配分别构造问答模型、写作服务和调度；产品存储已共享                     | `apps/app-server/src/ai-systems.ts`、`apps/app-server/src/modules/ai/ai.service.ts`、`apps/app-server/src/modules/ai/dispatch.ts` | 一个产品调度和 Agent 接入，继续复用 repository、预算、事件及授权               |
+| purpose=qa/writing 进入会话、Run、产物和原生日志外键，qa 只能产生 evidence | `apps/app-server/database/schema/ai.table.ts`、`apps/app-server/database/schema/writing.table.ts`                                 | 删除用途分叉及其约束，保留租户、会话外键和公开入口限制                         |
+| 创作页一直预留左侧区域，右侧切换两个 Chat；问答转写作会新建会话            | `apps/app-web/src/features/writing/creation-page.tsx`                                                                             | 初始完整 Chat，意图切换不换会话，用户创建草稿后才展开编辑器                    |
+| 自由草稿是页面 draftText 及 Markdown 预览，创建文档后离开工作台            | `apps/app-web/src/features/writing/writing-draft.tsx`                                                                             | 草稿绑定服务端真实文档，在原页面、原对话继续编辑；不以本地字符串决定已创建状态 |
+| 已有文档导入会校验内容、构建协同初始状态并幂等创建文档                     | `apps/app-server/src/modules/documents/document.service.ts`                                                                       | 复用初始化能力，补上与会话绑定联合提交的真实事务边界                           |
+| 站点、来源批准、访客和引用投影已实施                                       | `apps/app-server/src/modules/qa-sites/qa-site.service.ts`                                                                         | 使用同一个 Agent，公开策略固定为只读批准资料                                   |
+| 0042–0045 已完成上一轮旧表归档、退役、建表和回填                           | `apps/app-server/database/migrations/`                                                                                            | 新增向前 migration，不能修改或重新执行旧版本回滚来换架构                       |
 
 此前文档记录 2026-11-11 双流程版本通过 pnpm check、AI 测试、独立消费及隔离环境 smoke。这是上一版本的验收记录；本轮只做静态扫描和文档检查，未复跑这些测试，也不将它们当作新插件架构已通过的证据。
 

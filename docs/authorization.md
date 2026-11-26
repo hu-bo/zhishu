@@ -53,11 +53,11 @@ ACL、成员、角色策略、访问模式和目录/文档移动删除校验结�
 
 ```shell
 # 默认隔离 PGlite：真实 migration、约束、SQL 与 Fastify HTTP
-pnpm --filter @react-fastify-template/app-server test:authorization
+pnpm --filter @zhishu/app-server test:authorization
 
 # 空的本机独立 PostgreSQL，库名必须以 zhishu_permission_test_ 开头
 # 设置 AUTHORIZATION_TEST_DATABASE_URL 后执行：
-pnpm --filter @react-fastify-template/app-server test:authorization:postgres
+pnpm --filter @zhishu/app-server test:authorization:postgres
 
 # 整仓交付检查
 pnpm check

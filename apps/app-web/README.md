@@ -1,110 +1,50 @@
-# Workflow Web
+# 知书工作台
 
-Nova Workflow 的前端应用：工作流列表、分页、详情、新建、编辑和删除。调用已有后端的工作流基础信息 API。
+React 19、Vite、TanStack Router/Query 和 HeroUI v3 组成工作台。知识库、文档页、AI 助手以及公开分享和问答页面都在此应用。完整联调见 [本地启动](../../README.md#本地启动)，页面和交互边界见 [前端设计](../../docs/apps/app-web.md)。
 
-## Structure
+## 开发
 
-```text
-apps/workflow-web/
-  src/
-    main.tsx
-    app/                       # shell、providers、router、QueryClient、route feedback
-    routes/                    # TanStack file routes
-      __root.tsx
-      index.tsx
-      workflows/
-        index.tsx
-        new.tsx
-        $workflowId.tsx
-    routeTree.gen.ts           # 自动生成，不手改
-    api/
-      generated/               # Orval client 与 models，不手改
-      api-error.ts
-      transport.ts
-    features/workflows/
-      workflow-list.page.tsx
-      workflow-detail.page.tsx
-      workflow-create.page.tsx
-      workflow-form.tsx
-      workflow-form.schema.ts
-      workflow-search.schema.ts
-      workflow.queries.ts
-    components/ui/             # shadcn Base UI button/input/textarea/dialog
-    lib/cn.ts
-    styles/globals.css
-    vite-env.d.ts
-  scripts/api-generate.ts
-  components.json
-  orval.config.ts
-  tsr.config.json
-  vite.config.ts
-  tsconfig*.json
-  eslint.config.mjs
-  .env.example
-  index.html
-  package.json
-```
+从仓库根目录执行 `pnpm --dir apps/app-web dev`，打开 `http://127.0.0.1:8002`。Vite 开发模式对编辑器和 Chat 等工作区包使用源码别名，修改这些包可直接热更新。Casdoor SDK 仍使用包构建产物，本地启动的服务端依赖构建步骤会一并生成。
 
-UI 暂无跨组件客户端状态，不创建空 Zustand store；远程数据只存入 TanStack Query。表单草稿由 React Hook Form 管理，编辑表单打开时初始化，后台刷新不会覆盖未保存输入。
+可复制 [.env.example](.env.example) 到本目录的 `.env` 调整配置。
 
-## Development
+| 配置                | 行为                                                                                                              |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `API_PROXY_TARGET`  | Vite dev/preview 的 `/api` 代理目标，默认 `http://127.0.0.1:9010`                                                 |
+| `VITE_API_BASE_URL` | 浏览器使用的 API 基础地址。留空时同源访问                                                                         |
+| `VITE_AUTH_MODE`    | 留空时开发服务器选择 mock 登录，生产构建选择 Casdoor。联调真实 SSO 可设为 `casdoor`，生产留空或显式设为 `casdoor` |
 
-在仓库根目录运行（Node.js 24、pnpm 9.15.9）：
+前缀 `VITE_` 的变量会进入浏览器代码，仅放公开配置。生产同源代理和 WebSocket 配置见 [服务端运行手册](../app-server/README.md#构建和上线)。
 
-```powershell
-pnpm install
-cd apps/app-web
-pnpm dev
-```
+| 路由                                   | 入口                       |
+| -------------------------------------- | -------------------------- |
+| `/spaces`、`/spaces/:workspaceId`      | 空间列表、目录和知识库     |
+| `/spaces/:workspaceId/doc/:documentId` | 文档编辑、阅读和协同       |
+| `/documents`、`/documents/:documentId` | 文档列表和按文档 ID 定位   |
+| `/ai`、`/qa-sites`                     | 助手工作台与问答站点管理   |
+| `/share/:shareId`、`/ask/:slug`        | 公开分享与访客问答         |
+| `/callback`                            | Casdoor 扫码或授权后的回调 |
 
-打开 [Workflow Web](http://127.0.0.1:5173)。开发默认将 `/api` 代理到 `http://127.0.0.1:3000`。前端可以独立启动；后端不可用时展示错误与重试状态，不返回虚构数据。
+## API 与路由生成
 
-完整联调请按根目录 README 配置 PostgreSQL 并执行 migration，然后分别在 `apps/app-server` 和 `apps/app-web` 目录执行 `pnpm dev` 启动前后端。当前页面管理基础信息；AST 编辑与工作流执行属于后续功能。
-
-前端 dev 直接读取所依赖工作区包的 `src`，修改编辑器源码即可热更新；并行执行 typecheck/build 对 `dist` 的重编译不会触发页面更新。生产 build 仍按包的公开 exports 消费构建产物。若代理报告 `ECONNREFUSED 127.0.0.1:3000`，请检查后端是否已成功启动。
-
-可选复制本目录 `.env.example` 为 `.env`。`API_PROXY_TARGET` 只影响 Vite dev/preview 代理；`VITE_API_BASE_URL` 是浏览器公开配置，默认空字符串用于同源 `/api`，不要加入 secret。跨域 API 需要后端额外配置 CORS；当前默认同源。
-
-## API Contract
-
-Orval 直接读取 `../app-server/openapi.json`，避免复制 contract。前端类型、请求、Query options、mutation hooks 全部自动生成。
-
-从仓库根目录执行：
+服务端 Zod route schema 是 REST 契约来源。Orval 直接读取 [OpenAPI](../app-server/openapi.json)，生成 `src/api/generated/` 中的客户端和类型。TanStack Router 从 `src/routes/` 生成 `src/routeTree.gen.ts`。
 
 ```powershell
 pnpm --dir apps/app-server openapi:export
 pnpm --dir apps/app-web api:generate
-pnpm --dir apps/app-web api:check
+pnpm --dir apps/app-web routes:generate
 ```
 
-后端 OpenAPI 离线导出无需数据库。`api:generate` 在临时目录生成完整结果，成功后仅替换内容发生变化的文件，再删除失效文件；重复生成不改写源码，避免 dev 期间批量 HMR 和生成目录被清空造成的模块缺失。`api:check` 使用同一流程，比较内容修改、新增与删除，发生漂移返回非零并保留新结果；即使仓库还没初始化 Git 也能使用。
+OpenAPI 导出使用已构建的工作区依赖，可离线执行。生成前检查工作区改动。虽然 `api:check` 会在检测到漂移时返回非零，它也会写出新的客户端。请求传输与错误转换分别维护在 `src/api/transport.ts` 和 `src/api/api-error.ts`。
 
-请求通过统一 fetch transport 传递 AbortSignal，处理 JSON、204、网络错误与后端 error envelope。错误转换为安全中文提示；slug 冲突显示在对应表单字段。写操作不自动重试。删除使用 Base UI 确认弹窗。
-
-## Validation and Build
-
-在仓库根目录运行：
+## 检查与构建
 
 ```powershell
-pnpm --filter @nova-workflow/workflow-web lint
-pnpm --filter @nova-workflow/workflow-web format:check
-pnpm --filter @nova-workflow/workflow-web typecheck
-pnpm --filter @nova-workflow/workflow-web build
-pnpm --filter @nova-workflow/workflow-web preview
+pnpm --filter @zhishu/app-web lint
+pnpm --filter @zhishu/app-web test:chat
+pnpm --filter @zhishu/app-web typecheck
+pnpm --filter '@zhishu/app-web...' build
+pnpm --dir apps/app-web preview
 ```
 
-typecheck/build 会先生成 API client 与 route tree。`format` 可统一格式化人工维护文件；自动生成文件不手动格式化。构建产物为本目录 `dist/`，preview 默认在 `http://127.0.0.1:4173`，仅用于本地预览。
-
-生产部署将 `/api/*` 反向代理到 workflow-server；静态站点对其他不存在的资源路径回退到 `index.html`，确保 `/workflows/:id` 可直接访问与刷新。Vite 开发代理不会被打包进生产文件。
-
-## Scaffold Verification
-
-已通过安装与 lockfile 校验、API generation/check、lint、format check、typecheck 和生产构建。使用 Playwright 检查了后端不可用提示，以及列表、新建、编辑、删除、必填校验、slug 冲突、分页 URL 刷新恢复、390px 窄屏、弹窗 Tab/Escape 与焦点返回。
-
-CRUD 浏览器检查使用仅限该测试会话的网络拦截 fixture，未写入真实数据库，也不包含在应用构建中。真实 PostgreSQL 联调仍需启动数据库和后端后执行。截图与本地验证材料位于仓库 `output/playwright/`，已忽略版本管理。
-
-## UI Sources
-
-组件由 shadcn CLI 4.21.0 的 `base-nova` registry 生成，使用 `@base-ui/react`；项目统一改为导入本地 `@/lib/cn`。视觉 token 集中在 `styles/globals.css`。
-
-参考：[shadcn CLI](https://ui.shadcn.com/docs/cli)、[TanStack Router Vite](https://tanstack.com/router/latest/docs/installation/with-vite)、[Orval Custom Client](https://orval.dev/docs/guides/custom-client/)。
+`typecheck` 与 `build` 会重新生成 API 客户端和路由树。构建输出到 `dist/`，preview 监听 `http://127.0.0.1:4173`。如需用 preview 验证本地协同，将该 origin 加入服务端的 `COLLABORATION_ALLOWED_ORIGINS`，并使用与构建认证模式匹配的服务端。

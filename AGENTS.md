@@ -30,8 +30,8 @@
 | 协同、保存回执与离线恢复       | `packages/editor-collaboration/`、`apps/app-server/src/modules/collaboration/`、`apps/app-web/src/features/offline/`                                                                                         |
 | API、业务与持久化              | `apps/app-server/src/modules/`；数据库定义与 migration 在 `apps/app-server/database/`                                                                                                                        |
 | 身份、权限、空间与目录         | 服务端 `identity/`、`authorization/`、`workspaces/`、`catalogs/`、`knowledge/` 等模块；见 [授权规则](docs/authorization.md)                                                                                  |
-| Chat 展示、协议与 AI 写作      | `packages/chat-ui/`、`packages/chat-contracts/`、`packages/ai-contracts/`、`packages/dsh-agent/`、`packages/ai-plugins/`；应用接入在前端 `components/writing-chat/`、`features/ai/` 与服务端 `writing-chat/` |
-| RAG 与现有 AI 运行时           | `packages/rag/`、`packages/ai-runtime/` 与服务端 `rag/`、`ai/`；从实际调用方追踪，不混用写作和问答链路                                                                                                       |
+| Chat 展示、协议与统一助手       | `packages/chat-ui/`、`packages/chat-contracts/`、`packages/ai-contracts/`；应用入口在前端 `features/assistant/`、服务端 `ai/` 与 `qa-sites/` |
+| 助手执行、插件与知识检索       | `packages/dsh-agent/`、`packages/ai-runtime/`、`packages/ai-plugins/`、`packages/rag/`；服务端装配在 `apps/app-server/src/ai-systems.ts`，索引在 `rag/` |
 | 独立消费、部署与维护脚本       | `examples/`、`deploy/compose.yaml`、`apps/app-server/src/scripts/`；根目录 `scripts/` 负责跨包检查                                                                                                           |
 
 表中的服务端模块路径均相对于 `apps/app-server/src/modules/`，前端路径均相对于 `apps/app-web/src/`。
@@ -65,8 +65,8 @@
 
 ## AI 与 Chat 边界
 
-- `chat-ui` 提供受控展示和输入，宿主负责网络、身份、会话与业务动作。WritingChat 和 RAG Chat 各自维护状态与协议，共用基础组件，不共用可变业务状态。
-- 协作 AI 写作使用服务端进程内的 DSH Session/Agent 与 HTTP/SSE；RAG 问答保留 LangChain 路线。浏览器不加载服务端执行内核、模型 SDK 或密钥，不能因迁移写作而删除 RAG 仍使用的依赖。
+- `chat-ui` 提供受控展示和输入，宿主负责网络、身份、会话与业务动作。问答、调研与创作共用助手会话，按入口和当前授权组合插件。
+- 服务端通过 DSH Session/Agent 与 HTTP/SSE 执行统一助手。RAG 使用 LangChain 的分块与 Embedding 组件和 Qdrant 提供证据。模型 SDK、执行内核和密钥留在服务端。见 [统一助手](docs/apps/ai-assistant-and-public-qa.md#当前入口)。
 - AI 产物、接受写入与持久化完成分别确认；正式正文写入复用现有授权、提案校验、结构操作和 durable ack。检索范围由服务端构造，候选与证据交付复核当前权限和版本，不能把向量索引 ACL 当作授权事实。
 
 ## 生成、配置与验证
@@ -74,7 +74,7 @@
 - 通过源定义更新生成物：服务端 Zod route schema → `apps/app-server/openapi.json` → Orval 客户端 `apps/app-web/src/api/generated/`；文件路由生成 `apps/app-web/src/routeTree.gen.ts`。不要直接手改生成文件。
 - 修改 API 后按顺序执行 `pnpm --dir apps/app-server openapi:export` 与 `pnpm --filter @zhishu/app-web api:generate`；路由使用 `pnpm --filter @zhishu/app-web routes:generate`。OpenAPI 离线导出不得连接数据库。
 - 生成前检查目标路径的已有改动。前端 `typecheck` / `build` 会生成 API 和路由，`api:check` 检出漂移时也会重写客户端，根目录 `pnpm check` 包含这些步骤。只检查现有前端源码可用 `pnpm --filter @zhishu/app-web exec tsc -p tsconfig.app.json --noEmit`，构建配置另用 `tsconfig.node.json`。
-- 后端和 Drizzle 读取 `apps/app-server/.env`，前端公开配置放在 `apps/app-web/.env`，已有环境变量优先。密钥只留在服务端本机配置，不提交仓库；正常后端启动先检查数据库，`database` 与 `src` 一起编译，入口为 `dist/src/server.js`。
+- 后端读取 `apps/app-server/.env`，前端公开配置放在 `apps/app-web/.env`，已有环境变量优先。执行 Drizzle 命令时在进程环境提供目标库的 `DATABASE_URL`。密钥留在服务端配置。正常后端启动先检查数据库，`database` 与 `src` 一起编译，入口为 `dist/src/server.js`。
 - `pnpm --dir apps/app-server db:generate` 生成 migration，`pnpm --dir apps/app-server db:migrate` 显式执行。已发布 migration 不回写，普通应用启动不自动迁移。
 - 从改动的 app/package 开始验证，先跑相关测试与类型检查，再按影响扩大。包名和脚本以各自 `package.json` 为准；部分包只提供 `build`，测试或消费编译产物前先按依赖顺序构建。
 - 服务端单文件测试用 `pnpm --filter @zhishu/app-server exec tsx --test <测试文件>`；包内 `.mjs` 测试用对应包的 `node --test`。行为变更优先补到现有测试，纯重构用已有测试或输入输出对照验证，不为低风险文案/样式调整增加镜像实现的测试。

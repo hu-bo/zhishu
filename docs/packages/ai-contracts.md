@@ -1,6 +1,6 @@
 # ai-contracts 设计规划
 
-> 2026-11-13 新目标以 [主技术文档](../apps/ai-assistant-and-public-qa.md) 为准：沿用当前纯证据/Citation/提案，统一 AssistantRunContext 与原生执行定位，删除 QaExecution/WritingExecution 及旧 handoff 的用途分叉。恢复三包不恢复 AiTaskEvent、AuthoringProposal 旧协议或旧别名；以下旧日期内容只作背景。
+本包提供知书证据、来源引用、写作提案和助手相关的纯契约与校验。公开导出见 [源码](../../packages/ai-contracts/src/index.ts)，应用流程见 [统一助手](../apps/ai-assistant-and-public-qa.md#当前入口)。以下旧日期的双流程和任务协议是迁移背景。
 
 > 2026-10-24 包边界：协作 AI 写作的新会话、Run、审批与流协议由 [chat-contracts](chat-contracts.md)维护；本包继续承载文档目标、证据、引用、写作提案及既有任务契约。RAG Chat 保持 LangChain 和自己的 API，可复用证据/引用结构；共用 UI 不要求统一为 DSH 协议。写作迁移与边界见[总方案](ai-chat-architecture.md)。
 

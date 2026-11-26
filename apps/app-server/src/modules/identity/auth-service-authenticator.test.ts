@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { AuthServiceError, type AuthServiceIdentity } from "@nova/casdoor/server/auth-service";
 import {
-  AUTH_SERVICE_BASELINE_ROLES,
   AuthServiceIdentityService,
   principalFromVerifiedIdentity,
   type AuthServiceConfigFields,
@@ -32,15 +31,17 @@ function stubVerifier(result: "valid" | "invalid" | "unavailable", signal?: () =
   };
 }
 
-test("maps an Auth Service identity onto the baseline Zhishu principal", () => {
-  const principal = principalFromVerifiedIdentity(verifiedIdentity());
+test("maps an Auth Service identity to a Zhishu principal with only the baseline role", () => {
+  const principal = principalFromVerifiedIdentity(
+    verifiedIdentity({ roles: ["admin", "root", "editor"] }),
+  );
   assert.deepEqual(principal, {
     identityId: "zhishu/alice",
     tenantId: "zhishu",
     username: "alice",
     displayName: "Alice",
     email: "",
-    globalRoles: AUTH_SERVICE_BASELINE_ROLES,
+    globalRoles: ["user"],
     active: true,
   });
 });
@@ -52,13 +53,6 @@ test("tolerates identity ids without an organization separator", () => {
   assert.equal(principal.tenantId, "solo");
   assert.equal(principal.username, "solo");
   assert.equal(principal.displayName, "solo");
-});
-
-test("keeps every IdP role out of globalRoles", () => {
-  const principal = principalFromVerifiedIdentity(
-    verifiedIdentity({ roles: ["admin", "root", "editor"] }),
-  );
-  assert.deepEqual(principal.globalRoles, ["user"]);
 });
 
 test("carries the inactive flag through for the guard to reject", () => {

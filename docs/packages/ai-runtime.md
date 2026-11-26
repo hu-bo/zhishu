@@ -1,6 +1,6 @@
 # ai-runtime：统一助手编排设计
 
-状态：2026-11-13 新目标。原同名包已经退役，下一轮按当前职责重新实现；不恢复原 LangGraph/Deep Agents 运行图。完整规格见 [主技术文档](../apps/ai-assistant-and-public-qa.md)。
+当前统一助手编排通过 `createAssistantRuntime` 组合 DSH 内核与获准的插件。消费入口见 [源码](../../packages/ai-runtime/src/index.ts)，宿主装配见 [ai-systems.ts](../../apps/app-server/src/ai-systems.ts)，完整设计见 [统一助手](../apps/ai-assistant-and-public-qa.md)。
 
 ## 唯一责任
 
@@ -12,7 +12,7 @@ ai-runtime 通过 dsh-agent 运行同一 Agent，并组合 ai-plugins 中实际�
 
 依赖 dsh-agent、ai-plugins 和纯合约；不依赖 apps、Fastify 或业务数据库。宿主注入授权、证据、预算、产物、目标操作和真实持久化端口。只在真实边界注入，不为每个步骤建立 service/adapter 转发层。
 
-模型与工具执行只通过同一个 DSH Loop。当前 ai-qa 的引用/证据/结果门槛迁入纯校验和插件规则，不能继续维护独立问答生成器；当前 ai-writing 的编译、工具与 native 接入分别迁入对应责任包。
+模型与工具执行共用 DSH Loop。知识事实回答的证据门槛由运行时编排，引用与工具输出由插件和纯契约校验。
 
 ## 执行要求
 

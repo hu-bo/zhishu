@@ -201,7 +201,7 @@ test("create-draft is idempotent, guarded while in flight, and refuses uneditabl
   }
 });
 
-test("create-draft returns the bound target instead of creating a second document", async () => {
+test("binding a target advances the revision and later create-draft requests reuse the target", async () => {
   const { pg, db, assistant } = await setup();
   try {
     const conversation = await assistant.createConversation(internal, {});
@@ -221,15 +221,17 @@ test("create-draft returns the bound target instead of creating a second documen
       role: "admin",
       createdBy: "id1",
     });
-    await assistant.bindTarget(principal, conversation.id, {
+    const bound = await assistant.bindTarget(principal, conversation.id, {
       targetDocumentId: "doc_bound",
       expectedContextRevision: conversation.contextRevision,
     });
+    assert.equal(bound.contextRevision, conversation.contextRevision + 1);
+    assert.equal(bound.targetDocumentId, "doc_bound");
     const result = await assistant.createDraft(principal, conversation.id, {
       idempotencyKey: "draft-x",
       instruction: "再写",
       workspaceId: "ws_personal",
-      expectedContextRevision: conversation.contextRevision + 1,
+      expectedContextRevision: bound.contextRevision,
     });
     assert.equal(result.status, "already-bound");
     assert.equal(result.documentId, "doc_bound");
@@ -239,10 +241,9 @@ test("create-draft returns the bound target instead of creating a second documen
   }
 });
 
-test("binding an existing target bumps the context revision and isolates stale submissions", async () => {
+test("changing scope rejects submissions that still use the previous revision", async () => {
   const { pg, db, assistant } = await setup();
   try {
-    const conversation = await assistant.createConversation(internal, {});
     await db.insert(documents).values({
       id: "doc_target",
       tenantId: "t1",
@@ -252,37 +253,23 @@ test("binding an existing target bumps the context revision and isolates stale s
       workspaceId: "ws_personal",
       catalogId: "cat_personal",
     });
-    await db.insert(resourceAcl).values({
-      tenantId: "t1",
-      documentId: "doc_target",
-      identityId: "id1",
-      role: "admin",
-      createdBy: "id1",
-    });
-    const bound = await assistant.bindTarget(principal, conversation.id, {
-      targetDocumentId: "doc_target",
-      expectedContextRevision: conversation.contextRevision,
-    });
-    assert.equal(bound.contextRevision, conversation.contextRevision + 1);
-    assert.equal(bound.targetDocumentId, "doc_target");
-    // A stale revision is refused at admission (target-free conversation avoids snapshot capture).
-    const plain = await assistant.createConversation(internal, {});
-    await assistant.submitMessage(internal, plain.id, {
+    const conversation = await assistant.createConversation(internal, {});
+    await assistant.submitMessage(internal, conversation.id, {
       clientMessageId: "cm-ok",
       idempotencyKey: "ik-ok",
       text: "正常提交",
-      expectedContextRevision: plain.contextRevision,
+      expectedContextRevision: conversation.contextRevision,
     });
-    await assistant.setScope(internal, plain.id, plain.contextRevision, {
+    await assistant.setScope(internal, conversation.id, conversation.contextRevision, {
       kind: "documents",
       documentIds: ["doc_target"],
     });
     await assert.rejects(
-      assistant.submitMessage(internal, plain.id, {
+      assistant.submitMessage(internal, conversation.id, {
         clientMessageId: "cm-stale",
         idempotencyKey: "ik-stale",
         text: "旧修订",
-        expectedContextRevision: plain.contextRevision,
+        expectedContextRevision: conversation.contextRevision,
       }),
       /上下文已更新/,
     );

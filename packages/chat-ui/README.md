@@ -15,4 +15,4 @@ import "@zhishu/chat-ui/styles.css";
 
 子入口：./composer、./message-list、./approval、./styles.css。CSS 已构建且有作用域，不依赖宿主 Tailwind 扫描，无 body reset。主题变量为 --chat-surface、--chat-foreground、--chat-muted、--chat-border、--chat-accent、--chat-radius、--chat-content-width、--chat-danger；可映射应用亮暗主题。
 
-`pnpm --filter @zhishu/chat-consumer-example dev` 可运行两个独立受控实例，纯 fixture 不调用业务 API。实际应用的 WritingChat、RagChat 各自维护状态。包 private、未发布；许可记录见 UPSTREAM.md。
+`pnpm --filter @zhishu/chat-consumer-example dev` 可运行两个独立受控实例，纯 fixture 不调用业务 API。知书的工作台与公开问答页面从统一助手会话生成状态。见 [应用接入](../../docs/apps/ai-assistant-and-public-qa.md#当前入口)。包 private、未发布；许可记录见 UPSTREAM.md。

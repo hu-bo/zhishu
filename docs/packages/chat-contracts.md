@@ -1,6 +1,6 @@
 # chat-contracts 设计规划
 
-> 2026-11-13 新目标以 [主技术文档](../apps/ai-assistant-and-public-qa.md) 为准：双流程版本已实施，下一轮删除 qa/writing purpose 的协议分叉，统一会话/命令/Run/事件，并新增明确的同会话草稿创建与文档绑定语义。以下旧日期接口只作历史背景，不能恢复完整产品 snapshot 或双版本解析。
+本包维护通用 Chat 会话、消息、Run、审批、快照与事件的 TypeBox 契约。知书的问答与创作共用助手会话。当前导出见 [包 README](../../packages/chat-contracts/README.md) 与 [源码](../../packages/chat-contracts/src/index.ts)，应用协议见 [统一助手](../apps/ai-assistant-and-public-qa.md#当前入口)。以下日期和拟定接口用于追溯早期设计。
 
 状态：2026-10-24 已实现 TypeBox Schema、派生类型、命令边界、快照/实时 frame 与事件归并。当前 durable wire 使用完整 snapshot 事件；细粒度事件是后续目标。见 [实施记录](ai-chat-implementation.md) 和 [包 README](../../packages/chat-contracts/README.md)。
 
